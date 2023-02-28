@@ -1,0 +1,4 @@
+name: butane
+
+packages:
+  - packages/*

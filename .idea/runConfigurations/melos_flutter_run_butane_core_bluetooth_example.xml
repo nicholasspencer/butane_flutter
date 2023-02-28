@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Flutter Run -&gt; 'butane_core_bluetooth_example'" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/packages/butane_core_bluetooth/example/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
