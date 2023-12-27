@@ -290,3 +290,5 @@ fabric.properties
 
 # End of https://www.toptal.com/developers/gitignore/api/flutter,visualstudiocode,androidstudio,macos,linux,windows
 n
+
+**/pubspec_overrides.yaml

@@ -1,0 +1,11 @@
+name: butane_workspace
+description: ":fire:"
+version: 0.0.1
+homepage: https://github.com/nicholasspencer/butane
+publish_to: none
+
+environment:
+  sdk: ^3.0.0
+
+dev_dependencies:
+  melos: ^3.4.0

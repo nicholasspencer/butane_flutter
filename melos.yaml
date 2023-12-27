@@ -2,3 +2,12 @@ name: butane
 
 packages:
   - packages/*
+
+scripts:
+  gen_api:
+    description: Generate message types and channel APIs
+    run: cd packages/butane_platform_interface &&
+      dart run pigeon
+      --input pigeons/api.dart
+      --dart_out lib/src/api.g.dart
+      --swift_out ../butane_core_bluetooth/darwin/Classes/Api.swift
