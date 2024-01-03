@@ -8,27 +8,40 @@ base class CentralManager extends PeerManager<Peripheral> {
     @visibleForTesting super.platform,
   });
 
-  Stream<Peripheral> scan({
+  Stream<ScanResult> scan({
     List<UuidIdentifier>? forServices,
   }) {
-    return platform.scan(
-      forServices: forServices,
-    );
+    return platform
+        .scan(forServices: forServices?.toStrings())
+        .map(scanResultFromData);
   }
 
   Future<Iterable<Peripheral>> connectedPeripherals({
     List<UuidIdentifier> services = const [],
   }) async {
-    return platform.connectedPeripherals(
-      services: services,
+    final connectedPeripherals = await platform.connectedPeripherals(
+      serviceUuids: services.toStrings(),
     );
+
+    return connectedPeripherals.map(peripheralFromData);
   }
 
   Future<Iterable<Peripheral>> peripherals({
     List<Identifier> identifiers = const [],
   }) async {
-    return platform.peripherals(
-      identifiers: identifiers,
+    final peripherals = await platform.peripherals(
+      peripheralIdentifiers: identifiers.toStrings(),
     );
+    return peripherals.map(peripheralFromData);
+  }
+
+  @protected
+  Peripheral peripheralFromData(api.PeripheralData data) {
+    return data.toPeripheral(manager: this);
+  }
+
+  @protected
+  ScanResult scanResultFromData(api.ScanData data) {
+    return data.toScanResult(manager: this);
   }
 }

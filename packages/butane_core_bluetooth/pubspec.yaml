@@ -1,0 +1,33 @@
+name: butane_core_bluetooth
+description: "A new Flutter plugin project."
+version: 0.0.1
+homepage: https://github.com/nicholasspencer/butane
+publish_to: none
+
+environment:
+  sdk: ">=3.2.3 <4.0.0"
+  flutter: ">=3.3.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  butane_platform_interface:
+    path: ../butane_platform_interface
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  plugin:
+    implements: butane_platform_interface
+    platforms:
+      ios:
+        pluginClass: ButaneCoreBluetoothPlugin
+        dartPluginClass: ButaneCoreBluetooth
+        sharedDarwinSource: true
+      macos:
+        pluginClass: ButaneCoreBluetoothPlugin
+        dartPluginClass: ButaneCoreBluetooth
+        sharedDarwinSource: true

@@ -3,6 +3,10 @@ part of '../interface.dart';
 sealed class Identifier {
   const Identifier(this.value);
 
+  factory Identifier.parse(String value) {
+    return StringIdentifier(value);
+  }
+
   final Object value;
 
   @override
@@ -17,6 +21,10 @@ sealed class Identifier {
 
   @override
   int get hashCode => value.hashCode;
+}
+
+extension Identifiers on Iterable<Identifier> {
+  Iterable<String> toStrings() => map((e) => e.value as String);
 }
 
 class UuidIdentifier extends Identifier {
