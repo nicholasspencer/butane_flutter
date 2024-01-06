@@ -4,6 +4,7 @@ part of '../interface.dart';
 /// and interact with peripherals.
 base class CentralManager extends PeerManager<Peripheral> {
   CentralManager({
+    super.clientIdentifier,
     @visibleForTesting super.peers,
     @visibleForTesting super.platform,
   });
