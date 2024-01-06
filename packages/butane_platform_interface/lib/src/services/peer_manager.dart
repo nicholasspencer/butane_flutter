@@ -52,7 +52,10 @@ abstract base class PeerManager<T extends Peer> {
   }
 
   @mustCallSuper
-  void dispose() {}
+  void dispose() {
+    clientStateSubscription?.cancel();
+    stateController.close();
+  }
 }
 
 enum PeerManagerState {
