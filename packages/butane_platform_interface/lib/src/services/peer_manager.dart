@@ -3,7 +3,6 @@ part of '../interface.dart';
 abstract base class PeerManager<T extends Peer> {
   PeerManager({
     this.clientIdentifier,
-    @visibleForTesting this.peers = const {},
     @visibleForTesting ButanePlatformInterface? platform,
   }) : _platform = platform;
 
@@ -12,14 +11,11 @@ abstract base class PeerManager<T extends Peer> {
   final String? clientIdentifier;
 
   @protected
-  final Map<Identifier, T> peers;
-
-  @protected
   ButanePlatformInterface get platform =>
       _platform ?? ButanePlatformInterface.instance;
 
   @protected
-  StreamSubscription<api.ClientState>? clientStateSubscription;
+  StreamSubscription<api.ClientState>? stateSubscription;
 
   @protected
   late final StreamController<PeerManagerState> stateController =
@@ -33,7 +29,7 @@ abstract base class PeerManager<T extends Peer> {
 
   Stream<PeerManagerState> get stateStream {
     /// Subscribe to the api state stream if we aren't already.
-    clientStateSubscription ??=
+    stateSubscription ??=
         platform.clientStateStream(clientIdentifier).listen(onState);
 
     return stateController.stream;
@@ -45,7 +41,7 @@ abstract base class PeerManager<T extends Peer> {
   }
 
   @protected
-  void onStateListen() async {
+  Future<void> onStateListen() async {
     final state = await platform.clientState(clientIdentifier);
 
     stateController.sink.add(PeerManagerState.fromApi(state));
@@ -53,7 +49,7 @@ abstract base class PeerManager<T extends Peer> {
 
   @mustCallSuper
   void dispose() {
-    clientStateSubscription?.cancel();
+    stateSubscription?.cancel();
     stateController.close();
   }
 }

@@ -7,8 +7,10 @@ base class ButanePlatform extends ButanePlatformInterface {
     ButanePlatformInterface.instance = ButanePlatform();
   }
 
+  @protected
   late final api.ButaneHostApi hostApi = api.ButaneHostApi();
 
+  @protected
   late final ButaneFlutterApi flutterApi = ButaneFlutterApi();
 
   @override
@@ -23,23 +25,30 @@ base class ButanePlatform extends ButanePlatformInterface {
           .map((event) => event.state);
 
   @override
-  Stream<api.ScanData> scan({
+  Future<void> scan({
     Iterable<String>? forServices,
     String? clientIdentifier,
-  }) {
-    // TODO:
-    // We need to handle the future here in case of an error
-    // This should also return a handle to the stream so that it can be cancelled
-    // and scan should be able to be called multiple times.
-
+  }) async {
     hostApi.scan(
-      clientIdentifier: null,
+      clientIdentifier: clientIdentifier,
       forServices: forServices?.toList(),
     );
+  }
 
+  @override
+  Stream<api.ScanData> scanStream([String? clientIdentifier]) {
     return flutterApi.scanStream.where(
       (event) =>
           event.peripheral.identifier.clientIdentifier == clientIdentifier,
+    );
+  }
+
+  @override
+  Future<void> cancelScan({
+    String? clientIdentifier,
+  }) {
+    return hostApi.cancelScan(
+      clientIdentifier: clientIdentifier,
     );
   }
 
@@ -197,15 +206,36 @@ base class ButanePlatform extends ButanePlatformInterface {
 abstract base class ButanePlatformInterface {
   static late ButanePlatformInterface instance;
 
-  Future<api.ClientState> clientState([String? clientIdentifier]);
-
-  Stream<api.ClientState> clientStateStream([String? clientIdentifier]);
-
   /// The platform-specific implementation of [CentralManager].
 
-  /// Scans for peripherals that are advertising services.
-  Stream<api.ScanData> scan({
+  /// The current state of the client.
+  Future<api.ClientState> clientState([String? clientIdentifier]);
+
+  /// A stream of client state changes optionally filtered by the client
+  /// identifier.
+  Stream<api.ClientState> clientStateStream([String? clientIdentifier]);
+
+  /// Starts scanning for peripherals that are advertising services.
+  ///
+  /// See also:
+  ///  * [scanStream] for a stream of scan results.
+  Future<void> scan({
     Iterable<String>? forServices,
+    String? clientIdentifier,
+  });
+
+  /// A stream of scan results optionally filtered by the client identifier.
+  ///
+  /// You must call [scan] before this stream will emit any events however you
+  /// can listen to this stream before calling [scan] to ensure you don't miss
+  /// any events.
+  ///
+  /// See also:
+  ///  * [scan] for starting a scan.
+  Stream<api.ScanData> scanStream([String? clientIdentifier]);
+
+  /// Stops scanning for peripherals.
+  Future<void> cancelScan({
     String? clientIdentifier,
   });
 

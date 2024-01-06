@@ -10,8 +10,6 @@ typedef ClientStateResult = ({
   api.ClientState state,
 });
 
-typedef ScanResult = api.ScanData;
-
 typedef ConnectionStateResult = ({
   api.PeripheralData peripheral,
   api.ConnectionState state,
@@ -31,7 +29,7 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   Stream<ClientStateResult> get clientStateStream =>
       clientStateController.stream;
 
-  Stream<ScanResult> get scanStream => scanController.stream;
+  Stream<api.ScanData> get scanStream => scanController.stream;
 
   Stream<ConnectionStateResult> get connectionStateStream =>
       connectionStateController.stream;
@@ -43,7 +41,7 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   final clientStateController = StreamController<ClientStateResult>.broadcast();
 
   @protected
-  final scanController = StreamController<ScanResult>.broadcast();
+  final scanController = StreamController<api.ScanData>.broadcast();
 
   @protected
   final connectionStateController =
