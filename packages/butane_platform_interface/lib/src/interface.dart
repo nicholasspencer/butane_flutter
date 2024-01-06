@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'api/api.g.dart' as api;
 import 'package:meta/meta.dart';
 
-import 'api/native_api.dart';
+import 'api/api.dart';
 
 part 'platform_interface/interface.dart';
 part 'models/attribute.dart';
