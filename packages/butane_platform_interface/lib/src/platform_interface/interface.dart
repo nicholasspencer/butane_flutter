@@ -12,56 +12,41 @@ base class ButanePlatform extends ButanePlatformInterface {
   late final ButaneFlutterApi flutterApi = ButaneFlutterApi();
 
   @override
-  Stream<api.ManagerState> get managerStateStream =>
-      flutterApi.managerStateStream;
+  Future<api.ClientState> clientState([String? clientIdentifier]) async {
+    return hostApi.state(clientIdentifier: clientIdentifier);
+  }
 
   @override
-  Stream<api.ScanData> scan({Iterable<String>? forServices}) {
+  Stream<api.ClientState> clientStateStream([String? clientIdentifier]) =>
+      flutterApi.clientStateStream
+          .where((event) => event.clientIdentifier == clientIdentifier)
+          .map((event) => event.state);
+
+  @override
+  Stream<api.ScanData> scan({
+    Iterable<String>? forServices,
+    String? clientIdentifier,
+  }) {
     // TODO:
     // We need to handle the future here in case of an error
     // This should also return a handle to the stream so that it can be cancelled
     // and scan should be able to be called multiple times.
 
-    final requestIdentifier = const Uuid().v4();
-
     hostApi.scan(
-      requestIdentifier: requestIdentifier,
+      clientIdentifier: null,
       forServices: forServices?.toList(),
     );
 
-    return flutterApi.scanStream.map((result) {
-      return result.scanData;
-    });
-  }
-
-  @override
-  Future<void> connect({required String peripheralIdentifier}) async {
-    return hostApi.connect(
-      peripheralIdentifier: peripheralIdentifier,
+    return flutterApi.scanStream.where(
+      (event) =>
+          event.peripheral.identifier.clientIdentifier == clientIdentifier,
     );
-  }
-
-  @override
-  Future<void> cancelConnection({required String peripheralIdentifier}) async {
-    return hostApi.cancelConnection(
-      peripheralIdentifier: peripheralIdentifier,
-    );
-  }
-
-  @override
-  Future<Iterable<api.PeripheralData>> connectedPeripherals({
-    Iterable<String> serviceUuids = const [],
-  }) async {
-    final peripherals = await hostApi.connectedPeripherals(
-      serviceUuids: serviceUuids.toList(),
-    );
-
-    return peripherals.nonNulls;
   }
 
   @override
   Future<Iterable<api.PeripheralData>> peripherals({
     Iterable<String> peripheralIdentifiers = const [],
+    String? clientIdentifier,
   }) async {
     final peripherals = await hostApi.peripherals(
       peripheralIdentifiers: peripheralIdentifiers.toList(),
@@ -71,21 +56,51 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
+  Future<Iterable<api.PeripheralData>> connectedPeripherals({
+    Iterable<String> serviceUuids = const [],
+    String? clientIdentifier,
+  }) async {
+    final peripherals = await hostApi.connectedPeripherals(
+      serviceUuids: serviceUuids.toList(),
+    );
+
+    return peripherals.nonNulls;
+  }
+
+  @override
+  Future<void> connect({
+    required api.PeripheralSessionIdentifier sessionIdentifier,
+  }) async {
+    return hostApi.connect(
+      sessionIdentifier: sessionIdentifier,
+    );
+  }
+
+  @override
+  Future<void> cancelConnection({
+    required api.PeripheralSessionIdentifier sessionIdentifier,
+  }) async {
+    return hostApi.cancelConnection(
+      sessionIdentifier: sessionIdentifier,
+    );
+  }
+
+  @override
   Future<void> discoverServices({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     Iterable<String> serviceUuids = const [],
   }) async {
     await hostApi.discoverServices(
-      peripheralIdentifier: peripheralIdentifier,
+      sessionIdentifier: sessionIdentifier,
     );
   }
 
   @override
   Future<Iterable<api.ServiceData>> services({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
   }) async {
     final services = await hostApi.services(
-      peripheralIdentifier: peripheralIdentifier,
+      sessionIdentifier: sessionIdentifier,
     );
 
     return services.nonNulls;
@@ -93,12 +108,12 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> discoverCharacteristics({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     Iterable<String> characteristicUuids = const [],
   }) async {
     await hostApi.discoverCharacteristics(
-      peripheralIdentifier: peripheralIdentifier,
+      sessionIdentifier: sessionIdentifier,
       serviceUuid: serviceUuid,
       characteristicUuids: characteristicUuids.toList(),
     );
@@ -106,11 +121,11 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<Iterable<api.CharacteristicData>> characteristics({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
   }) async {
     final characteristics = await hostApi.characteristics(
-      peripheralIdentifier: peripheralIdentifier,
+      sessionIdentifier: sessionIdentifier,
       serviceUuid: serviceUuid,
     );
 
@@ -119,34 +134,27 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<Uint8List> readCharacteristic({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
   }) async {
     return hostApi.readCharacteristic(
-      peripheralIdentifier: peripheralIdentifier,
+      sessionIdentifier: sessionIdentifier,
       serviceUuid: serviceUuid,
       characteristicUuid: characteristicUuid,
     );
   }
 
   @override
-  Future<void> startAdvertising({
-    required api.PeripheralData peripheral,
-  }) async {
-    ///
-  }
-
-  @override
   Future<void> writeCharacteristic({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
     required Uint8List value,
     bool withoutResponse = false,
   }) {
     return hostApi.writeCharacteristic(
-      peripheralIdentifier: peripheralIdentifier,
+      sessionIdentifier: sessionIdentifier,
       serviceUuid: serviceUuid,
       characteristicUuid: characteristicUuid,
       value: value,
@@ -156,7 +164,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Stream<Uint8List> watchCharacteristic({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
   }) {
@@ -165,7 +173,7 @@ base class ButanePlatform extends ButanePlatformInterface {
     // This should also return a handle to the stream so the characteristic can
     // be unwatched and watch should be able to be called multiple times.
     hostApi.watchCharacteristic(
-      peripheralIdentifier: peripheralIdentifier,
+      sessionIdentifier: sessionIdentifier,
       serviceUuid: serviceUuid,
       characteristicUuid: characteristicUuid,
     );
@@ -173,22 +181,44 @@ base class ButanePlatform extends ButanePlatformInterface {
     return flutterApi.characteristicValueStream
         .forCharacteristic(
           characteristicUuid: characteristicUuid,
-          peripheralIdentifier: peripheralIdentifier,
+          peripheralIdentifier: sessionIdentifier.identifier,
         )
         .map((result) => result.value);
+  }
+
+  @override
+  Future<void> startAdvertising({
+    required api.PeripheralData peripheral,
+  }) async {
+    ///
   }
 }
 
 abstract base class ButanePlatformInterface {
   static late ButanePlatformInterface instance;
 
-  Stream<api.ManagerState> get managerStateStream;
+  Future<api.ClientState> clientState([String? clientIdentifier]);
+
+  Stream<api.ClientState> clientStateStream([String? clientIdentifier]);
 
   /// The platform-specific implementation of [CentralManager].
 
   /// Scans for peripherals that are advertising services.
   Stream<api.ScanData> scan({
     Iterable<String>? forServices,
+    String? clientIdentifier,
+  });
+
+  /// A list of known peripherals optionally filtered by their identifiers.
+  Future<Iterable<api.PeripheralData>> peripherals({
+    Iterable<String> peripheralIdentifiers = const [],
+    String? clientIdentifier,
+  });
+
+  /// A list of connected peripherals identified by an offered service.
+  Future<Iterable<api.PeripheralData>> connectedPeripherals({
+    Iterable<String> serviceUuids = const [],
+    String? clientIdentifier,
   });
 
   /// Establishes a connection to the peripheral.
@@ -201,58 +231,48 @@ abstract base class ButanePlatformInterface {
   ///
   /// Use [Peripheral.]
   Future<void> connect({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
   });
 
   /// Cancels an active or pending connection to the peripheral.
   Future<void> cancelConnection({
-    required String peripheralIdentifier,
-  });
-
-  /// A list of connected peripherals identified by an offered service.
-  Future<Iterable<api.PeripheralData>> connectedPeripherals({
-    Iterable<String> serviceUuids = const [],
-  });
-
-  /// A list of known peripherals optionally filtered by their identifiers.
-  Future<Iterable<api.PeripheralData>> peripherals({
-    Iterable<String> peripheralIdentifiers = const [],
+    required api.PeripheralSessionIdentifier sessionIdentifier,
   });
 
   /// Discovers services offered by the peripheral.
   Future<void> discoverServices({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     Iterable<String> serviceUuids = const [],
   });
 
   /// A list of discovered services offered by the peripheral.
   Future<Iterable<api.ServiceData>> services({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
   });
 
   /// Discovers characteristics offered by the service.
   Future<void> discoverCharacteristics({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     Iterable<String> characteristicUuids = const [],
   });
 
   /// A list of discovered characteristics offered by the service.
   Future<Iterable<api.CharacteristicData>> characteristics({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
   });
 
   /// Reads the value of the characteristic.
   Future<Uint8List> readCharacteristic({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
   });
 
   /// Writes the value of the characteristic.
   Future<void> writeCharacteristic({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
     required Uint8List value,
@@ -261,7 +281,7 @@ abstract base class ButanePlatformInterface {
 
   /// Streams characteristic value updates.
   Stream<Uint8List> watchCharacteristic({
-    required String peripheralIdentifier,
+    required api.PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
   });

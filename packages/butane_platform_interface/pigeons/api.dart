@@ -1,12 +1,36 @@
 import 'package:pigeon/pigeon.dart';
 
-enum ManagerState {
+enum ClientState {
   unknown,
   resetting,
   unsupported,
   unauthorized,
   poweredOff,
   poweredOn,
+}
+
+/// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
+/// [clientIdentifier] that discovered it.
+///
+/// The [clientIdentifier] is the identifier of the client that discovered the
+/// peripheral. This is useful when multiple clients are connected to the same
+/// adapter. If omitted, the default client is used.
+///
+/// The [adapterIdentifier] is the identifier of the adapter that discovered the
+/// peripheral. This is useful when multiple adapters are available on the same
+/// device. If omitted, the default adapter is used.
+class PeripheralSessionIdentifier {
+  PeripheralSessionIdentifier({
+    required this.identifier,
+    required this.clientIdentifier,
+    required this.adapterIdentifier,
+  });
+
+  final String identifier;
+
+  final String? clientIdentifier;
+
+  final String? adapterIdentifier;
 }
 
 class PeripheralData {
@@ -16,7 +40,7 @@ class PeripheralData {
     this.rssi,
   });
 
-  final String identifier;
+  final PeripheralSessionIdentifier identifier;
 
   final String? name;
 
@@ -114,7 +138,7 @@ class DescriptorData implements AttributeData {
   final List<int?>? value;
 }
 
-sealed class CharacteristicProperty {
+class CharacteristicProperty {
   const CharacteristicProperty({
     this.broadcast = false,
     this.read = false,
@@ -155,71 +179,79 @@ sealed class CharacteristicProperty {
 abstract class ButaneHostApi {
   /// "Central" APIs.
 
+  @async
+  ClientState state({
+    String? clientIdentifier,
+  });
+
   /// Scans for peripherals that are advertising services.
   @async
   void scan({
-    required String? requestIdentifier,
+    String? clientIdentifier,
     List<String>? forServices = const [],
   });
 
+  @async
   void cancelScan({
-    required String? requestIdentifier,
+    String? clientIdentifier,
   });
 
   /// A list of known peripherals optionally filtered by their identifiers.
   @async
   List<PeripheralData> peripherals({
+    String? clientIdentifier,
     List<String>? peripheralIdentifiers = const [],
-  });
-
-  /// Establishes a connection to the peripheral.
-  @async
-  void connect({
-    required String peripheralIdentifier,
-  });
-
-  /// Cancels an active or pending connection to the peripheral.
-  @async
-  void cancelConnection({
-    required String peripheralIdentifier,
   });
 
   /// A list of connected peripherals identified by an offered service.
   @async
   List<PeripheralData> connectedPeripherals({
+    String? clientIdentifier,
     List<String>? serviceUuids = const [],
+  });
+
+  /// Establishes a connection to the peripheral.
+  @async
+  void connect({
+    required PeripheralSessionIdentifier sessionIdentifier,
+  });
+
+  /// Cancels an active or pending connection to the peripheral.
+  @async
+  void cancelConnection({
+    required PeripheralSessionIdentifier sessionIdentifier,
   });
 
   /// Discovers services offered by the peripheral.
   @async
   void discoverServices({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     List<String>? serviceUuids = const [],
   });
 
   @async
   List<ServiceData> services({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
   });
 
   /// Discovers characteristics offered by the service.
   @async
   void discoverCharacteristics({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     List<String>? characteristicUuids = const [],
   });
 
   @async
   List<CharacteristicData> characteristics({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
   });
 
   /// Reads the value of the characteristic.
   @async
   Uint8List readCharacteristic({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
   });
@@ -227,7 +259,7 @@ abstract class ButaneHostApi {
   /// Writes the value of the characteristic.
   @async
   void writeCharacteristic({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
     required List<int> value,
@@ -236,7 +268,7 @@ abstract class ButaneHostApi {
 
   @async
   void watchCharacteristic({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
   });
@@ -244,7 +276,7 @@ abstract class ButaneHostApi {
   /// Enables notifications or indications for the characteristic.
   @async
   void setNotification({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String characteristicUuid,
     required bool enabled,
@@ -253,7 +285,7 @@ abstract class ButaneHostApi {
   /// Reads the value of the descriptor.
   @async
   List<int> readDescriptor({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String descriptorUuid,
   });
@@ -261,7 +293,7 @@ abstract class ButaneHostApi {
   /// Writes the value of the descriptor.
   @async
   void writeDescriptor({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required String serviceUuid,
     required String descriptorUuid,
     required List<int> value,
@@ -270,13 +302,13 @@ abstract class ButaneHostApi {
   /// Requests a read of the RSSI for the peripheral.
   @async
   int readRssi({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
   });
 
   /// Requests a MTU size change.
   @async
   int requestMtu({
-    required String peripheralIdentifier,
+    required PeripheralSessionIdentifier sessionIdentifier,
     required int mtu,
   });
 
@@ -287,14 +319,14 @@ abstract class ButaneHostApi {
 /// flutter plugin.
 @FlutterApi()
 abstract class ButaneFlutterApi {
-  /// "CentralManager" APIs.
+  /// "Central Client" APIs.
 
-  void onManagerState(
-    ManagerState state,
+  void onClientState(
+    String? clientIdentifier,
+    ClientState state,
   );
 
   void onScanResult(
-    String? requestIdentifier,
     ScanData scanResult,
   );
 
