@@ -30,7 +30,7 @@ class _MyAppState extends State<MyApp> {
 
     ButaneCoreBluetooth.registerWith();
 
-    _managerStateStream = manager.managerStateStream.listen(onManagerState);
+    _managerStateStream = manager.stateStream.listen(onManagerState);
   }
 
   void onManagerState(PeerManagerState state) {

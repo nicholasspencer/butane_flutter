@@ -11,7 +11,7 @@ base class Characteristic extends Attribute {
   /// Reads the value of the characteristic.
   Future<Uint8List> read() async {
     final data = await service?.peripheral?.manager.platform.readCharacteristic(
-      peripheralIdentifier: service!.peripheral!.identifier.toString(),
+      sessionIdentifier: service!.peripheral!.sessionIdentifier,
       serviceUuid: service!.uuid.toString(),
       characteristicUuid: uuid.toString(),
     );
@@ -25,7 +25,7 @@ base class Characteristic extends Attribute {
     bool withoutResponse = false,
   }) async {
     return service?.peripheral?.manager.platform.writeCharacteristic(
-      peripheralIdentifier: service!.peripheral!.identifier.toString(),
+      sessionIdentifier: service!.peripheral!.sessionIdentifier,
       serviceUuid: service!.uuid.toString(),
       characteristicUuid: uuid.toString(),
       value: value,
@@ -38,7 +38,7 @@ base class Characteristic extends Attribute {
     required bool enabled,
   }) {
     return service?.peripheral?.manager.platform.watchCharacteristic(
-          peripheralIdentifier: service!.peripheral!.identifier.toString(),
+          sessionIdentifier: service!.peripheral!.sessionIdentifier,
           serviceUuid: service!.uuid.toString(),
           characteristicUuid: uuid.toString(),
         ) ??

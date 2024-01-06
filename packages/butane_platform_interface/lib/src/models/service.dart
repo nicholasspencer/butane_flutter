@@ -20,7 +20,7 @@ base class Service extends Attribute {
     );
 
     return peripheral?.manager.platform.discoverCharacteristics(
-          peripheralIdentifier: peripheral!.identifier.toString(),
+          sessionIdentifier: peripheral!.sessionIdentifier,
           serviceUuid: uuid.toString(),
           characteristicUuids: characteristicUuids.toStrings(),
         ) ??
@@ -33,7 +33,7 @@ base class Service extends Attribute {
       'Cannot get characteristics without a peripheral',
     );
     final characteristics = await peripheral?.manager.platform.characteristics(
-          peripheralIdentifier: peripheral!.identifier.toString(),
+          sessionIdentifier: peripheral!.sessionIdentifier,
           serviceUuid: uuid.toString(),
         ) ??
         [];

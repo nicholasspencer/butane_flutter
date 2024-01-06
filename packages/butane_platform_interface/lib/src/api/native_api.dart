@@ -5,10 +5,12 @@ import 'package:meta/meta.dart';
 
 import 'api.g.dart' as api;
 
-typedef ScanResult = ({
-  String? requestIdentifier,
-  api.ScanData scanData,
+typedef ClientStateResult = ({
+  String? clientIdentifier,
+  api.ClientState state,
 });
+
+typedef ScanResult = api.ScanData;
 
 typedef ConnectionStateResult = ({
   api.PeripheralData peripheral,
@@ -26,8 +28,8 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     api.ButaneFlutterApi.setup(this);
   }
 
-  Stream<api.ManagerState> get managerStateStream =>
-      managerStateController.stream;
+  Stream<ClientStateResult> get clientStateStream =>
+      clientStateController.stream;
 
   Stream<ScanResult> get scanStream => scanController.stream;
 
@@ -38,7 +40,7 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
       characteristicValueController.stream;
 
   @protected
-  final managerStateController = StreamController<api.ManagerState>.broadcast();
+  final clientStateController = StreamController<ClientStateResult>.broadcast();
 
   @protected
   final scanController = StreamController<ScanResult>.broadcast();
@@ -53,19 +55,19 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   @protected
   @override
-  void onManagerState(api.ManagerState state) {
-    managerStateController.sink.add(state);
+  void onClientState(String? clientIdentifier, api.ClientState state) {
+    clientStateController.sink.add(
+      (
+        clientIdentifier: clientIdentifier,
+        state: state,
+      ),
+    );
   }
 
   @protected
   @override
-  void onScanResult(String? requestIdentifier, api.ScanData scanResult) {
-    scanController.sink.add(
-      (
-        requestIdentifier: requestIdentifier,
-        scanData: scanResult,
-      ),
-    );
+  void onScanResult(api.ScanData scanResult) {
+    scanController.sink.add(scanResult);
   }
 
   @protected
@@ -134,11 +136,11 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   }
 }
 
-extension ScanResultStreamFilter on Stream<ScanResult> {
-  Stream<ScanResult> forRequest(String? requestIdentifier) {
-    return where((result) => result.requestIdentifier == requestIdentifier);
-  }
-}
+// extension ScanResultStreamFilter on Stream<ScanResult> {
+//   Stream<ScanResult> forRequest(String? requestIdentifier) {
+//     return where((result) => result.requestIdentifier == requestIdentifier);
+//   }
+// }
 
 extension ConnectionStateResultStreamFilter on Stream<ConnectionStateResult> {
   Stream<ConnectionStateResult> forPeripheral(String peripheralIdentifier) {

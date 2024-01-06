@@ -9,18 +9,13 @@ import AppKit
 #endif
 import CoreBluetooth
 
- extension FlutterError: Error {}
+extension FlutterError: Error {}
 
-extension Result where Success == Void {
-  static var success: Result {
-    return .success(())
-  }
-}
-
-public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi, CBCentralManagerDelegate, CBPeripheralDelegate {
+public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
+  
   var flutterApi: ButaneFlutterApi
   
-  var centralManager: CBCentralManager!
+  var centralManagers: [String?:CentralManager] = [:]
   
   public static func register(with registrar: FlutterPluginRegistrar) {
     let flutterApi = ButaneFlutterApi(binaryMessenger: registrar.messenger)
@@ -30,138 +25,111 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi, 
   
   init(flutterApi: ButaneFlutterApi) {
     self.flutterApi = flutterApi
+  }
+  
+  func centralManager(_ id: String?) -> CentralManager {
+    if let manager = centralManagers[id] {
+      return manager;
+    }
     
-    super.init()
+    let manager = CentralManager(identifier: id, flutterApi: flutterApi, queue: nil)
     
-    centralManager = CBCentralManager(delegate: self, queue: nil)
+    centralManagers[id] = manager;
+    
+    return manager;
   }
   
   // MARK: Flutter API
   
-  func onNativeResult(_: Result<Void, FlutterError>) {}
-  
-  func scan(requestIdentifier: String?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-    let uuids: [CBUUID]? = forServices?.map({
-      return CBUUID(string: $0)
-    })
+  func state(clientIdentifier: String?, completion: @escaping (Result<ClientState, Error>) -> Void) {
+    let central = centralManager(clientIdentifier)
     
-    centralManager.scanForPeripherals(withServices: uuids)
+    central.state(completion: completion)
+  }
+  
+  func scan(clientIdentifier: String?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    let central = centralManager(clientIdentifier)
     
-    completion(.success)
+    central.scan(forServices: forServices, completion: completion)
   }
   
-  func cancelScan(requestIdentifier: String?) throws {
-   
-  }
-  
-  func peripherals(peripheralIdentifiers: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
-  
-  }
-  
-  func connect(peripheralIdentifier: String, completion: @escaping (Result<Void, Error>) -> Void) {
-    guard 
-      let identifier = UUID(uuidString: peripheralIdentifier),
-      let peripheral = peripherals[identifier] else {
-        completion(.failure(FlutterError()))
-        return
-    }
+  func cancelScan(clientIdentifier: String?, completion: @escaping (Result<Void, Error>) -> Void) {
     
-    centralManager.connect(peripheral)
   }
   
-  func cancelConnection(peripheralIdentifier: String, completion: @escaping (Result<Void, Error>) -> Void) {
-  
-  }
-  
-  func connectedPeripherals(serviceUuids: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
-  
-  }
-  
-  func discoverServices(peripheralIdentifier: String, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-  
-  }
-  
-  func services(peripheralIdentifier: String, completion: @escaping (Result<[ServiceData], Error>) -> Void) {
-  
-  }
-  
-  func discoverCharacteristics(peripheralIdentifier: String, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-  
-  }
-  
-  func characteristics(peripheralIdentifier: String, serviceUuid: String, completion: @escaping (Result<[CharacteristicData], Error>) -> Void) {
-  
-  }
-  
-  func readCharacteristic(peripheralIdentifier: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
-  
-  }
-  
-  func writeCharacteristic(peripheralIdentifier: String, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
-  
-  }
-  
-  func watchCharacteristic(peripheralIdentifier: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {
-  
-  }
-  
-  func setNotification(peripheralIdentifier: String, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
-  
-  }
-  
-  func readDescriptor(peripheralIdentifier: String, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {
-  
-  }
-  
-  func writeDescriptor(peripheralIdentifier: String, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {
-  
-  }
-  
-  func readRssi(peripheralIdentifier: String, completion: @escaping (Result<Int64, Error>) -> Void) {
-  
-  }
-  
-  func requestMtu(peripheralIdentifier: String, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
-  
-  }
-  
-  // MARK: Central Delegate
-  
-  var peripherals: [UUID: CBPeripheral] = [:]
-  
-  public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-    flutterApi.onManagerState(
-      state: central.state.managerState,
-      completion: onNativeResult
-    )
-  }
-  
-  public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
-    peripheral.delegate = self
-    peripherals[peripheral.identifier] = peripheral
+  func peripherals(clientIdentifier: String?, peripheralIdentifiers: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
     
-    flutterApi.onScanResult(
-      requestIdentifier: nil,
-      scanResult: ScanData(peripheral: PeripheralData(
-        identifier: peripheral.identifier.uuidString,
-        name: peripheral.name),
-        advertisementData: AdvertisementData.init(advertisementData: advertisementData)
-      ),
-      completion: onNativeResult
-    )
   }
   
-  public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-    flutterApi.onConnectionState(
-      peripheral: peripheral.toPeripheralData(),
-      state: .connected,
-      completion: onNativeResult
-    )
+  func connectedPeripherals(clientIdentifier: String?, serviceUuids: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
+    
+  }
+  
+  func connect(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Void, Error>) -> Void) {
+    centralManager(sessionIdentifier.clientIdentifier).connect(identifier: sessionIdentifier.identifier, completion: completion)
+  }
+  
+  func cancelConnection(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Void, Error>) -> Void) {
+    
+  }
+  
+  func discoverServices(sessionIdentifier: PeripheralSessionIdentifier, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    
+  }
+  
+  func services(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<[ServiceData], Error>) -> Void) {
+    
+  }
+  
+  func discoverCharacteristics(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    
+  }
+  
+  func characteristics(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, completion: @escaping (Result<[CharacteristicData], Error>) -> Void) {
+    
+  }
+  
+  func readCharacteristic(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
+    
+  }
+  
+  func writeCharacteristic(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+    
+  }
+  
+  func watchCharacteristic(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {
+    
+  }
+  
+  func setNotification(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+    
+  }
+  
+  func readDescriptor(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {
+    
+  }
+  
+  func writeDescriptor(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {
+    
+  }
+  
+  func readRssi(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Int64, Error>) -> Void) {
+    
+  }
+  
+  func requestMtu(sessionIdentifier: PeripheralSessionIdentifier, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
+    
+  }
+}
+
+extension Result where Success == Void {
+  static var success: Result {
+    return .success(())
   }
 }
 
 extension CBManagerState {
-  var managerState: ManagerState {
+  var managerState: ClientState {
     switch(self) {
     case .resetting:
       return .resetting
@@ -182,7 +150,7 @@ extension CBManagerState {
 extension CBPeripheral {
   func toPeripheralData() -> PeripheralData {
     return PeripheralData(
-      identifier: identifier.uuidString,
+      identifier: PeripheralSessionIdentifier(identifier: identifier.uuidString),
       name: name
     )
   }

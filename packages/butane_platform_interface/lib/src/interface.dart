@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:uuid/uuid.dart';
-
 import 'api/api.g.dart' as api;
 import 'package:meta/meta.dart';
 

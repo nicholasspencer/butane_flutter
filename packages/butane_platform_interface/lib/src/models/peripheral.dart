@@ -18,13 +18,13 @@ base class Peripheral extends Peer {
 
   Future<void> connect() async {
     return manager.platform.connect(
-      peripheralIdentifier: identifier.toString(),
+      sessionIdentifier: sessionIdentifier,
     );
   }
 
   Future<void> cancelConnection() async {
     return manager.platform.cancelConnection(
-      peripheralIdentifier: identifier.toString(),
+      sessionIdentifier: sessionIdentifier,
     );
   }
 
@@ -32,14 +32,14 @@ base class Peripheral extends Peer {
     List<UuidIdentifier> serviceUuids = const [],
   }) {
     return manager.platform.discoverServices(
-      peripheralIdentifier: identifier.toString(),
+      sessionIdentifier: sessionIdentifier,
       serviceUuids: serviceUuids.toStrings(),
     );
   }
 
   Future<Iterable<Service>> get services async {
     final services = await manager.platform.services(
-      peripheralIdentifier: identifier.toString(),
+      sessionIdentifier: sessionIdentifier,
     );
 
     return services.map(serviceFromData);
@@ -48,7 +48,7 @@ base class Peripheral extends Peer {
   @protected
   api.PeripheralData toData() {
     return api.PeripheralData(
-      identifier: identifier.toString(),
+      identifier: sessionIdentifier,
       name: name,
       rssi: initialRssi,
     );
@@ -105,7 +105,7 @@ base class ScanResult {
 extension ApiPeripheralData on api.PeripheralData {
   Peripheral toPeripheral({required PeerManager<Peripheral> manager}) {
     return Peripheral(
-      identifier: Identifier.parse(identifier),
+      identifier: Identifier.parse(identifier.identifier),
       name: name,
       initialRssi: rssi,
       manager: manager,

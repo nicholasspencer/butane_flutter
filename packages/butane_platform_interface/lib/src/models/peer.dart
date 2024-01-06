@@ -10,4 +10,11 @@ abstract base class Peer {
   final PeerManager manager;
 
   final Identifier identifier;
+
+  @protected
+  api.PeripheralSessionIdentifier get sessionIdentifier =>
+      api.PeripheralSessionIdentifier(
+        identifier: identifier.toString(),
+        clientIdentifier: manager.clientIdentifier,
+      );
 }
