@@ -88,6 +88,7 @@ class PeripheralData {
     required this.identifier,
     this.name,
     this.rssi,
+    required this.state,
   });
 
   PeripheralSessionIdentifier identifier;
@@ -96,11 +97,14 @@ class PeripheralData {
 
   double? rssi;
 
+  ConnectionState state;
+
   Object encode() {
     return <Object?>[
       identifier.encode(),
       name,
       rssi,
+      state.index,
     ];
   }
 
@@ -110,6 +114,7 @@ class PeripheralData {
       identifier: PeripheralSessionIdentifier.decode(result[0]! as List<Object?>),
       name: result[1] as String?,
       rssi: result[2] as double?,
+      state: ConnectionState.values[result[3]! as int],
     );
   }
 }
@@ -121,6 +126,7 @@ class AdvertisementData {
     this.manufacturerData,
     this.serviceData,
     this.serviceUuids,
+    required this.isConnectable,
   });
 
   String? localName;
@@ -133,6 +139,8 @@ class AdvertisementData {
 
   List<String?>? serviceUuids;
 
+  bool isConnectable;
+
   Object encode() {
     return <Object?>[
       localName,
@@ -140,6 +148,7 @@ class AdvertisementData {
       manufacturerData,
       serviceData,
       serviceUuids,
+      isConnectable,
     ];
   }
 
@@ -151,6 +160,7 @@ class AdvertisementData {
       manufacturerData: result[2] as Uint8List?,
       serviceData: (result[3] as Map<Object?, Object?>?)?.cast<String?, Uint8List?>(),
       serviceUuids: (result[4] as List<Object?>?)?.cast<String?>(),
+      isConnectable: result[5]! as bool,
     );
   }
 }
@@ -571,6 +581,33 @@ class ButaneHostApi {
       );
     } else {
       return;
+    }
+  }
+
+  Future<ConnectionState> connectionState({required PeripheralSessionIdentifier sessionIdentifier}) async {
+    const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectionState';
+    final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
+      __pigeon_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: __pigeon_binaryMessenger,
+    );
+    final List<Object?>? __pigeon_replyList =
+        await __pigeon_channel.send(<Object?>[sessionIdentifier]) as List<Object?>?;
+    if (__pigeon_replyList == null) {
+      throw _createConnectionError(__pigeon_channelName);
+    } else if (__pigeon_replyList.length > 1) {
+      throw PlatformException(
+        code: __pigeon_replyList[0]! as String,
+        message: __pigeon_replyList[1] as String?,
+        details: __pigeon_replyList[2],
+      );
+    } else if (__pigeon_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return ConnectionState.values[__pigeon_replyList[0]! as int];
     }
   }
 

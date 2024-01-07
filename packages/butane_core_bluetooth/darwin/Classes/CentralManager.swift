@@ -64,6 +64,17 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
   }
   
+  func connectionState(identifier: String, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
+    if
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid] {
+      manager.connect(peripheral)
+      completion(.success(peripheral.state.connectionState))
+    } else {
+      completion(.success(.disconnected))
+    }
+  }
+  
   func discoverServices(identifier: String, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
@@ -134,7 +145,8 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       scanResult: ScanData(
           peripheral: PeripheralData(
             identifier: identifier(peripheral),
-            name: peripheral.name
+            name: peripheral.name,
+            state: peripheral.state.connectionState
           ),
         advertisementData: AdvertisementData.init(advertisementData: advertisementData)
       ),

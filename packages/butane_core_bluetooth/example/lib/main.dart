@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:butane_core_bluetooth/butane_core_bluetooth.dart';
 import 'package:butane_platform_interface/butane_platform_interface.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
 
 void main() {
   runApp(const MyApp());
@@ -24,6 +24,8 @@ class _MyAppState extends State<MyApp> {
 
   StreamSubscription<PeerManagerState>? _managerStateStream;
 
+  bool ready = false;
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +37,9 @@ class _MyAppState extends State<MyApp> {
 
   void onManagerState(PeerManagerState state) {
     if (state == PeerManagerState.poweredOn) {
-      _scanSubscription = manager.scan().listen(onScanResult);
+      setState(() {
+        ready = true;
+      });
     }
   }
 
@@ -51,11 +55,54 @@ class _MyAppState extends State<MyApp> {
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Plugin example app'),
+          actions: [
+            if (_scanResults.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.delete_rounded),
+                onPressed: () {
+                  setState(() {
+                    _scanResults.clear();
+                  });
+                },
+              ),
+            if (_scanSubscription != null)
+              IconButton(
+                icon: const Icon(Icons.stop_rounded),
+                onPressed: () {
+                  setState(() {
+                    _scanSubscription?.cancel();
+                    _scanSubscription = null;
+                  });
+                },
+              )
+            else
+              IconButton(
+                icon: const Icon(
+                  Icons.search_rounded,
+                ),
+                onPressed: ready
+                    ? () {
+                        setState(() {
+                          _scanSubscription?.cancel();
+                          _scanSubscription =
+                              manager.scan().listen(onScanResult);
+                        });
+                      }
+                    : null,
+              ),
+            const SizedBox(
+              width: 40,
+            ),
+          ],
         ),
         body: _scanResults.isEmpty
-            ? const Center(
-                child: CircularProgressIndicator(),
-              )
+            ? _scanSubscription != null
+                ? const Center(
+                    child: CircularProgressIndicator(),
+                  )
+                : const Center(
+                    child: Icon(Icons.search_off_rounded),
+                  )
             : ListView.builder(
                 itemCount: _scanResults.length,
                 itemBuilder: (context, index) {
@@ -88,15 +135,20 @@ class ScanResultListItem extends StatefulWidget {
 }
 
 class _ScanResultStateListItem extends State<ScanResultListItem> {
+  ConnectionState _connectionState = ConnectionState.disconnected;
+
+  StreamSubscription<ConnectionState>? _connectionStateSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _connectionStateSubscription =
+        widget.scanResult.peripheral.stateStream.listen(onConnectionState);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final localName =
-        widget.scanResult.advertisementData.localName ?? 'Unknown';
-    final name = widget.scanResult.peripheral.name ?? 'Unknown';
-    final manufacturerData =
-        widget.scanResult.advertisementData.manufacturerData;
-    final advertisedServices =
-        widget.scanResult.advertisementData.serviceUuids ?? [];
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: Row(
@@ -104,66 +156,111 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
         children: [
           Column(
             children: [
-              const Icon(Icons.bluetooth_rounded, size: 20),
+              IconButton(
+                icon: const Icon(Icons.bluetooth_rounded, size: 20),
+                onPressed: _connectionState != ConnectionState.connected
+                    ? connect
+                    : null,
+              ),
               IconButton(
                 icon: const Icon(Icons.search_rounded, size: 20),
                 onPressed: () {},
               ),
             ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text('Name: $name'),
-                ],
-              ),
-              Row(
-                children: [
-                  Text('Local Name: $localName'),
-                ],
-              ),
-              Row(
-                children: [
-                  Text(
-                    'Manufacturer Data: '
-                    '${manufacturerData != null ? manufacturerData.toString() : '(No manufacturer data)'}',
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text(
-                    'Power level: '
-                    '${widget.scanResult.advertisementData.txPowerLevel}',
-                  ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Text('Advertised Services: '),
-                    ],
-                  ),
-                  for (final service in advertisedServices)
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.subdirectory_arrow_right_rounded,
-                          size: 20,
-                        ),
-                        Text(service),
-                      ],
-                    )
-                ],
-              ),
-            ],
-          ),
+          ScanResultDetails(scanResult: widget.scanResult),
         ],
       ),
+    );
+  }
+
+  void onConnectionState(ConnectionState state) {
+    setState(() {
+      _connectionState = state;
+    });
+  }
+
+  void connect() async {
+    final peripheral = widget.scanResult.peripheral;
+    await peripheral.connect();
+  }
+
+  void disconnect() async {
+    final peripheral = widget.scanResult.peripheral;
+    await peripheral.cancelConnection();
+  }
+
+  @override
+  void dispose() {
+    _connectionStateSubscription?.cancel();
+    super.dispose();
+  }
+}
+
+class ScanResultDetails extends StatelessWidget {
+  const ScanResultDetails({
+    required this.scanResult,
+    super.key,
+  });
+
+  final ScanResult scanResult;
+
+  @override
+  Widget build(BuildContext context) {
+    final localName = scanResult.advertisementData.localName ?? 'Unknown';
+    final name = scanResult.peripheral.name ?? 'Unknown';
+    final manufacturerData = scanResult.advertisementData.manufacturerData;
+    final advertisedServices = scanResult.advertisementData.serviceUuids ?? [];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Name: $name'),
+          ],
+        ),
+        Row(
+          children: [
+            Text('Local Name: $localName'),
+          ],
+        ),
+        Row(
+          children: [
+            Text(
+              'Manufacturer Data: '
+              '${manufacturerData != null ? manufacturerData.toString() : '(No manufacturer data)'}',
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Text(
+              'Power level: '
+              '${scanResult.advertisementData.txPowerLevel}',
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Text('Advertised Services: '),
+              ],
+            ),
+            for (final service in advertisedServices)
+              Row(
+                children: [
+                  const Icon(
+                    Icons.subdirectory_arrow_right_rounded,
+                    size: 20,
+                  ),
+                  Text(service),
+                ],
+              )
+          ],
+        ),
+      ],
     );
   }
 }

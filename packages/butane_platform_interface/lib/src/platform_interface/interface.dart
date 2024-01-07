@@ -95,6 +95,29 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
+  Future<api.ConnectionState> connectionState({
+    required api.PeripheralSessionIdentifier sessionIdentifier,
+  }) async {
+    return hostApi.connectionState(
+      sessionIdentifier: sessionIdentifier,
+    );
+  }
+
+  @override
+  Stream<api.ConnectionState> connectionStateStream({
+    required api.PeripheralSessionIdentifier sessionIdentifier,
+  }) {
+    return flutterApi.connectionStateStream.where(
+      (event) {
+        return event.peripheral.identifier.clientIdentifier ==
+                sessionIdentifier.clientIdentifier &&
+            event.peripheral.identifier.identifier ==
+                sessionIdentifier.identifier;
+      },
+    ).map((event) => event.state);
+  }
+
+  @override
   Future<void> discoverServices({
     required api.PeripheralSessionIdentifier sessionIdentifier,
     Iterable<String> serviceUuids = const [],
@@ -266,6 +289,16 @@ abstract base class ButanePlatformInterface {
 
   /// Cancels an active or pending connection to the peripheral.
   Future<void> cancelConnection({
+    required api.PeripheralSessionIdentifier sessionIdentifier,
+  });
+
+  /// The current connection state of the peripheral.
+  Future<api.ConnectionState> connectionState({
+    required api.PeripheralSessionIdentifier sessionIdentifier,
+  });
+
+  /// A stream of connection state changes for the peripheral.
+  Stream<api.ConnectionState> connectionStateStream({
     required api.PeripheralSessionIdentifier sessionIdentifier,
   });
 

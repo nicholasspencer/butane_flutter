@@ -9,6 +9,14 @@ enum ClientState {
   poweredOn,
 }
 
+enum ConnectionState {
+  disconnected,
+  connecting,
+  reconnecting,
+  connected,
+  disconnecting,
+}
+
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
 /// [clientIdentifier] that discovered it.
 ///
@@ -36,6 +44,7 @@ class PeripheralSessionIdentifier {
 class PeripheralData {
   PeripheralData({
     required this.identifier,
+    required this.state,
     this.name,
     this.rssi,
   });
@@ -45,6 +54,8 @@ class PeripheralData {
   final String? name;
 
   final double? rssi;
+
+  final ConnectionState state;
 }
 
 class AdvertisementData {
@@ -54,6 +65,7 @@ class AdvertisementData {
     required this.manufacturerData,
     required this.serviceData,
     required this.serviceUuids,
+    required this.isConnectable,
   });
 
   final String? localName;
@@ -65,6 +77,8 @@ class AdvertisementData {
   final Map<String?, Uint8List?>? serviceData;
 
   final List<String?>? serviceUuids;
+
+  final bool isConnectable;
 }
 
 class ScanData {
@@ -76,14 +90,6 @@ class ScanData {
   final PeripheralData peripheral;
 
   final AdvertisementData advertisementData;
-}
-
-enum ConnectionState {
-  disconnected,
-  connecting,
-  reconnecting,
-  connected,
-  disconnecting,
 }
 
 abstract interface class AttributeData {
@@ -219,6 +225,11 @@ abstract class ButaneHostApi {
   /// Cancels an active or pending connection to the peripheral.
   @async
   void cancelConnection({
+    required PeripheralSessionIdentifier sessionIdentifier,
+  });
+
+  @async
+  ConnectionState connectionState({
     required PeripheralSessionIdentifier sessionIdentifier,
   });
 

@@ -101,16 +101,19 @@ struct PeripheralData {
   var identifier: PeripheralSessionIdentifier
   var name: String? = nil
   var rssi: Double? = nil
+  var state: ConnectionState
 
   static func fromList(_ list: [Any?]) -> PeripheralData? {
     let identifier = PeripheralSessionIdentifier.fromList(list[0] as! [Any?])!
     let name: String? = nilOrValue(list[1])
     let rssi: Double? = nilOrValue(list[2])
+    let state = ConnectionState(rawValue: list[3] as! Int)!
 
     return PeripheralData(
       identifier: identifier,
       name: name,
-      rssi: rssi
+      rssi: rssi,
+      state: state
     )
   }
   func toList() -> [Any?] {
@@ -118,6 +121,7 @@ struct PeripheralData {
       identifier.toList(),
       name,
       rssi,
+      state.rawValue,
     ]
   }
 }
@@ -129,6 +133,7 @@ struct AdvertisementData {
   var manufacturerData: FlutterStandardTypedData? = nil
   var serviceData: [String?: FlutterStandardTypedData?]? = nil
   var serviceUuids: [String?]? = nil
+  var isConnectable: Bool
 
   static func fromList(_ list: [Any?]) -> AdvertisementData? {
     let localName: String? = nilOrValue(list[0])
@@ -136,13 +141,15 @@ struct AdvertisementData {
     let manufacturerData: FlutterStandardTypedData? = nilOrValue(list[2])
     let serviceData: [String?: FlutterStandardTypedData?]? = nilOrValue(list[3])
     let serviceUuids: [String?]? = nilOrValue(list[4])
+    let isConnectable = list[5] as! Bool
 
     return AdvertisementData(
       localName: localName,
       txPowerLevel: txPowerLevel,
       manufacturerData: manufacturerData,
       serviceData: serviceData,
-      serviceUuids: serviceUuids
+      serviceUuids: serviceUuids,
+      isConnectable: isConnectable
     )
   }
   func toList() -> [Any?] {
@@ -152,6 +159,7 @@ struct AdvertisementData {
       manufacturerData,
       serviceData,
       serviceUuids,
+      isConnectable,
     ]
   }
 }
@@ -390,6 +398,7 @@ protocol ButaneHostApi {
   func connect(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Void, Error>) -> Void)
   /// Cancels an active or pending connection to the peripheral.
   func cancelConnection(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Void, Error>) -> Void)
+  func connectionState(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<ConnectionState, Error>) -> Void)
   /// Discovers services offered by the peripheral.
   func discoverServices(sessionIdentifier: PeripheralSessionIdentifier, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
   func services(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<[ServiceData], Error>) -> Void)
@@ -546,6 +555,23 @@ class ButaneHostApiSetup {
       }
     } else {
       cancelConnectionChannel.setMessageHandler(nil)
+    }
+    let connectionStateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectionState", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      connectionStateChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let sessionIdentifierArg = args[0] as! PeripheralSessionIdentifier
+        api.connectionState(sessionIdentifier: sessionIdentifierArg) { result in
+          switch result {
+            case .success(let res):
+              reply(wrapResult(res.rawValue))
+            case .failure(let error):
+              reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      connectionStateChannel.setMessageHandler(nil)
     }
     /// Discovers services offered by the peripheral.
     let discoverServicesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverServices", binaryMessenger: binaryMessenger, codec: codec)

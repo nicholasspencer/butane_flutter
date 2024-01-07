@@ -12,7 +12,6 @@ import CoreBluetooth
 extension FlutterError: Error {}
 
 public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
-  
   var flutterApi: ButaneFlutterApi
   
   var centralManagers: [String?:CentralManager] = [:]
@@ -71,6 +70,10 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   
   func cancelConnection(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Void, Error>) -> Void) {
     
+  }
+  
+  func connectionState(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
+    centralManager(sessionIdentifier.clientIdentifier).connectionState(identifier: sessionIdentifier.identifier, completion: completion)
   }
   
   func discoverServices(sessionIdentifier: PeripheralSessionIdentifier, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -151,8 +154,26 @@ extension CBPeripheral {
   func toPeripheralData() -> PeripheralData {
     return PeripheralData(
       identifier: PeripheralSessionIdentifier(identifier: identifier.uuidString),
-      name: name
+      name: name,
+      state: state.connectionState
     )
+  }
+}
+
+extension CBPeripheralState {
+  var connectionState: ConnectionState {
+    switch(self) {
+    case .disconnected:
+        .disconnected
+    case .connecting:
+        .connecting
+    case .connected:
+        .connected
+    case .disconnecting:
+        .disconnecting
+    @unknown default:
+        .disconnected
+    }
   }
 }
 
@@ -170,6 +191,12 @@ extension AdvertisementData {
     
     if let services = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
       serviceUuids = services.map({ $0.uuidString })
+    }
+    
+    if let isConnectable = advertisementData[CBAdvertisementDataIsConnectable] as? Bool {
+      self.isConnectable = isConnectable
+    } else {
+      self.isConnectable = false
     }
   }
 }

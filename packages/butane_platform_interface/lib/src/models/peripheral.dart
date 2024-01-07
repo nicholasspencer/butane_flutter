@@ -1,16 +1,48 @@
 part of '../interface.dart';
 
+enum ConnectionState {
+  disconnected,
+  connecting,
+  connected,
+  disconnecting,
+  reconnecting;
+
+  api.ConnectionState toApi() {
+    switch (this) {
+      case ConnectionState.disconnected:
+        return api.ConnectionState.disconnected;
+      case ConnectionState.connecting:
+        return api.ConnectionState.connecting;
+      case ConnectionState.connected:
+        return api.ConnectionState.connected;
+      case ConnectionState.disconnecting:
+        return api.ConnectionState.disconnecting;
+      case ConnectionState.reconnecting:
+        return api.ConnectionState.reconnecting;
+    }
+  }
+}
+
 base class Peripheral extends Peer {
-  const Peripheral({
+  Peripheral({
     required PeerManager<Peripheral> super.manager,
     required this.name,
     required super.identifier,
     this.initialRssi,
-  });
+    this.initialState = ConnectionState.disconnected,
+    @visibleForTesting ButanePlatformInterface? platform,
+  }) : _platform = platform;
+
+  final ButanePlatformInterface? _platform;
+
+  @protected
+  ButanePlatformInterface get platform => _platform ?? manager.platform;
 
   final String? name;
 
   final double? initialRssi;
+
+  final ConnectionState initialState;
 
   @override
   PeerManager<Peripheral> get manager =>
@@ -26,6 +58,50 @@ base class Peripheral extends Peer {
     return manager.platform.cancelConnection(
       sessionIdentifier: sessionIdentifier,
     );
+  }
+
+  @protected
+  StreamSubscription<api.ConnectionState>? stateSubscription;
+
+  @protected
+  late final StreamController<ConnectionState> stateController =
+      StreamController<ConnectionState>.broadcast(onListen: onStateListen);
+
+  Future<ConnectionState> get state async {
+    final state = await platform.connectionState(
+      sessionIdentifier: api.PeripheralSessionIdentifier(
+        identifier: identifier.toString(),
+        clientIdentifier: manager.clientIdentifier,
+      ),
+    );
+
+    return state.toConnectionState();
+  }
+
+  Stream<ConnectionState> get stateStream {
+    /// Subscribe to the api state stream if we aren't already.
+    stateSubscription ??= platform
+        .connectionStateStream(
+          sessionIdentifier: api.PeripheralSessionIdentifier(
+            identifier: identifier.toString(),
+            clientIdentifier: manager.clientIdentifier,
+          ),
+        )
+        .listen(onState);
+
+    return stateController.stream;
+  }
+
+  @protected
+  void onState(api.ConnectionState state) {
+    stateController.sink.add(state.toConnectionState());
+  }
+
+  @protected
+  Future<void> onStateListen() async {
+    final state = await this.state;
+
+    stateController.sink.add(state);
   }
 
   Future<void> discoverServices({
@@ -51,6 +127,7 @@ base class Peripheral extends Peer {
       identifier: sessionIdentifier,
       name: name,
       rssi: initialRssi,
+      state: initialState.toApi(),
     );
   }
 
@@ -67,6 +144,7 @@ base class AdvertisementData {
     this.manufacturerData,
     this.serviceData,
     this.serviceUuids,
+    this.isConnectable = false,
   });
 
   final String? localName;
@@ -79,6 +157,8 @@ base class AdvertisementData {
 
   final List<String>? serviceUuids;
 
+  final bool isConnectable;
+
   @protected
   api.AdvertisementData toData() {
     return api.AdvertisementData(
@@ -87,6 +167,7 @@ base class AdvertisementData {
       manufacturerData: manufacturerData,
       serviceData: serviceData,
       serviceUuids: serviceUuids,
+      isConnectable: isConnectable,
     );
   }
 }
@@ -110,6 +191,23 @@ extension ApiPeripheralData on api.PeripheralData {
       initialRssi: rssi,
       manager: manager,
     );
+  }
+}
+
+extension ApiConnectionState on api.ConnectionState {
+  ConnectionState toConnectionState() {
+    switch (this) {
+      case api.ConnectionState.disconnected:
+        return ConnectionState.disconnected;
+      case api.ConnectionState.connecting:
+        return ConnectionState.connecting;
+      case api.ConnectionState.connected:
+        return ConnectionState.connected;
+      case api.ConnectionState.disconnecting:
+        return ConnectionState.disconnecting;
+      case api.ConnectionState.reconnecting:
+        return ConnectionState.reconnecting;
+    }
   }
 }
 
