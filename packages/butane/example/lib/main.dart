@@ -136,12 +136,19 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
 
   StreamSubscription<ConnectionState>? _connectionStateSubscription;
 
+  final _rssiStreamController = StreamController<int>();
+
   @override
   void initState() {
     super.initState();
 
     _connectionStateSubscription =
         widget.scanResult.peripheral.stateStream.listen(onConnectionState);
+
+    Timer.periodic(const Duration(seconds: 1), (_) async {
+      final rssi = await widget.scanResult.peripheral.rssi;
+      _rssiStreamController.add(rssi);
+    });
   }
 
   @override
@@ -162,6 +169,16 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
               IconButton(
                 icon: const Icon(Icons.search_rounded, size: 20),
                 onPressed: () {},
+              ),
+              StreamBuilder(
+                stream: _rssiStreamController.stream,
+                builder: (context, snapshot) {
+                  return Text(
+                    snapshot.data?.toString() ??
+                        widget.scanResult.peripheral.initialRssi?.toString() ??
+                        '??',
+                  );
+                },
               ),
             ],
           ),

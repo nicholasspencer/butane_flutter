@@ -100,13 +100,13 @@ struct Session {
 struct Peripheral {
   var session: Session
   var name: String? = nil
-  var rssi: Double? = nil
+  var rssi: Int64? = nil
   var state: ConnectionState
 
   static func fromList(_ list: [Any?]) -> Peripheral? {
     let session = Session.fromList(list[0] as! [Any?])!
     let name: String? = nilOrValue(list[1])
-    let rssi: Double? = nilOrValue(list[2])
+    let rssi: Int64? = isNullish(list[2]) ? nil : (list[2] is Int64? ? list[2] as! Int64? : Int64(list[2] as! Int32))
     let state = ConnectionState(rawValue: list[3] as! Int)!
 
     return Peripheral(
@@ -893,7 +893,6 @@ protocol ButaneFlutterApiProtocol {
   func onDescriptorsDiscovered(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, completion: @escaping (Result<Void, FlutterError>) -> Void)
   func onCharacteristicValue(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, FlutterError>) -> Void)
   func onDescriptorValue(peripheral peripheralArg: Peripheral, descriptor descriptorArg: Descriptor, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, FlutterError>) -> Void)
-  func onRssi(peripheral peripheralArg: Peripheral, rssi rssiArg: Int64, completion: @escaping (Result<Void, FlutterError>) -> Void)
 }
 class ButaneFlutterApi: ButaneFlutterApiProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -1035,24 +1034,6 @@ class ButaneFlutterApi: ButaneFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorValue"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralArg, descriptorArg, valueArg] as [Any?]) { response in
-      guard let listResponse = response as? [Any?] else {
-        completion(.failure(createConnectionError(withChannelName:channelName)))
-        return
-      }
-      if (listResponse.count > 1) {
-        let code: String = listResponse[0] as! String
-        let message: String? = nilOrValue(listResponse[1])
-        let details: String? = nilOrValue(listResponse[2])
-        completion(.failure(FlutterError(code: code, message: message, details: details)));
-      } else {
-        completion(.success(Void()))
-      }
-    }
-  }
-  func onRssi(peripheral peripheralArg: Peripheral, rssi rssiArg: Int64, completion: @escaping (Result<Void, FlutterError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onRssi"
-    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([peripheralArg, rssiArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName:channelName)))
         return

@@ -65,14 +65,14 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   func connectionState(identifier: String, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
-    if
+    guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid] {
-      manager.connect(peripheral)
-      completion(.success(peripheral.state.connectionState))
-    } else {
-      completion(.success(.disconnected))
+      let peripheral = peripherals[uuid] else {
+      return completion(.success(.disconnected))
     }
+    
+    manager.connect(peripheral)
+    completion(.success(peripheral.state.connectionState))
   }
   
   func discoverServices(identifier: String, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -115,8 +115,20 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
   }
   
+  typealias RssiCompletion = (peripheral: CBPeripheral, completion: (Result<Int64, Error>) -> Void)
+  
+  var rssiCompletions: [RssiCompletion] = []
+  
   func readRssi(identifier: String, completion: @escaping (Result<Int64, Error>) -> Void) {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid] else {
+      return completion(.failure(FlutterError()))
+    }
     
+    rssiCompletions.append((peripheral: peripheral, completion: completion))
+    
+    peripheral.readRSSI()
   }
   
   func requestMtu(identifier: String, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
@@ -160,5 +172,19 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       state: .connected,
       completion: onNativeResult
     )
+  }
+  
+  // Peripheral Delegate
+  
+  func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
+    for i in stride(from: rssiCompletions.count - 1, to: 0, by: -1) {
+      let completion = rssiCompletions[i]
+      
+      if completion.peripheral.identifier != peripheral.identifier {
+        continue
+      }
+      
+      completion.completion(.success(RSSI.int64Value))
+    }
   }
 }

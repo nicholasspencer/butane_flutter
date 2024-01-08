@@ -22,6 +22,11 @@ typedef CharacteristicValueResult = ({
   Uint8List value,
 });
 
+typedef RssiResult = ({
+  api.Peripheral peripheral,
+  int rssi,
+});
+
 /// A default implementation of [ButanePlatformInterface] which uses generated
 /// method channels to call platform-specific code.
 base class ButanePlatform extends ButanePlatformInterface {
@@ -239,6 +244,16 @@ base class ButanePlatform extends ButanePlatformInterface {
         )
         .map((result) => result.value);
   }
+
+  /// Requests a read of the RSSI for the peripheral.
+  @override
+  Future<int> readRssi({
+    required Session session,
+  }) {
+    return hostApi.readRssi(
+      session: session.toSession(),
+    );
+  }
 }
 
 base class ButaneFlutterApi extends api.ButaneFlutterApi {
@@ -246,30 +261,13 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     api.ButaneFlutterApi.setup(this);
   }
 
+  // Client State
+
   Stream<ClientStateResult> get clientStateStream =>
       clientStateController.stream;
 
-  Stream<api.ScanResult> get scanStream => scanController.stream;
-
-  Stream<ConnectionStateResult> get connectionStateStream =>
-      connectionStateController.stream;
-
-  Stream<CharacteristicValueResult> get characteristicValueStream =>
-      characteristicValueController.stream;
-
   @protected
   final clientStateController = StreamController<ClientStateResult>.broadcast();
-
-  @protected
-  final scanController = StreamController<api.ScanResult>.broadcast();
-
-  @protected
-  final connectionStateController =
-      StreamController<ConnectionStateResult>.broadcast();
-
-  @protected
-  final characteristicValueController =
-      StreamController<CharacteristicValueResult>.broadcast();
 
   @protected
   @override
@@ -282,11 +280,27 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     );
   }
 
+  // Scan Result
+
+  Stream<api.ScanResult> get scanStream => scanController.stream;
+
+  @protected
+  final scanController = StreamController<api.ScanResult>.broadcast();
+
   @protected
   @override
   void onScanResult(api.ScanResult scanResult) {
     scanController.sink.add(scanResult);
   }
+
+  // Connection State
+
+  @protected
+  final connectionStateController =
+      StreamController<ConnectionStateResult>.broadcast();
+
+  Stream<ConnectionStateResult> get connectionStateStream =>
+      connectionStateController.stream;
 
   @protected
   @override
@@ -301,6 +315,15 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
       ),
     );
   }
+
+  // Characteristic Value
+
+  Stream<CharacteristicValueResult> get characteristicValueStream =>
+      characteristicValueController.stream;
+
+  @protected
+  final characteristicValueController =
+      StreamController<CharacteristicValueResult>.broadcast();
 
   @protected
   @override
@@ -318,6 +341,8 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     );
   }
 
+  // Characteristic Discovery
+
   @override
   void onCharacteristicsDiscovered(
     api.Peripheral peripheral,
@@ -325,6 +350,8 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   ) {
     // TODO: implement onCharacteristicsDiscovered
   }
+
+  // Descriptor Value
 
   @override
   void onDescriptorValue(
@@ -335,6 +362,8 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     // TODO: implement onDescriptorValue
   }
 
+  // Descriptor Discovery
+
   @override
   void onDescriptorsDiscovered(
     api.Peripheral peripheral,
@@ -343,10 +372,7 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     // TODO: implement onDescriptorsDiscovered
   }
 
-  @override
-  void onRssi(api.Peripheral peripheral, int rssi) {
-    // TODO: implement onRssi
-  }
+  // Service Discovery
 
   @override
   void onServicesDiscovered(api.Peripheral peripheral) {

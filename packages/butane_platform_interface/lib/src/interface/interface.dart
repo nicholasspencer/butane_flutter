@@ -123,6 +123,11 @@ abstract base class ButanePlatformInterface {
     required String characteristicUuid,
   });
 
+  /// Requests a read of the RSSI for the peripheral.
+  Future<int> readRssi({
+    required Session session,
+  });
+
   /// TODO The platform-specific implementation of [PeripheralManager].
 }
 
@@ -171,7 +176,7 @@ final class Peripheral {
 
   final String? name;
 
-  final double? rssi;
+  final int? rssi;
 
   final ConnectionState state;
 }

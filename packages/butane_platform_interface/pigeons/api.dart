@@ -53,7 +53,7 @@ class Peripheral {
 
   final String? name;
 
-  final double? rssi;
+  final int? rssi;
 
   final ConnectionState state;
 }
@@ -372,8 +372,8 @@ abstract class ButaneFlutterApi {
     Uint8List value,
   );
 
-  void onRssi(
-    Peripheral peripheral,
-    int rssi,
-  );
+  // void onRssi(
+  //   Peripheral peripheral,
+  //   int rssi,
+  // );
 }

@@ -117,7 +117,9 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func readRssi(session: Session, completion: @escaping (Result<Int64, Error>) -> Void) {
+    let central = centralManager(session.clientIdentifier)
     
+    central.readRssi(identifier: session.peripheralIdentifier, completion: completion)
   }
   
   func requestMtu(session: Session, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {

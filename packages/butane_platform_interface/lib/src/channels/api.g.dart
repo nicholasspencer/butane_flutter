@@ -95,7 +95,7 @@ class Peripheral {
 
   String? name;
 
-  double? rssi;
+  int? rssi;
 
   ConnectionState state;
 
@@ -113,7 +113,7 @@ class Peripheral {
     return Peripheral(
       session: Session.decode(result[0]! as List<Object?>),
       name: result[1] as String?,
-      rssi: result[2] as double?,
+      rssi: result[2] as int?,
       state: ConnectionState.values[result[3]! as int],
     );
   }
@@ -994,8 +994,6 @@ abstract class ButaneFlutterApi {
 
   void onDescriptorValue(Peripheral peripheral, Descriptor descriptor, Uint8List value);
 
-  void onRssi(Peripheral peripheral, int rssi);
-
   static void setup(ButaneFlutterApi? api, {BinaryMessenger? binaryMessenger}) {
     {
       final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
@@ -1210,34 +1208,6 @@ abstract class ButaneFlutterApi {
               'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorValue was null, expected non-null Uint8List.');
           try {
             api.onDescriptorValue(arg_peripheral!, arg_descriptor!, arg_value!);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onRssi', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        __pigeon_channel.setMessageHandler(null);
-      } else {
-        __pigeon_channel.setMessageHandler((Object? message) async {
-          assert(message != null,
-          'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onRssi was null.');
-          final List<Object?> args = (message as List<Object?>?)!;
-          final Peripheral? arg_peripheral = (args[0] as Peripheral?);
-          assert(arg_peripheral != null,
-              'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onRssi was null, expected non-null Peripheral.');
-          final int? arg_rssi = (args[1] as int?);
-          assert(arg_rssi != null,
-              'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onRssi was null, expected non-null int.');
-          try {
-            api.onRssi(arg_peripheral!, arg_rssi!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

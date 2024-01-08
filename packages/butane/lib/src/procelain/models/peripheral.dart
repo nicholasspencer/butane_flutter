@@ -35,7 +35,7 @@ base class Peripheral extends Peer {
 
   final String? name;
 
-  final double? initialRssi;
+  final int? initialRssi;
 
   final ConnectionState initialState;
 
@@ -100,6 +100,10 @@ base class Peripheral extends Peer {
     );
 
     return services.map(serviceFromData);
+  }
+
+  Future<int> get rssi async {
+    return await platform.readRssi(session: session);
   }
 
   @protected
