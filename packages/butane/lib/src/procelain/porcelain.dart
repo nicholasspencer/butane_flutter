@@ -5,6 +5,8 @@ import 'package:butane_platform_interface/butane_platform_interface.dart'
     as api;
 import 'package:meta/meta.dart';
 
+import 'services/platform_stream_controller.dart';
+
 part 'models/attribute.dart';
 part 'models/central.dart';
 part 'models/characteristic.dart';

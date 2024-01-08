@@ -15,11 +15,7 @@ abstract base class PeerManager<T extends Peer> {
       _platform ?? api.ButanePlatformInterface.instance;
 
   @protected
-  StreamSubscription<api.ClientState>? stateSubscription;
-
-  @protected
-  late final StreamController<PeerManagerState> stateController =
-      StreamController<PeerManagerState>.broadcast(onListen: onStateListen);
+  PlatformStreamController<PeerManagerState, api.ClientState>? stateController;
 
   Future<PeerManagerState> get state async {
     final state = await platform.clientState(clientIdentifier);
@@ -28,29 +24,26 @@ abstract base class PeerManager<T extends Peer> {
   }
 
   Stream<PeerManagerState> get stateStream {
-    /// Subscribe to the api state stream if we aren't already.
-    stateSubscription ??=
-        platform.clientStateStream(clientIdentifier).listen(onState);
+    // Subscribe to the api state stream if we aren't already.
+    stateController ??=
+        PlatformStreamController<PeerManagerState, api.ClientState>(
+      platform: platform,
+      map: (value) => PeerManagerState.fromApi(value),
+      createStream: (platform) {
+        return platform.clientStateStream(clientIdentifier);
+      },
+      createValue: (platform) => state,
+      onListen: (platform) async {
+        platform.clientState(clientIdentifier);
+      },
+    );
 
-    return stateController.stream;
-  }
-
-  @protected
-  void onState(api.ClientState state) {
-    stateController.sink.add(PeerManagerState.fromApi(state));
-  }
-
-  @protected
-  Future<void> onStateListen() async {
-    final state = await platform.clientState(clientIdentifier);
-
-    stateController.sink.add(PeerManagerState.fromApi(state));
+    return stateController!.stream;
   }
 
   @mustCallSuper
   void dispose() {
-    stateSubscription?.cancel();
-    stateController.close();
+    stateController?.dispose();
   }
 }
 

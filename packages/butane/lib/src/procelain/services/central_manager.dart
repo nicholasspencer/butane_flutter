@@ -8,16 +8,27 @@ base class CentralManager extends PeerManager<Peripheral> {
     @visibleForTesting super.platform,
   });
 
-  ScanController? scanController;
+  PlatformStreamController<ScanResult, api.ScanResult>? scanController;
 
   Stream<ScanResult> scan({
     List<UuidIdentifier>? forServices,
   }) {
     scanController?.dispose();
 
-    scanController ??= ScanController(
-      manager: this,
-      services: forServices,
+    scanController ??= PlatformStreamController<ScanResult, api.ScanResult>(
+      platform: platform,
+      map: (value) => value.toScanResult(manager: this),
+      createStream: (platform) {
+        return platform.scanStream(
+          clientIdentifier,
+        );
+      },
+      onListen: (platform) async {
+        return platform.scan(
+          clientIdentifier: clientIdentifier,
+          forServices: forServices?.toStrings(),
+        );
+      },
     );
 
     return scanController!.stream;
@@ -57,63 +68,5 @@ base class CentralManager extends PeerManager<Peripheral> {
   void dispose() {
     scanController?.dispose();
     super.dispose();
-  }
-}
-
-final class ScanController {
-  ScanController({
-    required this.manager,
-    this.services,
-  });
-
-  final CentralManager manager;
-
-  final List<UuidIdentifier>? services;
-
-  @protected
-  StreamSubscription<api.ScanResult>? subscription;
-
-  @protected
-  late final controller = StreamController<ScanResult>.broadcast(
-    onListen: onScanListen,
-    onCancel: onScanCancel,
-  );
-
-  Stream<ScanResult> get stream {
-    /// Subscribe to the api scan stream if we aren't already.
-    subscription ??=
-        manager.platform.scanStream(manager.clientIdentifier).listen(onScan);
-
-    return controller.stream;
-  }
-
-  void onScan(api.ScanResult data) {
-    controller.sink.add(data.toScanResult(manager: manager));
-  }
-
-  Future<void> onScanListen() async {
-    await manager.platform.scan(
-      forServices: services?.toStrings(),
-      clientIdentifier: manager.clientIdentifier,
-    );
-  }
-
-  Future<void> onScanCancel() async {
-    if (controller.hasListener) {
-      return;
-    }
-    await cancelScan();
-  }
-
-  Future<void> cancelScan() {
-    return manager.platform.cancelScan(
-      clientIdentifier: manager.clientIdentifier,
-    );
-  }
-
-  void dispose() async {
-    await cancelScan();
-    await subscription?.cancel();
-    await controller.close();
   }
 }

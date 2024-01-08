@@ -30,13 +30,8 @@ base class Peripheral extends Peer {
     required super.identifier,
     this.initialRssi,
     this.initialState = ConnectionState.disconnected,
-    @visibleForTesting api.ButanePlatformInterface? platform,
-  }) : _platform = platform;
-
-  final api.ButanePlatformInterface? _platform;
-
-  @protected
-  api.ButanePlatformInterface get platform => _platform ?? manager.platform;
+    @visibleForTesting super.platform,
+  });
 
   final String? name;
 
@@ -59,11 +54,8 @@ base class Peripheral extends Peer {
   }
 
   @protected
-  StreamSubscription<api.ConnectionState>? stateSubscription;
-
-  @protected
-  late final StreamController<ConnectionState> stateController =
-      StreamController<ConnectionState>.broadcast(onListen: onStateListen);
+  PlatformStreamController<ConnectionState, api.ConnectionState>?
+      stateController;
 
   Future<ConnectionState> get state async {
     final state = await platform.connectionState(session: session);
@@ -72,26 +64,25 @@ base class Peripheral extends Peer {
   }
 
   Stream<ConnectionState> get stateStream {
-    /// Subscribe to the api state stream if we aren't already.
-    stateSubscription ??= platform
-        .connectionStateStream(
+    // Subscribe to the api state stream if we aren't already.
+    stateController ??=
+        PlatformStreamController<ConnectionState, api.ConnectionState>(
+      platform: platform,
+      map: (value) => value.toConnectionState(),
+      createStream: (platform) {
+        return platform.connectionStateStream(
           session: session,
-        )
-        .listen(onState);
+        );
+      },
+      createValue: (platform) => state,
+      onListen: (platform) async {
+        platform.connectionState(
+          session: session,
+        );
+      },
+    );
 
-    return stateController.stream;
-  }
-
-  @protected
-  void onState(api.ConnectionState state) {
-    stateController.sink.add(state.toConnectionState());
-  }
-
-  @protected
-  Future<void> onStateListen() async {
-    final state = await this.state;
-
-    stateController.sink.add(state);
+    return stateController!.stream;
   }
 
   Future<void> discoverServices({
@@ -124,6 +115,12 @@ base class Peripheral extends Peer {
   @protected
   Service serviceFromData(api.Service data) {
     return data.toService(peripheral: this);
+  }
+
+  @override
+  void dispose() {
+    stateController?.dispose();
+    super.dispose();
   }
 }
 
@@ -205,7 +202,7 @@ extension ApiAdvertisementData on api.AdvertisementData {
   AdvertisementData toAdvertisementData() {
     return AdvertisementData(
       manufacturerData: manufacturerData,
-      serviceData: serviceData as Map<String, Uint8List>?,
+      serviceData: serviceData,
       serviceUuids: serviceUuids?.nonNulls.toList(),
       txPowerLevel: txPowerLevel,
       localName: localName,
