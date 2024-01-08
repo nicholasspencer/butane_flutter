@@ -1,0 +1,31 @@
+name: butane_example
+description: "Demonstrates how to use the butane plugin."
+publish_to: none
+
+environment:
+  sdk: ">=3.2.3 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  butane:
+    path: ../
+
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  integration_test:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+dependency_overrides:
+  butane_core_bluetooth:
+    path: ../../butane_core_bluetooth
+  butane_platform_interface:
+    path: ../../butane_platform_interface

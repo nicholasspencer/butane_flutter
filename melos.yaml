@@ -9,5 +9,5 @@ scripts:
     run: cd packages/butane_platform_interface &&
       dart run pigeon
       --input pigeons/api.dart
-      --dart_out lib/src/api/api.g.dart
+      --dart_out lib/src/channels/api.g.dart
       --swift_out ../butane_core_bluetooth/darwin/Classes/Api.gen.swift

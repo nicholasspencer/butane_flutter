@@ -24,8 +24,8 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     self.flutterApi = flutterApi
   }
   
-  func identifier(_ peripheral: CBPeripheral) -> PeripheralSessionIdentifier {
-    return PeripheralSessionIdentifier(identifier: peripheral.identifier.uuidString, clientIdentifier: identifier)
+  func session(_ peripheral: CBPeripheral) -> Session {
+    return Session(peripheralIdentifier: peripheral.identifier.uuidString, clientIdentifier: identifier)
   }
   
   // MARK: Host API
@@ -48,11 +48,11 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
   }
   
-  func peripherals(peripheralIdentifiers: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
+  func peripherals(peripheralIdentifiers: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
     
   }
   
-  func connectedPeripherals(serviceUuids: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
+  func connectedPeripherals(serviceUuids: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
     
   }
   
@@ -79,7 +79,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
   }
   
-  func services(identifier: String, completion: @escaping (Result<[ServiceData], Error>) -> Void) {
+  func services(identifier: String, completion: @escaping (Result<[Service], Error>) -> Void) {
     
   }
   
@@ -87,7 +87,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
   }
   
-  func characteristics(identifier: String, serviceUuid: String, completion: @escaping (Result<[CharacteristicData], Error>) -> Void) {
+  func characteristics(identifier: String, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {
     
   }
   
@@ -142,9 +142,9 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     peripherals[peripheral.identifier] = peripheral
     
     flutterApi.onScanResult(
-      scanResult: ScanData(
-          peripheral: PeripheralData(
-            identifier: identifier(peripheral),
+      scanResult: ScanResult(
+          peripheral: Peripheral(
+            session: session(peripheral),
             name: peripheral.name,
             state: peripheral.state.connectionState
           ),
@@ -156,7 +156,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   
   public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
     flutterApi.onConnectionState(
-      peripheral: peripheral.toPeripheralData(),
+      peripheral: peripheral.toPeripheral(),
       state: .connected,
       completion: onNativeResult
     )

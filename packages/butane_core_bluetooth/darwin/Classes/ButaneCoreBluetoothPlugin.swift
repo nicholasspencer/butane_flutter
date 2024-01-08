@@ -56,71 +56,71 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     
   }
   
-  func peripherals(clientIdentifier: String?, peripheralIdentifiers: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
+  func peripherals(clientIdentifier: String?, peripheralIdentifiers: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
     
   }
   
-  func connectedPeripherals(clientIdentifier: String?, serviceUuids: [String]?, completion: @escaping (Result<[PeripheralData], Error>) -> Void) {
+  func connectedPeripherals(clientIdentifier: String?, serviceUuids: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
     
   }
   
-  func connect(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Void, Error>) -> Void) {
-    centralManager(sessionIdentifier.clientIdentifier).connect(identifier: sessionIdentifier.identifier, completion: completion)
+  func connect(session: Session, completion: @escaping (Result<Void, Error>) -> Void) {
+    centralManager(session.clientIdentifier).connect(identifier: session.peripheralIdentifier, completion: completion)
   }
   
-  func cancelConnection(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Void, Error>) -> Void) {
+  func cancelConnection(session: Session, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func connectionState(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
-    centralManager(sessionIdentifier.clientIdentifier).connectionState(identifier: sessionIdentifier.identifier, completion: completion)
+  func connectionState(session: Session, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
+    centralManager(session.clientIdentifier).connectionState(identifier: session.peripheralIdentifier, completion: completion)
   }
   
-  func discoverServices(sessionIdentifier: PeripheralSessionIdentifier, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+  func discoverServices(session: Session, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func services(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<[ServiceData], Error>) -> Void) {
+  func services(session: Session, completion: @escaping (Result<[Service], Error>) -> Void) {
     
   }
   
-  func discoverCharacteristics(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+  func discoverCharacteristics(session: Session, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func characteristics(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, completion: @escaping (Result<[CharacteristicData], Error>) -> Void) {
+  func characteristics(session: Session, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {
     
   }
   
-  func readCharacteristic(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
+  func readCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
     
   }
   
-  func writeCharacteristic(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+  func writeCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func watchCharacteristic(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {
+  func watchCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func setNotification(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+  func setNotification(session: Session, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func readDescriptor(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {
+  func readDescriptor(session: Session, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {
     
   }
   
-  func writeDescriptor(sessionIdentifier: PeripheralSessionIdentifier, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {
+  func writeDescriptor(session: Session, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func readRssi(sessionIdentifier: PeripheralSessionIdentifier, completion: @escaping (Result<Int64, Error>) -> Void) {
+  func readRssi(session: Session, completion: @escaping (Result<Int64, Error>) -> Void) {
     
   }
   
-  func requestMtu(sessionIdentifier: PeripheralSessionIdentifier, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
+  func requestMtu(session: Session, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
     
   }
 }
@@ -151,9 +151,9 @@ extension CBManagerState {
 }
 
 extension CBPeripheral {
-  func toPeripheralData() -> PeripheralData {
-    return PeripheralData(
-      identifier: PeripheralSessionIdentifier(identifier: identifier.uuidString),
+  func toPeripheral() -> Peripheral {
+    return Peripheral(
+      session: Session(peripheralIdentifier: identifier.uuidString),
       name: name,
       state: state.connectionState
     )

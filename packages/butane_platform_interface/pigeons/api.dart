@@ -27,29 +27,29 @@ enum ConnectionState {
 /// The [adapterIdentifier] is the identifier of the adapter that discovered the
 /// peripheral. This is useful when multiple adapters are available on the same
 /// device. If omitted, the default adapter is used.
-class PeripheralSessionIdentifier {
-  PeripheralSessionIdentifier({
-    required this.identifier,
+class Session {
+  Session({
+    required this.peripheralIdentifier,
     required this.clientIdentifier,
     required this.adapterIdentifier,
   });
 
-  final String identifier;
+  final String peripheralIdentifier;
 
   final String? clientIdentifier;
 
   final String? adapterIdentifier;
 }
 
-class PeripheralData {
-  PeripheralData({
-    required this.identifier,
+class Peripheral {
+  Peripheral({
+    required this.session,
     required this.state,
     this.name,
     this.rssi,
   });
 
-  final PeripheralSessionIdentifier identifier;
+  final Session session;
 
   final String? name;
 
@@ -61,33 +61,33 @@ class PeripheralData {
 class AdvertisementData {
   AdvertisementData({
     required this.localName,
-    required this.txPowerLevel,
     required this.manufacturerData,
     required this.serviceData,
     required this.serviceUuids,
+    required this.txPowerLevel,
     required this.isConnectable,
   });
 
   final String? localName;
 
-  final int? txPowerLevel;
-
   final Uint8List? manufacturerData;
-
-  final Map<String?, Uint8List?>? serviceData;
 
   final List<String?>? serviceUuids;
 
-  final bool isConnectable;
+  final Map<String?, Uint8List?>? serviceData;
+
+  final int? txPowerLevel;
+
+  final bool? isConnectable;
 }
 
-class ScanData {
-  ScanData({
+class ScanResult {
+  ScanResult({
     required this.peripheral,
     required this.advertisementData,
   });
 
-  final PeripheralData peripheral;
+  final Peripheral peripheral;
 
   final AdvertisementData advertisementData;
 }
@@ -100,20 +100,20 @@ abstract interface class AttributeData {
   final String uuid;
 }
 
-class ServiceData implements AttributeData {
-  ServiceData({
+class Service implements AttributeData {
+  Service({
     required this.uuid,
-    this.isPrimary,
+    this.isPrimary = false,
   });
 
   @override
   final String uuid;
 
-  final bool? isPrimary;
+  final bool isPrimary;
 }
 
-class CharacteristicData implements AttributeData {
-  CharacteristicData({
+class Characteristic implements AttributeData {
+  Characteristic({
     required this.uuid,
     this.value,
     this.descriptors,
@@ -123,16 +123,15 @@ class CharacteristicData implements AttributeData {
   @override
   final String uuid;
 
-  /// List of bytes
-  final List<int?>? value;
+  final Uint8List? value;
 
-  final List<DescriptorData?>? descriptors;
+  final List<Descriptor?>? descriptors;
 
   final CharacteristicProperty? properties;
 }
 
-class DescriptorData implements AttributeData {
-  DescriptorData({
+class Descriptor implements AttributeData {
+  Descriptor({
     required this.uuid,
     this.value,
   });
@@ -140,8 +139,7 @@ class DescriptorData implements AttributeData {
   @override
   final String uuid;
 
-  /// List of bytes
-  final List<int?>? value;
+  final Uint8List? value;
 }
 
 class CharacteristicProperty {
@@ -204,14 +202,14 @@ abstract class ButaneHostApi {
 
   /// A list of known peripherals optionally filtered by their identifiers.
   @async
-  List<PeripheralData> peripherals({
+  List<Peripheral> peripherals({
     String? clientIdentifier,
     List<String>? peripheralIdentifiers = const [],
   });
 
   /// A list of connected peripherals identified by an offered service.
   @async
-  List<PeripheralData> connectedPeripherals({
+  List<Peripheral> connectedPeripherals({
     String? clientIdentifier,
     List<String>? serviceUuids = const [],
   });
@@ -219,50 +217,50 @@ abstract class ButaneHostApi {
   /// Establishes a connection to the peripheral.
   @async
   void connect({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
   });
 
   /// Cancels an active or pending connection to the peripheral.
   @async
   void cancelConnection({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
   });
 
   @async
   ConnectionState connectionState({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
   });
 
   /// Discovers services offered by the peripheral.
   @async
   void discoverServices({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     List<String>? serviceUuids = const [],
   });
 
   @async
-  List<ServiceData> services({
-    required PeripheralSessionIdentifier sessionIdentifier,
+  List<Service> services({
+    required Session session,
   });
 
   /// Discovers characteristics offered by the service.
   @async
   void discoverCharacteristics({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required String serviceUuid,
     List<String>? characteristicUuids = const [],
   });
 
   @async
-  List<CharacteristicData> characteristics({
-    required PeripheralSessionIdentifier sessionIdentifier,
+  List<Characteristic> characteristics({
+    required Session session,
     required String serviceUuid,
   });
 
   /// Reads the value of the characteristic.
   @async
   Uint8List readCharacteristic({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required String serviceUuid,
     required String characteristicUuid,
   });
@@ -270,7 +268,7 @@ abstract class ButaneHostApi {
   /// Writes the value of the characteristic.
   @async
   void writeCharacteristic({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required String serviceUuid,
     required String characteristicUuid,
     required List<int> value,
@@ -279,7 +277,7 @@ abstract class ButaneHostApi {
 
   @async
   void watchCharacteristic({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required String serviceUuid,
     required String characteristicUuid,
   });
@@ -287,7 +285,7 @@ abstract class ButaneHostApi {
   /// Enables notifications or indications for the characteristic.
   @async
   void setNotification({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required String serviceUuid,
     required String characteristicUuid,
     required bool enabled,
@@ -296,7 +294,7 @@ abstract class ButaneHostApi {
   /// Reads the value of the descriptor.
   @async
   List<int> readDescriptor({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required String serviceUuid,
     required String descriptorUuid,
   });
@@ -304,7 +302,7 @@ abstract class ButaneHostApi {
   /// Writes the value of the descriptor.
   @async
   void writeDescriptor({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required String serviceUuid,
     required String descriptorUuid,
     required List<int> value,
@@ -313,13 +311,13 @@ abstract class ButaneHostApi {
   /// Requests a read of the RSSI for the peripheral.
   @async
   int readRssi({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
   });
 
   /// Requests a MTU size change.
   @async
   int requestMtu({
-    required PeripheralSessionIdentifier sessionIdentifier,
+    required Session session,
     required int mtu,
   });
 
@@ -338,44 +336,44 @@ abstract class ButaneFlutterApi {
   );
 
   void onScanResult(
-    ScanData scanResult,
+    ScanResult scanResult,
   );
 
   /// "Peripheral" APIs.
 
   void onConnectionState(
-    PeripheralData peripheral,
+    Peripheral peripheral,
     ConnectionState state,
   );
 
   void onServicesDiscovered(
-    PeripheralData peripheral,
+    Peripheral peripheral,
   );
 
   void onCharacteristicsDiscovered(
-    PeripheralData peripheral,
-    ServiceData service,
+    Peripheral peripheral,
+    Service service,
   );
 
   void onDescriptorsDiscovered(
-    PeripheralData peripheral,
-    CharacteristicData characteristic,
+    Peripheral peripheral,
+    Characteristic characteristic,
   );
 
   void onCharacteristicValue(
-    PeripheralData peripheral,
-    CharacteristicData characteristic,
+    Peripheral peripheral,
+    Characteristic characteristic,
     Uint8List value,
   );
 
   void onDescriptorValue(
-    PeripheralData peripheral,
-    DescriptorData descriptor,
+    Peripheral peripheral,
+    Descriptor descriptor,
     Uint8List value,
   );
 
   void onRssi(
-    PeripheralData peripheral,
+    Peripheral peripheral,
     int rssi,
   );
 }
