@@ -155,18 +155,27 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
         children: [
           Column(
             children: [
-              IconButton(
-                icon: const Icon(Icons.bluetooth_rounded, size: 20),
-                onPressed: _connectionState != ConnectionState.connected
-                    ? connect
-                    : null,
+              RssiIcon(
+                value: widget.scanResult.peripheral.initialRssi ?? 0,
               ),
+              switch (_connectionState) {
+                ConnectionState.connected => IconButton(
+                    icon: const Icon(Icons.bluetooth_rounded, size: 20),
+                    color: const Color(0xFF0082FC),
+                    onPressed: disconnect,
+                  ),
+                ConnectionState.connecting => const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(),
+                  ),
+                _ => IconButton(
+                    icon: const Icon(Icons.bluetooth_rounded, size: 20),
+                    onPressed: connect,
+                  ),
+              },
               IconButton(
                 icon: const Icon(Icons.search_rounded, size: 20),
                 onPressed: () {},
-              ),
-              Text(
-                widget.scanResult.peripheral.initialRssi?.toString() ?? '??',
               ),
             ],
           ),
@@ -264,5 +273,34 @@ class ScanResultDetails extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class RssiIcon extends StatelessWidget {
+  const RssiIcon({
+    required this.value,
+    super.key,
+  });
+
+  final num? value;
+
+  /// • A more strong connection is between -30 to -55
+  /// • A strong connection starts from -55 to -67
+  /// • A terrible connection starts from -80 to -90
+  /// • An unusable connection starts from -90 and below
+  @override
+  Widget build(BuildContext context) {
+    switch (value) {
+      case null:
+        return const Icon(Icons.wifi_off_rounded);
+      case > -67:
+        return const Icon(Icons.wifi_rounded);
+      case > -80 && <= -67:
+        return const Icon(Icons.wifi_2_bar_rounded);
+      case > -90 && <= -80:
+        return const Icon(Icons.wifi_1_bar_rounded);
+      default:
+        return const Icon(Icons.wifi_off_rounded);
+    }
   }
 }

@@ -76,9 +76,11 @@ base class Peripheral extends Peer {
         );
       },
       sinkValue: (platform) async {
-        return platform.connectionState(
+        final value = await platform.connectionState(
           session: session,
         );
+        print(value);
+        return value;
       },
     );
 

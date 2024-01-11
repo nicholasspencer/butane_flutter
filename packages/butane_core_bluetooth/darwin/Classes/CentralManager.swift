@@ -62,6 +62,12 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       return
     }
     
+    flutterApi.onConnectionState(
+      peripheral: peripheral.toPeripheral(session: session(peripheral)),
+      state: .connecting,
+      completion: onNativeResult
+    )
+    
     manager.connect(peripheral)
   }
   
@@ -76,7 +82,9 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       return .disconnected
     }
     
-    return peripheral.state.connectionState
+    let state = peripheral.state.connectionState
+    
+    return state
   }
   
   func discoverServices(identifier: String, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -161,12 +169,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
     flutterApi.onScanResult(
       scanResult: ScanResult(
-          peripheral: Peripheral(
-            session: session(peripheral),
-            name: peripheral.name,
-            rssi: RSSI.int64Value,
-            state: peripheral.state.connectionState
-          ),
+        peripheral: peripheral.toPeripheral(session: session(peripheral), rssi: RSSI),
         advertisementData: AdvertisementData.init(advertisementData: advertisementData)
       ),
       completion: onNativeResult
@@ -175,7 +178,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   
   public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
     flutterApi.onConnectionState(
-      peripheral: peripheral.toPeripheral(),
+      peripheral: peripheral.toPeripheral(session: session(peripheral)),
       state: .connected,
       completion: onNativeResult
     )

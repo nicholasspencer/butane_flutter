@@ -174,6 +174,23 @@ extension CBPeripheral {
       state: state.connectionState
     )
   }
+  
+  func toPeripheral(session: Session?) -> Peripheral {
+    return Peripheral(
+      session: session ?? Session(peripheralIdentifier: identifier.uuidString),
+      name: name,
+      state: state.connectionState
+    )
+  }
+  
+  func toPeripheral( session: Session?, rssi: NSNumber) -> Peripheral {
+    return Peripheral(
+      session: session ?? Session(peripheralIdentifier: identifier.uuidString),
+      name: name,
+      rssi: rssi.int64Value,
+      state: state.connectionState
+    )
+  }
 }
 
 extension CBPeripheralState {

@@ -26,9 +26,14 @@ base class CentralManager extends PeerManager<Peripheral> {
         );
       },
       onListen: (platform) async {
-        platform.scan(
+        await platform.scan(
           clientIdentifier: clientIdentifier,
           forServices: forServices?.toStrings(),
+        );
+      },
+      onCancel: (platform) async {
+        await platform.cancelScan(
+          clientIdentifier: clientIdentifier,
         );
       },
     );
