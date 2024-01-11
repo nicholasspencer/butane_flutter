@@ -79,7 +79,7 @@ base class Peripheral extends Peer {
         final value = await platform.connectionState(
           session: session,
         );
-        print(value);
+
         return value;
       },
     );

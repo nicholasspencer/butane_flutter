@@ -164,7 +164,9 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
                     color: const Color(0xFF0082FC),
                     onPressed: disconnect,
                   ),
-                ConnectionState.connecting => const SizedBox.square(
+                ConnectionState.connecting ||
+                ConnectionState.disconnecting =>
+                  const SizedBox.square(
                     dimension: 20,
                     child: CircularProgressIndicator(),
                   ),

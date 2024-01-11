@@ -73,7 +73,9 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func cancelConnection(session: Session, completion: @escaping (Result<Void, Error>) -> Void) {
+    centralManager(session.clientIdentifier).cancelConnection(identifier: session.peripheralIdentifier)
     
+    completion(.success)
   }
   
   func connectionState(session: Session, completion: @escaping (Result<ConnectionState, Error>) -> Void) {

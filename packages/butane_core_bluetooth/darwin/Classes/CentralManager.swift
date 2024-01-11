@@ -72,7 +72,19 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   func cancelConnection(identifier: String) {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid] else {
+      return
+    }
     
+    flutterApi.onConnectionState(
+      peripheral: peripheral.toPeripheral(session: session(peripheral)),
+      state: .disconnecting,
+      completion: onNativeResult
+    )
+    
+    manager.cancelPeripheralConnection(peripheral)
   }
   
   func connectionState(identifier: String) -> ConnectionState {
@@ -185,6 +197,14 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   // Peripheral Delegate
+  
+  func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+      flutterApi.onConnectionState(
+        peripheral: peripheral.toPeripheral(session: session(peripheral)),
+        state: .disconnected,
+        completion: onNativeResult
+      )
+  }
   
   func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
     guard let continuations = rssiContinuations[peripheral] else {
