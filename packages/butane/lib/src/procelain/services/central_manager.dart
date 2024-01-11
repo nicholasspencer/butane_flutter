@@ -15,7 +15,9 @@ base class CentralManager extends PeerManager<Peripheral> {
   }) {
     scanController?.dispose();
 
-    scanController ??= PlatformStreamController<ScanResult, api.ScanResult>(
+    scanController = PlatformStreamController<ScanResult, api.ScanResult>(
+      debugLabel:
+          'CentralManager($clientIdentifier, ${forServices?.map((e) => e.toString())}).scan',
       platform: platform,
       map: (value) => value.toScanResult(manager: this),
       createStream: (platform) {
@@ -24,7 +26,7 @@ base class CentralManager extends PeerManager<Peripheral> {
         );
       },
       onListen: (platform) async {
-        return platform.scan(
+        platform.scan(
           clientIdentifier: clientIdentifier,
           forServices: forServices?.toStrings(),
         );

@@ -67,6 +67,7 @@ base class Peripheral extends Peer {
     // Subscribe to the api state stream if we aren't already.
     stateController ??=
         PlatformStreamController<ConnectionState, api.ConnectionState>(
+      debugLabel: 'Peripheral($identifier).state',
       platform: platform,
       map: (value) => value.toConnectionState(),
       createStream: (platform) {
@@ -74,9 +75,8 @@ base class Peripheral extends Peer {
           session: session,
         );
       },
-      createValue: (platform) => state,
-      onListen: (platform) async {
-        platform.connectionState(
+      sinkValue: (platform) async {
+        return platform.connectionState(
           session: session,
         );
       },

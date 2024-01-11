@@ -48,6 +48,8 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    final scanResults = _scanResults.values.toList();
+
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
@@ -92,7 +94,7 @@ class _MyAppState extends State<MyApp> {
             ),
           ],
         ),
-        body: _scanResults.isEmpty
+        body: scanResults.isEmpty
             ? _scanSubscription != null
                 ? const Center(
                     child: CircularProgressIndicator(),
@@ -101,9 +103,9 @@ class _MyAppState extends State<MyApp> {
                     child: Icon(Icons.search_off_rounded),
                   )
             : ListView.builder(
-                itemCount: _scanResults.length,
+                itemCount: scanResults.length,
                 itemBuilder: (context, index) {
-                  final scanResult = _scanResults.values.elementAt(index);
+                  final scanResult = scanResults.elementAt(index);
                   return ScanResultListItem(scanResult: scanResult);
                 },
               ),
@@ -136,19 +138,12 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
 
   StreamSubscription<ConnectionState>? _connectionStateSubscription;
 
-  final _rssiStreamController = StreamController<int>();
-
   @override
   void initState() {
     super.initState();
 
     _connectionStateSubscription =
         widget.scanResult.peripheral.stateStream.listen(onConnectionState);
-
-    Timer.periodic(const Duration(seconds: 1), (_) async {
-      final rssi = await widget.scanResult.peripheral.rssi;
-      _rssiStreamController.add(rssi);
-    });
   }
 
   @override
@@ -170,15 +165,8 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
                 icon: const Icon(Icons.search_rounded, size: 20),
                 onPressed: () {},
               ),
-              StreamBuilder(
-                stream: _rssiStreamController.stream,
-                builder: (context, snapshot) {
-                  return Text(
-                    snapshot.data?.toString() ??
-                        widget.scanResult.peripheral.initialRssi?.toString() ??
-                        '??',
-                  );
-                },
+              Text(
+                widget.scanResult.peripheral.initialRssi?.toString() ?? '??',
               ),
             ],
           ),

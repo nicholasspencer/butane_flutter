@@ -371,9 +371,4 @@ abstract class ButaneFlutterApi {
     Descriptor descriptor,
     Uint8List value,
   );
-
-  // void onRssi(
-  //   Peripheral peripheral,
-  //   int rssi,
-  // );
 }

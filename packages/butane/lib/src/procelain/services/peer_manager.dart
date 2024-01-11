@@ -25,16 +25,16 @@ abstract base class PeerManager<T extends Peer> {
 
   Stream<PeerManagerState> get stateStream {
     // Subscribe to the api state stream if we aren't already.
-    stateController ??=
-        PlatformStreamController<PeerManagerState, api.ClientState>(
+    stateController ??= PlatformStreamController(
+      debugLabel: 'PeerManager($clientIdentifier).stateStream',
       platform: platform,
       map: (value) => PeerManagerState.fromApi(value),
       createStream: (platform) {
         return platform.clientStateStream(clientIdentifier);
       },
-      createValue: (platform) => state,
-      onListen: (platform) async {
-        platform.clientState(clientIdentifier);
+      sinkValue: (platform) async {
+        final state = await platform.clientState(clientIdentifier);
+        return state;
       },
     );
 

@@ -43,13 +43,15 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   func state(clientIdentifier: String?, completion: @escaping (Result<ClientState, Error>) -> Void) {
     let central = centralManager(clientIdentifier)
     
-    central.state(completion: completion)
+    completion(.success(central.state))
   }
   
   func scan(clientIdentifier: String?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     let central = centralManager(clientIdentifier)
     
-    central.scan(forServices: forServices, completion: completion)
+    central.scan(forServices: forServices)
+    
+    completion(.success)
   }
   
   func cancelScan(clientIdentifier: String?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -65,7 +67,9 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func connect(session: Session, completion: @escaping (Result<Void, Error>) -> Void) {
-    centralManager(session.clientIdentifier).connect(identifier: session.peripheralIdentifier, completion: completion)
+    centralManager(session.clientIdentifier).connect(identifier: session.peripheralIdentifier)
+    
+    completion(.success)
   }
   
   func cancelConnection(session: Session, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -73,7 +77,9 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func connectionState(session: Session, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
-    centralManager(session.clientIdentifier).connectionState(identifier: session.peripheralIdentifier, completion: completion)
+    let state = centralManager(session.clientIdentifier).connectionState(identifier: session.peripheralIdentifier)
+    
+    completion(.success(state))
   }
   
   func discoverServices(session: Session, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -117,9 +123,17 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func readRssi(session: Session, completion: @escaping (Result<Int64, Error>) -> Void) {
+    Task { readRssi(session: session, completion: completion) }
+  }
+  
+  func readRssi(session: Session, completion: @escaping (Result<Int64, Error>) -> Void) async {
     let central = centralManager(session.clientIdentifier)
     
-    central.readRssi(identifier: session.peripheralIdentifier, completion: completion)
+    if let rssi = try? await central.readRssi(identifier: session.peripheralIdentifier) {
+      completion(.success(rssi))
+    } else {
+      completion(.failure(FlutterError()))
+    }
   }
   
   func requestMtu(session: Session, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {

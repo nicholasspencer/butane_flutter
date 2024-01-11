@@ -9,26 +9,52 @@ import 'package:flutter/foundation.dart';
 base class PlatformStreamController<T, P> {
   PlatformStreamController({
     required this.createStream,
-    required this.onListen,
     required this.map,
-    this.createValue,
+    this.sinkValue,
+    this.onListen,
     this.onCancel,
+    this.debugLabel,
     api.ButanePlatformInterface? platform,
   }) : _platform = platform;
 
   final api.ButanePlatformInterface? _platform;
 
+  /// This should call the platform method that returns the stream.
   final Stream<P> Function(api.ButanePlatformInterface platform) createStream;
 
-  final Future<void> Function(api.ButanePlatformInterface platform) onListen;
-
-  final Future<T> Function(api.ButanePlatformInterface platform)? createValue;
-
-  final Future<void> Function(api.ButanePlatformInterface platform)? onCancel;
-
+  /// This should map the platform value to the value that is emitted by the
+  /// stream.
   final T Function(P value) map;
 
-  Stream<T> get stream => controller.stream;
+  /// This optional function should call the platform method that sinks a value
+  /// into the stream.
+  final Future<P> Function(api.ButanePlatformInterface platform)? sinkValue;
+
+  /// This should call the platform method that starts the stream.
+  final Future<void> Function(api.ButanePlatformInterface platform)? onListen;
+
+  /// This should call the platform method that stops the stream.
+  final Future<void> Function(api.ButanePlatformInterface platform)? onCancel;
+
+  final String? debugLabel;
+
+  bool _disposed = false;
+
+  int listenerCount = 0;
+
+  @protected
+  P? currentValue;
+
+  Stream<T> get stream {
+    assert(
+      !_disposed,
+      'PlatformStreamController has already been disposed.',
+    );
+
+    subscription ??= createStream(platform).listen(onEvent);
+
+    return controller.stream;
+  }
 
   @protected
   api.ButanePlatformInterface get platform =>
@@ -45,29 +71,31 @@ base class PlatformStreamController<T, P> {
 
   @protected
   void onEvent(P value) {
+    currentValue = value;
     controller.sink.add(map(value));
   }
 
   @protected
   void onListen_() async {
-    if (subscription != null) {
-      final value = await createValue?.call(platform);
+    listenerCount += 1;
 
-      if (value != null) {
-        controller.sink.add(value);
-      }
-
-      return;
+    if (listenerCount == 1) {
+      await onListen?.call(platform);
     }
 
-    subscription ??= createStream(platform).listen(onEvent);
+    final currentValue = await sinkValue?.call(platform);
+    this.currentValue = currentValue;
 
-    await onListen.call(platform);
+    if (currentValue != null) {
+      controller.sink.add(map(currentValue));
+    }
   }
 
   @protected
   void onCancel_() async {
-    if (controller.hasListener) {
+    listenerCount -= 1;
+
+    if (listenerCount > 0) {
       return;
     }
 
@@ -77,6 +105,8 @@ base class PlatformStreamController<T, P> {
   }
 
   void dispose() async {
+    _disposed = true;
+
     await subscription?.cancel();
     await controller.close();
   }

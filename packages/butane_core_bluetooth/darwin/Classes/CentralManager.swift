@@ -29,66 +29,70 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   // MARK: Host API
-  func state(completion: @escaping (Result<ClientState, Error>) -> Void) {
-    let state = manager.state.managerState;
-    completion(.success(state))
+  var state: ClientState {
+    get {
+      return manager.state.managerState;
+    }
   }
   
-  func scan(forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+  func scan(forServices: [String]?) {
     let uuids: [CBUUID]? = forServices?.map({
       return CBUUID(string: $0)
     })
     
     manager.scanForPeripherals(withServices: uuids)
-    
-    completion(.success)
   }
   
-  func cancelScan(completion: @escaping (Result<Void, Error>) -> Void) {
+  func cancelScan() {
     
   }
   
-  func peripherals(peripheralIdentifiers: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
-    
+  func peripherals(peripheralIdentifiers: [String]?) async throws -> [Peripheral] {
+    return []
   }
   
-  func connectedPeripherals(serviceUuids: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
-    
+  func connectedPeripherals(serviceUuids: [String]?) async throws -> [Peripheral] {
+    return []
   }
   
-  func connect(identifier: String, completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
-  
-  func cancelConnection(identifier: String, completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
-  
-  func connectionState(identifier: String, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
+  func connect(identifier: String) {
     guard
       let uuid = UUID(uuidString: identifier),
       let peripheral = peripherals[uuid] else {
-      return completion(.success(.disconnected))
+      return
     }
     
     manager.connect(peripheral)
-    completion(.success(peripheral.state.connectionState))
+  }
+  
+  func cancelConnection(identifier: String) {
+    
+  }
+  
+  func connectionState(identifier: String) -> ConnectionState {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid] else {
+      return .disconnected
+    }
+    
+    return peripheral.state.connectionState
   }
   
   func discoverServices(identifier: String, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func services(identifier: String, completion: @escaping (Result<[Service], Error>) -> Void) {
-    
+  func services(identifier: String) -> [Service] {
+    return []
   }
   
   func discoverCharacteristics(identifier: String, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     
   }
   
-  func characteristics(identifier: String, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {
-    
+  func characteristics(identifier: String, serviceUuid: String) -> [Characteristic] {
+    return []
   }
   
   func readCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
@@ -115,20 +119,22 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
   }
   
-  typealias RssiCompletion = (peripheral: CBPeripheral, completion: (Result<Int64, Error>) -> Void)
+  var rssiContinuations: [CBPeripheral: [CheckedContinuation<Int64, Error>]] = [:]
   
-  var rssiCompletions: [RssiCompletion] = []
-  
-  func readRssi(identifier: String, completion: @escaping (Result<Int64, Error>) -> Void) {
+  func readRssi(identifier: String) async throws -> Int64 {
     guard
       let uuid = UUID(uuidString: identifier),
       let peripheral = peripherals[uuid] else {
-      return completion(.failure(FlutterError()))
+      throw FlutterError()
     }
     
-    rssiCompletions.append((peripheral: peripheral, completion: completion))
+    return try await withCheckedThrowingContinuation { continuation in
+      var continuations = rssiContinuations[peripheral] ?? []
+      continuations.append(continuation)
+      rssiContinuations[peripheral] = continuations
+      peripheral.readRSSI()
+    }
     
-    peripheral.readRSSI()
   }
   
   func requestMtu(identifier: String, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
@@ -158,6 +164,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
           peripheral: Peripheral(
             session: session(peripheral),
             name: peripheral.name,
+            rssi: RSSI.int64Value,
             state: peripheral.state.connectionState
           ),
         advertisementData: AdvertisementData.init(advertisementData: advertisementData)
@@ -177,14 +184,14 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   // Peripheral Delegate
   
   func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
-    for i in stride(from: rssiCompletions.count - 1, to: 0, by: -1) {
-      let completion = rssiCompletions[i]
-      
-      if completion.peripheral.identifier != peripheral.identifier {
-        continue
-      }
-      
-      completion.completion(.success(RSSI.int64Value))
+    guard let continuations = rssiContinuations[peripheral] else {
+      return;
+    }
+    
+    rssiContinuations[peripheral] = nil
+    
+    for continuation in continuations {
+      continuation.resume(returning: RSSI.int64Value)
     }
   }
 }
