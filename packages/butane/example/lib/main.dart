@@ -15,9 +15,13 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late final manager = CentralManager();
+  late final manager = CentralManager(
+    restorationIdentifier: 'com.example.butane_example',
+  );
 
   final Map<Identifier, ScanResult> _scanResults = {};
+
+  final Map<Identifier, Peripheral> _peripherals = {};
 
   StreamSubscription<ScanResult>? _scanSubscription;
 
@@ -32,7 +36,7 @@ class _MyAppState extends State<MyApp> {
     _managerStateStream = manager.stateStream.listen(onManagerState);
   }
 
-  void onManagerState(PeerManagerState state) {
+  Future<void> onManagerState(PeerManagerState state) async {
     if (state == PeerManagerState.poweredOn) {
       setState(() {
         ready = true;
@@ -48,7 +52,16 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final scanResults = _scanResults.values.toList();
+    final items = [
+      ..._scanResults.values,
+      ..._peripherals.values,
+    ];
+
+    var count = items.length;
+
+    if (_scanSubscription != null) {
+      count += 1;
+    }
 
     return MaterialApp(
       home: Scaffold(
@@ -94,7 +107,7 @@ class _MyAppState extends State<MyApp> {
             ),
           ],
         ),
-        body: scanResults.isEmpty
+        body: items.isEmpty
             ? _scanSubscription != null
                 ? const Center(
                     child: CircularProgressIndicator(),
@@ -103,10 +116,22 @@ class _MyAppState extends State<MyApp> {
                     child: Icon(Icons.search_off_rounded),
                   )
             : ListView.builder(
-                itemCount: scanResults.length,
+                itemCount: count,
                 itemBuilder: (context, index) {
-                  final scanResult = scanResults.elementAt(index);
-                  return ScanResultListItem(scanResult: scanResult);
+                  if (_scanSubscription != null && index == count - 1) {
+                    return const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+                  final item = items.elementAt(index);
+                  return switch (item) {
+                    Peripheral() => PeripheralListItem(peripheral: item),
+                    ScanResult() => ScanResultListItem(scanResult: item),
+                    _ => const SizedBox(),
+                  };
                 },
               ),
       ),
@@ -118,6 +143,43 @@ class _MyAppState extends State<MyApp> {
     _scanSubscription?.cancel();
     _managerStateStream?.cancel();
     super.dispose();
+  }
+}
+
+class PeripheralListItem extends StatelessWidget {
+  const PeripheralListItem({
+    required this.peripheral,
+    super.key,
+  });
+
+  final Peripheral peripheral;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              RssiIcon(
+                value: peripheral.initialRssi ?? 0,
+              ),
+              IconButton(
+                icon: const Icon(Icons.bluetooth_rounded, size: 20),
+                onPressed: () {},
+              ),
+              IconButton(
+                icon: const Icon(Icons.search_rounded, size: 20),
+                onPressed: () {},
+              ),
+            ],
+          ),
+          Text(peripheral.name ?? 'Unknown'),
+        ],
+      ),
+    );
   }
 }
 

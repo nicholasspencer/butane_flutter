@@ -54,9 +54,46 @@ enum ConnectionState {
 /// device. If omitted, the default adapter is used.
 class Session {
   Session({
+    this.peripheralIdentifier,
+    this.clientIdentifier,
+    this.adapterIdentifier,
+    this.restorationIdentifier,
+  });
+
+  String? peripheralIdentifier;
+
+  String? clientIdentifier;
+
+  String? adapterIdentifier;
+
+  String? restorationIdentifier;
+
+  Object encode() {
+    return <Object?>[
+      peripheralIdentifier,
+      clientIdentifier,
+      adapterIdentifier,
+      restorationIdentifier,
+    ];
+  }
+
+  static Session decode(Object result) {
+    result as List<Object?>;
+    return Session(
+      peripheralIdentifier: result[0] as String?,
+      clientIdentifier: result[1] as String?,
+      adapterIdentifier: result[2] as String?,
+      restorationIdentifier: result[3] as String?,
+    );
+  }
+}
+
+class PeripheralSession {
+  PeripheralSession({
     required this.peripheralIdentifier,
     this.clientIdentifier,
     this.adapterIdentifier,
+    this.restorationIdentifier,
   });
 
   String peripheralIdentifier;
@@ -65,20 +102,24 @@ class Session {
 
   String? adapterIdentifier;
 
+  String? restorationIdentifier;
+
   Object encode() {
     return <Object?>[
       peripheralIdentifier,
       clientIdentifier,
       adapterIdentifier,
+      restorationIdentifier,
     ];
   }
 
-  static Session decode(Object result) {
+  static PeripheralSession decode(Object result) {
     result as List<Object?>;
-    return Session(
+    return PeripheralSession(
       peripheralIdentifier: result[0]! as String,
       clientIdentifier: result[1] as String?,
       adapterIdentifier: result[2] as String?,
+      restorationIdentifier: result[3] as String?,
     );
   }
 }
@@ -91,7 +132,7 @@ class Peripheral {
     required this.state,
   });
 
-  Session session;
+  PeripheralSession session;
 
   String? name;
 
@@ -111,7 +152,7 @@ class Peripheral {
   static Peripheral decode(Object result) {
     result as List<Object?>;
     return Peripheral(
-      session: Session.decode(result[0]! as List<Object?>),
+      session: PeripheralSession.decode(result[0]! as List<Object?>),
       name: result[1] as String?,
       rssi: result[2] as int?,
       state: ConnectionState.values[result[3]! as int],
@@ -363,11 +404,14 @@ class _ButaneHostApiCodec extends StandardMessageCodec {
     } else if (value is Peripheral) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    } else if (value is Service) {
+    } else if (value is PeripheralSession) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is Session) {
+    } else if (value is Service) {
       buffer.putUint8(133);
+      writeValue(buffer, value.encode());
+    } else if (value is Session) {
+      buffer.putUint8(134);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -386,8 +430,10 @@ class _ButaneHostApiCodec extends StandardMessageCodec {
       case 131: 
         return Peripheral.decode(readValue(buffer)!);
       case 132: 
-        return Service.decode(readValue(buffer)!);
+        return PeripheralSession.decode(readValue(buffer)!);
       case 133: 
+        return Service.decode(readValue(buffer)!);
+      case 134: 
         return Session.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -408,7 +454,7 @@ class ButaneHostApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _ButaneHostApiCodec();
 
   /// "Central" APIs.
-  Future<ClientState> state({String? clientIdentifier}) async {
+  Future<ClientState> state({Session? session}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.state';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -416,7 +462,7 @@ class ButaneHostApi {
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[clientIdentifier]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[session]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {
@@ -436,7 +482,7 @@ class ButaneHostApi {
   }
 
   /// Scans for peripherals that are advertising services.
-  Future<void> scan({String? clientIdentifier, List<String?>? forServices = const []}) async {
+  Future<void> scan({Session? session, List<String?>? forServices = const []}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.scan';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -444,7 +490,7 @@ class ButaneHostApi {
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[clientIdentifier, forServices]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[session, forServices]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {
@@ -458,7 +504,7 @@ class ButaneHostApi {
     }
   }
 
-  Future<void> cancelScan({String? clientIdentifier}) async {
+  Future<void> cancelScan({Session? session}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.cancelScan';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -466,7 +512,7 @@ class ButaneHostApi {
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[clientIdentifier]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[session]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {
@@ -481,7 +527,7 @@ class ButaneHostApi {
   }
 
   /// A list of known peripherals optionally filtered by their identifiers.
-  Future<List<Peripheral?>> peripherals({String? clientIdentifier, List<String?>? peripheralIdentifiers = const []}) async {
+  Future<List<Peripheral?>> peripherals({Session? session, List<String?> peripheralIdentifiers = const []}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.peripherals';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -489,7 +535,7 @@ class ButaneHostApi {
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[clientIdentifier, peripheralIdentifiers]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[session, peripheralIdentifiers]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {
@@ -509,7 +555,7 @@ class ButaneHostApi {
   }
 
   /// A list of connected peripherals identified by an offered service.
-  Future<List<Peripheral?>> connectedPeripherals({String? clientIdentifier, List<String?>? serviceUuids = const []}) async {
+  Future<List<Peripheral?>> connectedPeripherals({Session? session, List<String?> serviceUuids = const []}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectedPeripherals';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -517,7 +563,7 @@ class ButaneHostApi {
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[clientIdentifier, serviceUuids]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[session, serviceUuids]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {
@@ -537,7 +583,7 @@ class ButaneHostApi {
   }
 
   /// Establishes a connection to the peripheral.
-  Future<void> connect({required Session session}) async {
+  Future<void> connect({required PeripheralSession session}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connect';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -560,7 +606,7 @@ class ButaneHostApi {
   }
 
   /// Cancels an active or pending connection to the peripheral.
-  Future<void> cancelConnection({required Session session}) async {
+  Future<void> cancelConnection({required PeripheralSession session}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.cancelConnection';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -582,7 +628,7 @@ class ButaneHostApi {
     }
   }
 
-  Future<ConnectionState> connectionState({required Session session}) async {
+  Future<ConnectionState> connectionState({required PeripheralSession session}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectionState';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -610,7 +656,7 @@ class ButaneHostApi {
   }
 
   /// Discovers services offered by the peripheral.
-  Future<void> discoverServices({required Session session, List<String?>? serviceUuids = const []}) async {
+  Future<void> discoverServices({required PeripheralSession session, List<String?>? serviceUuids = const []}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverServices';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -632,7 +678,7 @@ class ButaneHostApi {
     }
   }
 
-  Future<List<Service?>> services({required Session session}) async {
+  Future<List<Service?>> services({required PeripheralSession session}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.services';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -660,7 +706,7 @@ class ButaneHostApi {
   }
 
   /// Discovers characteristics offered by the service.
-  Future<void> discoverCharacteristics({required Session session, required String serviceUuid, List<String?>? characteristicUuids = const [],}) async {
+  Future<void> discoverCharacteristics({required PeripheralSession session, required String serviceUuid, List<String?>? characteristicUuids = const [],}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverCharacteristics';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -682,7 +728,7 @@ class ButaneHostApi {
     }
   }
 
-  Future<List<Characteristic?>> characteristics({required Session session, required String serviceUuid}) async {
+  Future<List<Characteristic?>> characteristics({required PeripheralSession session, required String serviceUuid}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.characteristics';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -710,7 +756,7 @@ class ButaneHostApi {
   }
 
   /// Reads the value of the characteristic.
-  Future<Uint8List> readCharacteristic({required Session session, required String serviceUuid, required String characteristicUuid,}) async {
+  Future<Uint8List> readCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readCharacteristic';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -738,7 +784,7 @@ class ButaneHostApi {
   }
 
   /// Writes the value of the characteristic.
-  Future<void> writeCharacteristic({required Session session, required String serviceUuid, required String characteristicUuid, required List<int?> value, bool withoutResponse = false,}) async {
+  Future<void> writeCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required List<int?> value, bool withoutResponse = false,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeCharacteristic';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -760,7 +806,7 @@ class ButaneHostApi {
     }
   }
 
-  Future<void> watchCharacteristic({required Session session, required String serviceUuid, required String characteristicUuid,}) async {
+  Future<void> watchCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.watchCharacteristic';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -783,7 +829,7 @@ class ButaneHostApi {
   }
 
   /// Enables notifications or indications for the characteristic.
-  Future<void> setNotification({required Session session, required String serviceUuid, required String characteristicUuid, required bool enabled,}) async {
+  Future<void> setNotification({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required bool enabled,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.setNotification';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -806,7 +852,7 @@ class ButaneHostApi {
   }
 
   /// Reads the value of the descriptor.
-  Future<List<int?>> readDescriptor({required Session session, required String serviceUuid, required String descriptorUuid,}) async {
+  Future<List<int?>> readDescriptor({required PeripheralSession session, required String serviceUuid, required String descriptorUuid,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readDescriptor';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -834,7 +880,7 @@ class ButaneHostApi {
   }
 
   /// Writes the value of the descriptor.
-  Future<void> writeDescriptor({required Session session, required String serviceUuid, required String descriptorUuid, required List<int?> value,}) async {
+  Future<void> writeDescriptor({required PeripheralSession session, required String serviceUuid, required String descriptorUuid, required List<int?> value,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeDescriptor';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -857,7 +903,7 @@ class ButaneHostApi {
   }
 
   /// Requests a read of the RSSI for the peripheral.
-  Future<int> readRssi({required Session session}) async {
+  Future<int> readRssi({required PeripheralSession session}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readRssi';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -885,7 +931,7 @@ class ButaneHostApi {
   }
 
   /// Requests a MTU size change.
-  Future<int> requestMtu({required Session session, required int mtu}) async {
+  Future<int> requestMtu({required PeripheralSession session, required int mtu}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestMtu';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -932,13 +978,13 @@ class _ButaneFlutterApiCodec extends StandardMessageCodec {
     } else if (value is Peripheral) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is ScanResult) {
+    } else if (value is PeripheralSession) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is Service) {
+    } else if (value is ScanResult) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is Session) {
+    } else if (value is Service) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
     } else {
@@ -960,11 +1006,11 @@ class _ButaneFlutterApiCodec extends StandardMessageCodec {
       case 132: 
         return Peripheral.decode(readValue(buffer)!);
       case 133: 
-        return ScanResult.decode(readValue(buffer)!);
+        return PeripheralSession.decode(readValue(buffer)!);
       case 134: 
-        return Service.decode(readValue(buffer)!);
+        return ScanResult.decode(readValue(buffer)!);
       case 135: 
-        return Session.decode(readValue(buffer)!);
+        return Service.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }

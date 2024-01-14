@@ -3,12 +3,15 @@ part of '../porcelain.dart';
 abstract base class PeerManager<T extends Peer> {
   PeerManager({
     this.clientIdentifier,
+    this.restorationIdentifier,
     @visibleForTesting api.ButanePlatformInterface? platform,
   }) : _platform = platform;
 
   final api.ButanePlatformInterface? _platform;
 
   final String? clientIdentifier;
+
+  final String? restorationIdentifier;
 
   @protected
   api.ButanePlatformInterface get platform =>
@@ -17,8 +20,14 @@ abstract base class PeerManager<T extends Peer> {
   @protected
   PlatformStreamController<PeerManagerState, api.ClientState>? stateController;
 
+  @protected
+  api.Session get session => api.Session(
+        clientIdentifier: clientIdentifier,
+        restorationIdentifier: restorationIdentifier,
+      );
+
   Future<PeerManagerState> get state async {
-    final state = await platform.clientState(clientIdentifier);
+    final state = await platform.clientState(session);
 
     return PeerManagerState.fromApi(state);
   }
@@ -30,10 +39,10 @@ abstract base class PeerManager<T extends Peer> {
       platform: platform,
       map: (value) => PeerManagerState.fromApi(value),
       createStream: (platform) {
-        return platform.clientStateStream(clientIdentifier);
+        return platform.clientStateStream(session);
       },
       sinkValue: (platform) async {
-        final state = await platform.clientState(clientIdentifier);
+        final state = await platform.clientState(session);
         return state;
       },
     );

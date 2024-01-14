@@ -32,13 +32,37 @@ class Session {
     required this.peripheralIdentifier,
     required this.clientIdentifier,
     required this.adapterIdentifier,
+    required this.restorationIdentifier,
   });
 
-  final String peripheralIdentifier;
+  final String? peripheralIdentifier;
 
   final String? clientIdentifier;
 
   final String? adapterIdentifier;
+
+  final String? restorationIdentifier;
+}
+
+class PeripheralSession implements Session {
+  PeripheralSession({
+    required this.peripheralIdentifier,
+    required this.clientIdentifier,
+    required this.adapterIdentifier,
+    required this.restorationIdentifier,
+  });
+
+  @override
+  final String peripheralIdentifier;
+
+  @override
+  final String? clientIdentifier;
+
+  @override
+  final String? adapterIdentifier;
+
+  @override
+  final String? restorationIdentifier;
 }
 
 class Peripheral {
@@ -49,7 +73,7 @@ class Peripheral {
     this.rssi,
   });
 
-  final Session session;
+  final PeripheralSession session;
 
   final String? name;
 
@@ -185,82 +209,82 @@ abstract class ButaneHostApi {
 
   @async
   ClientState state({
-    String? clientIdentifier,
+    Session? session,
   });
 
   /// Scans for peripherals that are advertising services.
   @async
   void scan({
-    String? clientIdentifier,
+    Session? session,
     List<String>? forServices = const [],
   });
 
   @async
   void cancelScan({
-    String? clientIdentifier,
+    Session? session,
   });
 
   /// A list of known peripherals optionally filtered by their identifiers.
   @async
   List<Peripheral> peripherals({
-    String? clientIdentifier,
-    List<String>? peripheralIdentifiers = const [],
+    Session? session,
+    List<String> peripheralIdentifiers = const [],
   });
 
   /// A list of connected peripherals identified by an offered service.
   @async
   List<Peripheral> connectedPeripherals({
-    String? clientIdentifier,
-    List<String>? serviceUuids = const [],
+    Session? session,
+    List<String> serviceUuids = const [],
   });
 
   /// Establishes a connection to the peripheral.
   @async
   void connect({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// Cancels an active or pending connection to the peripheral.
   @async
   void cancelConnection({
-    required Session session,
+    required PeripheralSession session,
   });
 
   @async
   ConnectionState connectionState({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// Discovers services offered by the peripheral.
   @async
   void discoverServices({
-    required Session session,
+    required PeripheralSession session,
     List<String>? serviceUuids = const [],
   });
 
   @async
   List<Service> services({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// Discovers characteristics offered by the service.
   @async
   void discoverCharacteristics({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     List<String>? characteristicUuids = const [],
   });
 
   @async
   List<Characteristic> characteristics({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
   });
 
   /// Reads the value of the characteristic.
   @async
   Uint8List readCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
   });
@@ -268,7 +292,7 @@ abstract class ButaneHostApi {
   /// Writes the value of the characteristic.
   @async
   void writeCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
     required List<int> value,
@@ -277,7 +301,7 @@ abstract class ButaneHostApi {
 
   @async
   void watchCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
   });
@@ -285,7 +309,7 @@ abstract class ButaneHostApi {
   /// Enables notifications or indications for the characteristic.
   @async
   void setNotification({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
     required bool enabled,
@@ -294,7 +318,7 @@ abstract class ButaneHostApi {
   /// Reads the value of the descriptor.
   @async
   List<int> readDescriptor({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String descriptorUuid,
   });
@@ -302,7 +326,7 @@ abstract class ButaneHostApi {
   /// Writes the value of the descriptor.
   @async
   void writeDescriptor({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String descriptorUuid,
     required List<int> value,
@@ -311,13 +335,13 @@ abstract class ButaneHostApi {
   /// Requests a read of the RSSI for the peripheral.
   @async
   int readRssi({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// Requests a MTU size change.
   @async
   int requestMtu({
-    required Session session,
+    required PeripheralSession session,
     required int mtu,
   });
 

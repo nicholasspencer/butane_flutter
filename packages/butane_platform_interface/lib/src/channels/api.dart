@@ -7,7 +7,7 @@ import '../interface/interface.dart';
 import 'api.g.dart' as api;
 
 typedef ClientStateResult = ({
-  String? clientIdentifier,
+  Session? session,
   api.ClientState state,
 });
 
@@ -41,51 +41,60 @@ base class ButanePlatform extends ButanePlatformInterface {
   late final ButaneFlutterApi flutterApi = ButaneFlutterApi();
 
   @override
-  Future<ClientState> clientState([String? clientIdentifier]) async {
-    final state = await hostApi.state(clientIdentifier: clientIdentifier);
+  Future<ClientState> clientState([
+    Session? session,
+  ]) async {
+    final state = await hostApi.state(session: session?.toSession());
     return state.toClientState();
   }
 
   @override
-  Stream<ClientState> clientStateStream([String? clientIdentifier]) =>
+  Stream<ClientState> clientStateStream([
+    Session? session,
+  ]) =>
       flutterApi.clientStateStream
-          .where((e) => e.clientIdentifier == clientIdentifier)
+          .where(
+            (e) => e.session?.clientIdentifier == session?.clientIdentifier,
+          )
           .map((e) => e.state.toClientState());
 
   @override
   Future<void> scan({
     Iterable<String>? forServices,
-    String? clientIdentifier,
+    Session? session,
   }) async {
     hostApi.scan(
-      clientIdentifier: clientIdentifier,
+      session: session?.toSession(),
       forServices: forServices?.toList(),
     );
   }
 
   @override
-  Stream<ScanResult> scanStream([String? clientIdentifier]) {
+  Stream<ScanResult> scanStream([
+    Session? session,
+  ]) {
     return flutterApi.scanStream.where((e) {
-      return e.peripheral.session.clientIdentifier == clientIdentifier;
+      return e.peripheral.session.clientIdentifier == session?.clientIdentifier;
     }).map(ScanResultConverter.fromScanResult);
   }
 
   @override
   Future<void> cancelScan({
-    String? clientIdentifier,
+    Session? session,
   }) {
     return hostApi.cancelScan(
-      clientIdentifier: clientIdentifier,
+      session: session?.toSession(),
     );
   }
 
   @override
   Future<Iterable<Peripheral>> peripherals({
     Iterable<String> peripheralIdentifiers = const [],
-    String? clientIdentifier,
+    Session? session,
   }) async {
     final peripherals = await hostApi.peripherals(
       peripheralIdentifiers: peripheralIdentifiers.toList(),
+      session: session?.toSession(),
     );
 
     return peripherals.nonNulls.map((e) => e.toPeripheral());
@@ -94,10 +103,11 @@ base class ButanePlatform extends ButanePlatformInterface {
   @override
   Future<Iterable<Peripheral>> connectedPeripherals({
     Iterable<String> serviceUuids = const [],
-    String? clientIdentifier,
+    Session? session,
   }) async {
     final peripherals = await hostApi.connectedPeripherals(
       serviceUuids: serviceUuids.toList(),
+      session: session?.toSession(),
     );
 
     return peripherals.nonNulls.map((e) => e.toPeripheral());
@@ -105,7 +115,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> connect({
-    required Session session,
+    required PeripheralSession session,
   }) async {
     return hostApi.connect(
       session: session.toSession(),
@@ -114,7 +124,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> cancelConnection({
-    required Session session,
+    required PeripheralSession session,
   }) async {
     return hostApi.cancelConnection(
       session: session.toSession(),
@@ -123,7 +133,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<ConnectionState> connectionState({
-    required Session session,
+    required PeripheralSession session,
   }) async {
     final state = await hostApi.connectionState(
       session: session.toSession(),
@@ -134,7 +144,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Stream<ConnectionState> connectionStateStream({
-    required Session session,
+    required PeripheralSession session,
   }) {
     return flutterApi.connectionStateStream.where(
       (event) {
@@ -148,7 +158,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> discoverServices({
-    required Session session,
+    required PeripheralSession session,
     Iterable<String> serviceUuids = const [],
   }) async {
     await hostApi.discoverServices(
@@ -158,7 +168,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<Iterable<Service>> services({
-    required Session session,
+    required PeripheralSession session,
   }) async {
     final services = await hostApi.services(
       session: session.toSession(),
@@ -169,7 +179,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> discoverCharacteristics({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     Iterable<String> characteristicUuids = const [],
   }) async {
@@ -182,7 +192,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<Iterable<Characteristic>> characteristics({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
   }) async {
     final characteristics = await hostApi.characteristics(
@@ -197,7 +207,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<Uint8List> readCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
   }) async {
@@ -210,7 +220,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> writeCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
     required Uint8List value,
@@ -227,7 +237,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Stream<Uint8List> watchCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
   }) {
@@ -248,7 +258,7 @@ base class ButanePlatform extends ButanePlatformInterface {
   /// Requests a read of the RSSI for the peripheral.
   @override
   Future<int> readRssi({
-    required Session session,
+    required PeripheralSession session,
   }) {
     return hostApi.readRssi(
       session: session.toSession(),
@@ -274,7 +284,9 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   void onClientState(String? clientIdentifier, api.ClientState state) {
     clientStateController.sink.add(
       (
-        clientIdentifier: clientIdentifier,
+        session: Session(
+          clientIdentifier: clientIdentifier,
+        ),
         state: state,
       ),
     );
@@ -399,7 +411,7 @@ extension ConnectionStateResultStreamFilter on Stream<ConnectionStateResult> {
 extension CharacteristicValueResultStreamFilter
     on Stream<CharacteristicValueResult> {
   Stream<CharacteristicValueResult> forCharacteristic({
-    required String peripheralIdentifier,
+    required String? peripheralIdentifier,
     required String characteristicUuid,
   }) {
     return where(
@@ -429,6 +441,7 @@ extension SessionConverter on Session {
       peripheralIdentifier: session.peripheralIdentifier,
       clientIdentifier: session.clientIdentifier,
       adapterIdentifier: session.adapterIdentifier,
+      restorationIdentifier: session.restorationIdentifier,
     );
   }
 
@@ -437,6 +450,7 @@ extension SessionConverter on Session {
       peripheralIdentifier: peripheralIdentifier,
       clientIdentifier: clientIdentifier,
       adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier,
     );
   }
 }
@@ -447,6 +461,7 @@ extension SessionChannelConverter on api.Session {
       peripheralIdentifier: session.peripheralIdentifier,
       clientIdentifier: session.clientIdentifier,
       adapterIdentifier: session.adapterIdentifier,
+      restorationIdentifier: session.restorationIdentifier,
     );
   }
 
@@ -455,6 +470,47 @@ extension SessionChannelConverter on api.Session {
       peripheralIdentifier: peripheralIdentifier,
       clientIdentifier: clientIdentifier,
       adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier,
+    );
+  }
+}
+
+extension PeripheralSessionConverter on PeripheralSession {
+  static PeripheralSession fromSession(api.PeripheralSession session) {
+    return PeripheralSession(
+      peripheralIdentifier: session.peripheralIdentifier,
+      clientIdentifier: session.clientIdentifier,
+      adapterIdentifier: session.adapterIdentifier,
+      restorationIdentifier: session.restorationIdentifier,
+    );
+  }
+
+  api.PeripheralSession toSession() {
+    return api.PeripheralSession(
+      peripheralIdentifier: peripheralIdentifier,
+      clientIdentifier: clientIdentifier,
+      adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier,
+    );
+  }
+}
+
+extension PeripheralChannelSessionConverter on api.PeripheralSession {
+  static api.PeripheralSession fromSession(PeripheralSession session) {
+    return api.PeripheralSession(
+      peripheralIdentifier: session.peripheralIdentifier,
+      clientIdentifier: session.clientIdentifier,
+      adapterIdentifier: session.adapterIdentifier,
+      restorationIdentifier: session.restorationIdentifier,
+    );
+  }
+
+  PeripheralSession toSession() {
+    return PeripheralSession(
+      peripheralIdentifier: peripheralIdentifier,
+      clientIdentifier: clientIdentifier,
+      adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier,
     );
   }
 }
@@ -598,7 +654,7 @@ extension ConnectionStateChannelConverter on api.ConnectionState {
 extension PeripheralConverter on Peripheral {
   static Peripheral fromPeripheral(api.Peripheral peripheral) {
     return Peripheral(
-      session: SessionConverter.fromSession(peripheral.session),
+      session: PeripheralSessionConverter.fromSession(peripheral.session),
       name: peripheral.name,
       rssi: peripheral.rssi,
       state: ConnectionStateConverter.fromConnectionState(peripheral.state),
@@ -618,7 +674,8 @@ extension PeripheralConverter on Peripheral {
 extension PeripheralChannelConverter on api.Peripheral {
   static api.Peripheral fromPeripheral(Peripheral peripheral) {
     return api.Peripheral(
-      session: SessionChannelConverter.fromSession(peripheral.session),
+      session:
+          PeripheralChannelSessionConverter.fromSession(peripheral.session),
       name: peripheral.name,
       rssi: peripheral.rssi,
       state: ConnectionStateChannelConverter.fromConnectionState(

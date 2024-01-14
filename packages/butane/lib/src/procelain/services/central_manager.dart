@@ -5,6 +5,7 @@ part of '../porcelain.dart';
 base class CentralManager extends PeerManager<Peripheral> {
   CentralManager({
     super.clientIdentifier,
+    super.restorationIdentifier,
     @visibleForTesting super.platform,
   });
 
@@ -21,19 +22,17 @@ base class CentralManager extends PeerManager<Peripheral> {
       platform: platform,
       map: (value) => value.toScanResult(manager: this),
       createStream: (platform) {
-        return platform.scanStream(
-          clientIdentifier,
-        );
+        return platform.scanStream(session);
       },
       onListen: (platform) async {
         await platform.scan(
-          clientIdentifier: clientIdentifier,
+          session: session,
           forServices: forServices?.toStrings(),
         );
       },
       onCancel: (platform) async {
         await platform.cancelScan(
-          clientIdentifier: clientIdentifier,
+          session: session,
         );
       },
     );

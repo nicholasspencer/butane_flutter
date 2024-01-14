@@ -2,8 +2,8 @@
 import Flutter
 import UIKit
 #elseif os(macOS)
-import FlutterMacOS
 import AppKit
+import FlutterMacOS
 #else
 #error("Unsupported platform.")
 #endif
@@ -14,7 +14,7 @@ extension FlutterError: Error {}
 public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   var flutterApi: ButaneFlutterApi
   
-  var centralManagers: [String?:CentralManager] = [:]
+  var centralManagers: [String?: CentralManager] = [:]
   
   public static func register(with registrar: FlutterPluginRegistrar) {
     let flutterApi = ButaneFlutterApi(binaryMessenger: registrar.messenger)
@@ -26,110 +26,106 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     self.flutterApi = flutterApi
   }
   
-  func centralManager(_ id: String?) -> CentralManager {
-    if let manager = centralManagers[id] {
-      return manager;
+  func centralManager(_ session: Session?) -> CentralManager {
+    if let manager = centralManagers[session?.clientIdentifier] {
+      return manager
     }
     
-    let manager = CentralManager(identifier: id, flutterApi: flutterApi, queue: nil)
+    let manager = CentralManager(
+      identifier: session?.clientIdentifier,
+      restorationIdentifier: session?.restorationIdentifier,
+      flutterApi: flutterApi,
+      queue: nil
+    )
     
-    centralManagers[id] = manager;
+    centralManagers[session?.clientIdentifier] = manager
     
-    return manager;
+    return manager
   }
   
   // MARK: Flutter API
   
-  func state(clientIdentifier: String?, completion: @escaping (Result<ClientState, Error>) -> Void) {
-    let central = centralManager(clientIdentifier)
+  func state(session: Session?, completion: @escaping (Result<ClientState, Error>) -> Void) {
+    let central = centralManager(session)
     
     completion(.success(central.state))
   }
   
-  func scan(clientIdentifier: String?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-    let central = centralManager(clientIdentifier)
+  func scan(session: Session?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    let central = centralManager(session)
     
     central.scan(forServices: forServices)
     
     completion(.success)
   }
   
-  func cancelScan(clientIdentifier: String?, completion: @escaping (Result<Void, Error>) -> Void) {
-    
+  func cancelScan(session: Session?, completion: @escaping (Result<Void, Error>) -> Void) {
+    let central = centralManager(session)
+      
+    central.cancelScan()
+      
+    completion(.success)
   }
   
-  func peripherals(clientIdentifier: String?, peripheralIdentifiers: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
+  func peripherals(session: Session?, peripheralIdentifiers: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void) {
+    let central = centralManager(session)
     
+    let peripherals = central.peripherals(peripheralIdentifiers: peripheralIdentifiers)
+    
+    completion(.success(peripherals))
   }
   
-  func connectedPeripherals(clientIdentifier: String?, serviceUuids: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void) {
+  func connectedPeripherals(session: Session?, serviceUuids: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void) {
+    let central = centralManager(session)
     
-  }
+    let peripherals = central.connectedPeripherals(serviceUuids: serviceUuids)
+    
+    completion(.success(peripherals))}
   
-  func connect(session: Session, completion: @escaping (Result<Void, Error>) -> Void) {
-    centralManager(session.clientIdentifier).connect(identifier: session.peripheralIdentifier)
+  func connect(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void) {
+    centralManager(session.session).connect(identifier: session.peripheralIdentifier)
     
     completion(.success)
   }
   
-  func cancelConnection(session: Session, completion: @escaping (Result<Void, Error>) -> Void) {
-    centralManager(session.clientIdentifier).cancelConnection(identifier: session.peripheralIdentifier)
+  func cancelConnection(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void) {
+    centralManager(session.session).cancelConnection(identifier: session.peripheralIdentifier)
     
     completion(.success)
   }
   
-  func connectionState(session: Session, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
-    let state = centralManager(session.clientIdentifier).connectionState(identifier: session.peripheralIdentifier)
+  func connectionState(session: PeripheralSession, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
+    let state = centralManager(session.session).connectionState(identifier: session.peripheralIdentifier)
     
     completion(.success(state))
   }
   
-  func discoverServices(session: Session, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
+  func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
   
-  func services(session: Session, completion: @escaping (Result<[Service], Error>) -> Void) {
-    
-  }
+  func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void) {}
   
-  func discoverCharacteristics(session: Session, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
+  func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
   
-  func characteristics(session: Session, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {
-    
-  }
+  func characteristics(session: PeripheralSession, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {}
   
-  func readCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
-    
-  }
+  func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {}
   
-  func writeCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
+  func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
   
-  func watchCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
+  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {}
   
-  func setNotification(session: Session, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
+  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
   
-  func readDescriptor(session: Session, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {
-    
-  }
+  func readDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {}
   
-  func writeDescriptor(session: Session, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {
-    
-  }
+  func writeDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {}
   
-  func readRssi(session: Session, completion: @escaping (Result<Int64, Error>) -> Void) {
+  func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) {
     Task { readRssi(session: session, completion: completion) }
   }
   
-  func readRssi(session: Session, completion: @escaping (Result<Int64, Error>) -> Void) async {
-    let central = centralManager(session.clientIdentifier)
+  func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) async {
+    let central = centralManager(session.session)
     
     if let rssi = try? await central.readRssi(identifier: session.peripheralIdentifier) {
       completion(.success(rssi))
@@ -138,9 +134,7 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     }
   }
   
-  func requestMtu(session: Session, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
-    
-  }
+  func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {}
 }
 
 extension Result where Success == Void {
@@ -149,9 +143,20 @@ extension Result where Success == Void {
   }
 }
 
+extension PeripheralSession {
+  var session: Session {
+    Session(
+      peripheralIdentifier: peripheralIdentifier,
+      clientIdentifier: clientIdentifier,
+      adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier
+    )
+  }
+}
+
 extension CBManagerState {
   var managerState: ClientState {
-    switch(self) {
+    switch self {
     case .resetting:
       return .resetting
     case .unsupported:
@@ -171,23 +176,23 @@ extension CBManagerState {
 extension CBPeripheral {
   func toPeripheral() -> Peripheral {
     return Peripheral(
-      session: Session(peripheralIdentifier: identifier.uuidString),
+      session: PeripheralSession(peripheralIdentifier: identifier.uuidString),
       name: name,
       state: state.connectionState
     )
   }
   
-  func toPeripheral(session: Session?) -> Peripheral {
+  func toPeripheral(session: PeripheralSession?) -> Peripheral {
     return Peripheral(
-      session: session ?? Session(peripheralIdentifier: identifier.uuidString),
+      session: session ?? PeripheralSession(peripheralIdentifier: identifier.uuidString),
       name: name,
       state: state.connectionState
     )
   }
   
-  func toPeripheral( session: Session?, rssi: NSNumber) -> Peripheral {
+  func toPeripheral(session: PeripheralSession?, rssi: NSNumber) -> Peripheral {
     return Peripheral(
-      session: session ?? Session(peripheralIdentifier: identifier.uuidString),
+      session: session ?? PeripheralSession(peripheralIdentifier: identifier.uuidString),
       name: name,
       rssi: rssi.int64Value,
       state: state.connectionState
@@ -197,17 +202,17 @@ extension CBPeripheral {
 
 extension CBPeripheralState {
   var connectionState: ConnectionState {
-    switch(self) {
+    switch self {
     case .disconnected:
-        .disconnected
+      .disconnected
     case .connecting:
-        .connecting
+      .connecting
     case .connected:
-        .connected
+      .connected
     case .disconnecting:
-        .disconnecting
+      .disconnecting
     @unknown default:
-        .disconnected
+      .disconnected
     }
   }
 }
@@ -225,7 +230,7 @@ extension AdvertisementData {
     }
     
     if let services = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
-      serviceUuids = services.map({ $0.uuidString })
+      serviceUuids = services.map { $0.uuidString }
     }
     
     if let isConnectable = advertisementData[CBAdvertisementDataIsConnectable] as? Bool {

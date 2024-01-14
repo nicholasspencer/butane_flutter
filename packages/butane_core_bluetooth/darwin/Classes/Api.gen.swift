@@ -72,19 +72,22 @@ enum ConnectionState: Int {
 ///
 /// Generated class from Pigeon that represents data sent in messages.
 struct Session {
-  var peripheralIdentifier: String
+  var peripheralIdentifier: String? = nil
   var clientIdentifier: String? = nil
   var adapterIdentifier: String? = nil
+  var restorationIdentifier: String? = nil
 
   static func fromList(_ list: [Any?]) -> Session? {
-    let peripheralIdentifier = list[0] as! String
+    let peripheralIdentifier: String? = nilOrValue(list[0])
     let clientIdentifier: String? = nilOrValue(list[1])
     let adapterIdentifier: String? = nilOrValue(list[2])
+    let restorationIdentifier: String? = nilOrValue(list[3])
 
     return Session(
       peripheralIdentifier: peripheralIdentifier,
       clientIdentifier: clientIdentifier,
-      adapterIdentifier: adapterIdentifier
+      adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier
     )
   }
   func toList() -> [Any?] {
@@ -92,19 +95,50 @@ struct Session {
       peripheralIdentifier,
       clientIdentifier,
       adapterIdentifier,
+      restorationIdentifier,
+    ]
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct PeripheralSession {
+  var peripheralIdentifier: String
+  var clientIdentifier: String? = nil
+  var adapterIdentifier: String? = nil
+  var restorationIdentifier: String? = nil
+
+  static func fromList(_ list: [Any?]) -> PeripheralSession? {
+    let peripheralIdentifier = list[0] as! String
+    let clientIdentifier: String? = nilOrValue(list[1])
+    let adapterIdentifier: String? = nilOrValue(list[2])
+    let restorationIdentifier: String? = nilOrValue(list[3])
+
+    return PeripheralSession(
+      peripheralIdentifier: peripheralIdentifier,
+      clientIdentifier: clientIdentifier,
+      adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      peripheralIdentifier,
+      clientIdentifier,
+      adapterIdentifier,
+      restorationIdentifier,
     ]
   }
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
 struct Peripheral {
-  var session: Session
+  var session: PeripheralSession
   var name: String? = nil
   var rssi: Int64? = nil
   var state: ConnectionState
 
   static func fromList(_ list: [Any?]) -> Peripheral? {
-    let session = Session.fromList(list[0] as! [Any?])!
+    let session = PeripheralSession.fromList(list[0] as! [Any?])!
     let name: String? = nilOrValue(list[1])
     let rssi: Int64? = isNullish(list[2]) ? nil : (list[2] is Int64? ? list[2] as! Int64? : Int64(list[2] as! Int32))
     let state = ConnectionState(rawValue: list[3] as! Int)!
@@ -329,8 +363,10 @@ private class ButaneHostApiCodecReader: FlutterStandardReader {
       case 131:
         return Peripheral.fromList(self.readValue() as! [Any?])
       case 132:
-        return Service.fromList(self.readValue() as! [Any?])
+        return PeripheralSession.fromList(self.readValue() as! [Any?])
       case 133:
+        return Service.fromList(self.readValue() as! [Any?])
+      case 134:
         return Session.fromList(self.readValue() as! [Any?])
       default:
         return super.readValue(ofType: type)
@@ -352,11 +388,14 @@ private class ButaneHostApiCodecWriter: FlutterStandardWriter {
     } else if let value = value as? Peripheral {
       super.writeByte(131)
       super.writeValue(value.toList())
-    } else if let value = value as? Service {
+    } else if let value = value as? PeripheralSession {
       super.writeByte(132)
       super.writeValue(value.toList())
-    } else if let value = value as? Session {
+    } else if let value = value as? Service {
       super.writeByte(133)
+      super.writeValue(value.toList())
+    } else if let value = value as? Session {
+      super.writeByte(134)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -384,40 +423,40 @@ class ButaneHostApiCodec: FlutterStandardMessageCodec {
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol ButaneHostApi {
   /// "Central" APIs.
-  func state(clientIdentifier: String?, completion: @escaping (Result<ClientState, Error>) -> Void)
+  func state(session: Session?, completion: @escaping (Result<ClientState, Error>) -> Void)
   /// Scans for peripherals that are advertising services.
-  func scan(clientIdentifier: String?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
-  func cancelScan(clientIdentifier: String?, completion: @escaping (Result<Void, Error>) -> Void)
+  func scan(session: Session?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
+  func cancelScan(session: Session?, completion: @escaping (Result<Void, Error>) -> Void)
   /// A list of known peripherals optionally filtered by their identifiers.
-  func peripherals(clientIdentifier: String?, peripheralIdentifiers: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void)
+  func peripherals(session: Session?, peripheralIdentifiers: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void)
   /// A list of connected peripherals identified by an offered service.
-  func connectedPeripherals(clientIdentifier: String?, serviceUuids: [String]?, completion: @escaping (Result<[Peripheral], Error>) -> Void)
+  func connectedPeripherals(session: Session?, serviceUuids: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void)
   /// Establishes a connection to the peripheral.
-  func connect(session: Session, completion: @escaping (Result<Void, Error>) -> Void)
+  func connect(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void)
   /// Cancels an active or pending connection to the peripheral.
-  func cancelConnection(session: Session, completion: @escaping (Result<Void, Error>) -> Void)
-  func connectionState(session: Session, completion: @escaping (Result<ConnectionState, Error>) -> Void)
+  func cancelConnection(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void)
+  func connectionState(session: PeripheralSession, completion: @escaping (Result<ConnectionState, Error>) -> Void)
   /// Discovers services offered by the peripheral.
-  func discoverServices(session: Session, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
-  func services(session: Session, completion: @escaping (Result<[Service], Error>) -> Void)
+  func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
+  func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void)
   /// Discovers characteristics offered by the service.
-  func discoverCharacteristics(session: Session, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
-  func characteristics(session: Session, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void)
+  func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
+  func characteristics(session: PeripheralSession, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void)
   /// Reads the value of the characteristic.
-  func readCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
+  func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   /// Writes the value of the characteristic.
-  func writeCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void)
-  func watchCharacteristic(session: Session, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
+  func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void)
+  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
   /// Enables notifications or indications for the characteristic.
-  func setNotification(session: Session, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
+  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   /// Reads the value of the descriptor.
-  func readDescriptor(session: Session, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void)
+  func readDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void)
   /// Writes the value of the descriptor.
-  func writeDescriptor(session: Session, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void)
+  func writeDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void)
   /// Requests a read of the RSSI for the peripheral.
-  func readRssi(session: Session, completion: @escaping (Result<Int64, Error>) -> Void)
+  func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void)
   /// Requests a MTU size change.
-  func requestMtu(session: Session, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void)
+  func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void)
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -431,8 +470,8 @@ class ButaneHostApiSetup {
     if let api = api {
       stateChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let clientIdentifierArg: String? = nilOrValue(args[0])
-        api.state(clientIdentifier: clientIdentifierArg) { result in
+        let sessionArg: Session? = nilOrValue(args[0])
+        api.state(session: sessionArg) { result in
           switch result {
             case .success(let res):
               reply(wrapResult(res.rawValue))
@@ -449,9 +488,9 @@ class ButaneHostApiSetup {
     if let api = api {
       scanChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let clientIdentifierArg: String? = nilOrValue(args[0])
+        let sessionArg: Session? = nilOrValue(args[0])
         let forServicesArg: [String]? = nilOrValue(args[1])
-        api.scan(clientIdentifier: clientIdentifierArg, forServices: forServicesArg) { result in
+        api.scan(session: sessionArg, forServices: forServicesArg) { result in
           switch result {
             case .success:
               reply(wrapResult(nil))
@@ -467,8 +506,8 @@ class ButaneHostApiSetup {
     if let api = api {
       cancelScanChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let clientIdentifierArg: String? = nilOrValue(args[0])
-        api.cancelScan(clientIdentifier: clientIdentifierArg) { result in
+        let sessionArg: Session? = nilOrValue(args[0])
+        api.cancelScan(session: sessionArg) { result in
           switch result {
             case .success:
               reply(wrapResult(nil))
@@ -485,9 +524,9 @@ class ButaneHostApiSetup {
     if let api = api {
       peripheralsChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let clientIdentifierArg: String? = nilOrValue(args[0])
-        let peripheralIdentifiersArg: [String]? = nilOrValue(args[1])
-        api.peripherals(clientIdentifier: clientIdentifierArg, peripheralIdentifiers: peripheralIdentifiersArg) { result in
+        let sessionArg: Session? = nilOrValue(args[0])
+        let peripheralIdentifiersArg = args[1] as! [String]
+        api.peripherals(session: sessionArg, peripheralIdentifiers: peripheralIdentifiersArg) { result in
           switch result {
             case .success(let res):
               reply(wrapResult(res))
@@ -504,9 +543,9 @@ class ButaneHostApiSetup {
     if let api = api {
       connectedPeripheralsChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let clientIdentifierArg: String? = nilOrValue(args[0])
-        let serviceUuidsArg: [String]? = nilOrValue(args[1])
-        api.connectedPeripherals(clientIdentifier: clientIdentifierArg, serviceUuids: serviceUuidsArg) { result in
+        let sessionArg: Session? = nilOrValue(args[0])
+        let serviceUuidsArg = args[1] as! [String]
+        api.connectedPeripherals(session: sessionArg, serviceUuids: serviceUuidsArg) { result in
           switch result {
             case .success(let res):
               reply(wrapResult(res))
@@ -523,7 +562,7 @@ class ButaneHostApiSetup {
     if let api = api {
       connectChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         api.connect(session: sessionArg) { result in
           switch result {
             case .success:
@@ -541,7 +580,7 @@ class ButaneHostApiSetup {
     if let api = api {
       cancelConnectionChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         api.cancelConnection(session: sessionArg) { result in
           switch result {
             case .success:
@@ -558,7 +597,7 @@ class ButaneHostApiSetup {
     if let api = api {
       connectionStateChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         api.connectionState(session: sessionArg) { result in
           switch result {
             case .success(let res):
@@ -576,7 +615,7 @@ class ButaneHostApiSetup {
     if let api = api {
       discoverServicesChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidsArg: [String]? = nilOrValue(args[1])
         api.discoverServices(session: sessionArg, serviceUuids: serviceUuidsArg) { result in
           switch result {
@@ -594,7 +633,7 @@ class ButaneHostApiSetup {
     if let api = api {
       servicesChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         api.services(session: sessionArg) { result in
           switch result {
             case .success(let res):
@@ -612,7 +651,7 @@ class ButaneHostApiSetup {
     if let api = api {
       discoverCharacteristicsChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let characteristicUuidsArg: [String]? = nilOrValue(args[2])
         api.discoverCharacteristics(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuids: characteristicUuidsArg) { result in
@@ -631,7 +670,7 @@ class ButaneHostApiSetup {
     if let api = api {
       characteristicsChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         api.characteristics(session: sessionArg, serviceUuid: serviceUuidArg) { result in
           switch result {
@@ -650,7 +689,7 @@ class ButaneHostApiSetup {
     if let api = api {
       readCharacteristicChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let characteristicUuidArg = args[2] as! String
         api.readCharacteristic(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg) { result in
@@ -670,7 +709,7 @@ class ButaneHostApiSetup {
     if let api = api {
       writeCharacteristicChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let characteristicUuidArg = args[2] as! String
         let valueArg = args[3] as! [Int64]
@@ -691,7 +730,7 @@ class ButaneHostApiSetup {
     if let api = api {
       watchCharacteristicChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let characteristicUuidArg = args[2] as! String
         api.watchCharacteristic(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg) { result in
@@ -711,7 +750,7 @@ class ButaneHostApiSetup {
     if let api = api {
       setNotificationChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let characteristicUuidArg = args[2] as! String
         let enabledArg = args[3] as! Bool
@@ -732,7 +771,7 @@ class ButaneHostApiSetup {
     if let api = api {
       readDescriptorChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let descriptorUuidArg = args[2] as! String
         api.readDescriptor(session: sessionArg, serviceUuid: serviceUuidArg, descriptorUuid: descriptorUuidArg) { result in
@@ -752,7 +791,7 @@ class ButaneHostApiSetup {
     if let api = api {
       writeDescriptorChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let descriptorUuidArg = args[2] as! String
         let valueArg = args[3] as! [Int64]
@@ -773,7 +812,7 @@ class ButaneHostApiSetup {
     if let api = api {
       readRssiChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         api.readRssi(session: sessionArg) { result in
           switch result {
             case .success(let res):
@@ -791,7 +830,7 @@ class ButaneHostApiSetup {
     if let api = api {
       requestMtuChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! Session
+        let sessionArg = args[0] as! PeripheralSession
         let mtuArg = args[1] is Int64 ? args[1] as! Int64 : Int64(args[1] as! Int32)
         api.requestMtu(session: sessionArg, mtu: mtuArg) { result in
           switch result {
@@ -821,11 +860,11 @@ private class ButaneFlutterApiCodecReader: FlutterStandardReader {
       case 132:
         return Peripheral.fromList(self.readValue() as! [Any?])
       case 133:
-        return ScanResult.fromList(self.readValue() as! [Any?])
+        return PeripheralSession.fromList(self.readValue() as! [Any?])
       case 134:
-        return Service.fromList(self.readValue() as! [Any?])
+        return ScanResult.fromList(self.readValue() as! [Any?])
       case 135:
-        return Session.fromList(self.readValue() as! [Any?])
+        return Service.fromList(self.readValue() as! [Any?])
       default:
         return super.readValue(ofType: type)
     }
@@ -849,13 +888,13 @@ private class ButaneFlutterApiCodecWriter: FlutterStandardWriter {
     } else if let value = value as? Peripheral {
       super.writeByte(132)
       super.writeValue(value.toList())
-    } else if let value = value as? ScanResult {
+    } else if let value = value as? PeripheralSession {
       super.writeByte(133)
       super.writeValue(value.toList())
-    } else if let value = value as? Service {
+    } else if let value = value as? ScanResult {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? Session {
+    } else if let value = value as? Service {
       super.writeByte(135)
       super.writeValue(value.toList())
     } else {

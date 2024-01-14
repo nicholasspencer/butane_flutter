@@ -23,6 +23,52 @@ enum ConnectionState {
   }
 }
 
+base class ScanResult {
+  const ScanResult({
+    required this.peripheral,
+    required this.advertisementData,
+  });
+
+  final Peripheral peripheral;
+
+  final AdvertisementData advertisementData;
+}
+
+base class AdvertisementData {
+  const AdvertisementData({
+    this.localName,
+    this.txPowerLevel,
+    this.manufacturerData,
+    this.serviceData,
+    this.serviceUuids,
+    this.isConnectable = false,
+  });
+
+  final String? localName;
+
+  final int? txPowerLevel;
+
+  final Uint8List? manufacturerData;
+
+  final Map<String, Uint8List>? serviceData;
+
+  final List<String>? serviceUuids;
+
+  final bool isConnectable;
+
+  @protected
+  api.AdvertisementData toData() {
+    return api.AdvertisementData(
+      localName: localName,
+      txPowerLevel: txPowerLevel,
+      manufacturerData: manufacturerData,
+      serviceData: serviceData,
+      serviceUuids: serviceUuids,
+      isConnectable: isConnectable,
+    );
+  }
+}
+
 base class Peripheral extends Peer {
   Peripheral({
     required PeerManager<Peripheral> super.manager,
@@ -124,56 +170,19 @@ base class Peripheral extends Peer {
   }
 
   @override
+  @protected
+  api.PeripheralSession get session => api.PeripheralSession(
+        peripheralIdentifier: identifier.toString(),
+        clientIdentifier: manager.clientIdentifier,
+        adapterIdentifier: null,
+        restorationIdentifier: manager.restorationIdentifier,
+      );
+
+  @override
   void dispose() {
     stateController?.dispose();
     super.dispose();
   }
-}
-
-base class AdvertisementData {
-  const AdvertisementData({
-    this.localName,
-    this.txPowerLevel,
-    this.manufacturerData,
-    this.serviceData,
-    this.serviceUuids,
-    this.isConnectable = false,
-  });
-
-  final String? localName;
-
-  final int? txPowerLevel;
-
-  final Uint8List? manufacturerData;
-
-  final Map<String, Uint8List>? serviceData;
-
-  final List<String>? serviceUuids;
-
-  final bool isConnectable;
-
-  @protected
-  api.AdvertisementData toData() {
-    return api.AdvertisementData(
-      localName: localName,
-      txPowerLevel: txPowerLevel,
-      manufacturerData: manufacturerData,
-      serviceData: serviceData,
-      serviceUuids: serviceUuids,
-      isConnectable: isConnectable,
-    );
-  }
-}
-
-base class ScanResult {
-  const ScanResult({
-    required this.peripheral,
-    required this.advertisementData,
-  });
-
-  final Peripheral peripheral;
-
-  final AdvertisementData advertisementData;
 }
 
 extension ApiPeripheralData on api.Peripheral {

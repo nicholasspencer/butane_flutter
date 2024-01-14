@@ -6,11 +6,15 @@ abstract base class ButanePlatformInterface {
   /// The platform-specific implementation of [CentralManager].
 
   /// The current state of the client.
-  Future<ClientState> clientState([String? clientIdentifier]);
+  Future<ClientState> clientState([
+    Session? session,
+  ]);
 
   /// A stream of client state changes optionally filtered by the client
   /// identifier.
-  Stream<ClientState> clientStateStream([String? clientIdentifier]);
+  Stream<ClientState> clientStateStream([
+    Session? session,
+  ]);
 
   /// Starts scanning for peripherals that are advertising services.
   ///
@@ -18,7 +22,7 @@ abstract base class ButanePlatformInterface {
   ///  * [scanStream] for a stream of scan results.
   Future<void> scan({
     Iterable<String>? forServices,
-    String? clientIdentifier,
+    Session? session,
   });
 
   /// A stream of scan results optionally filtered by the client identifier.
@@ -29,23 +33,25 @@ abstract base class ButanePlatformInterface {
   ///
   /// See also:
   ///  * [scan] for starting a scan.
-  Stream<ScanResult> scanStream([String? clientIdentifier]);
+  Stream<ScanResult> scanStream([
+    Session? session,
+  ]);
 
   /// Stops scanning for peripherals.
   Future<void> cancelScan({
-    String? clientIdentifier,
+    Session? session,
   });
 
   /// A list of known peripherals optionally filtered by their identifiers.
   Future<Iterable<Peripheral>> peripherals({
     Iterable<String> peripheralIdentifiers = const [],
-    String? clientIdentifier,
+    Session? session,
   });
 
   /// A list of connected peripherals identified by an offered service.
   Future<Iterable<Peripheral>> connectedPeripherals({
     Iterable<String> serviceUuids = const [],
-    String? clientIdentifier,
+    Session? session,
   });
 
   /// Establishes a connection to the peripheral.
@@ -58,58 +64,58 @@ abstract base class ButanePlatformInterface {
   ///
   /// Use [Peripheral.]
   Future<void> connect({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// Cancels an active or pending connection to the peripheral.
   Future<void> cancelConnection({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// The current connection state of the peripheral.
   Future<ConnectionState> connectionState({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// A stream of connection state changes for the peripheral.
   Stream<ConnectionState> connectionStateStream({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// Discovers services offered by the peripheral.
   Future<void> discoverServices({
-    required Session session,
+    required PeripheralSession session,
     Iterable<String> serviceUuids = const [],
   });
 
   /// A list of discovered services offered by the peripheral.
   Future<Iterable<Service>> services({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// Discovers characteristics offered by the service.
   Future<void> discoverCharacteristics({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     Iterable<String> characteristicUuids = const [],
   });
 
   /// A list of discovered characteristics offered by the service.
   Future<Iterable<Characteristic>> characteristics({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
   });
 
   /// Reads the value of the characteristic.
   Future<Uint8List> readCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
   });
 
   /// Writes the value of the characteristic.
   Future<void> writeCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
     required Uint8List value,
@@ -118,14 +124,14 @@ abstract base class ButanePlatformInterface {
 
   /// Streams characteristic value updates.
   Stream<Uint8List> watchCharacteristic({
-    required Session session,
+    required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
   });
 
   /// Requests a read of the RSSI for the peripheral.
   Future<int> readRssi({
-    required Session session,
+    required PeripheralSession session,
   });
 
   /// TODO The platform-specific implementation of [PeripheralManager].
@@ -152,16 +158,31 @@ enum ConnectionState {
 
 final class Session {
   const Session({
-    required this.peripheralIdentifier,
+    this.peripheralIdentifier,
     this.clientIdentifier,
     this.adapterIdentifier,
+    this.restorationIdentifier,
   });
 
-  final String peripheralIdentifier;
+  final String? peripheralIdentifier;
 
   final String? clientIdentifier;
 
   final String? adapterIdentifier;
+
+  final String? restorationIdentifier;
+}
+
+final class PeripheralSession extends Session {
+  const PeripheralSession({
+    super.peripheralIdentifier,
+    super.clientIdentifier,
+    super.adapterIdentifier,
+    super.restorationIdentifier,
+  });
+
+  @override
+  String get peripheralIdentifier => super.peripheralIdentifier!;
 }
 
 final class Peripheral {
@@ -172,7 +193,7 @@ final class Peripheral {
     this.rssi,
   });
 
-  final Session session;
+  final PeripheralSession session;
 
   final String? name;
 
