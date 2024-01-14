@@ -370,10 +370,6 @@ abstract class ButaneFlutterApi {
     ConnectionState state,
   );
 
-  void onServicesDiscovered(
-    Peripheral peripheral,
-  );
-
   void onCharacteristicsDiscovered(
     Peripheral peripheral,
     Service service,

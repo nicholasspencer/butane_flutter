@@ -383,13 +383,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   ) {
     // TODO: implement onDescriptorsDiscovered
   }
-
-  // Service Discovery
-
-  @override
-  void onServicesDiscovered(api.Peripheral peripheral) {
-    // TODO: implement onServicesDiscovered
-  }
 }
 
 // extension ScanResultStreamFilter on Stream<ScanResult> {

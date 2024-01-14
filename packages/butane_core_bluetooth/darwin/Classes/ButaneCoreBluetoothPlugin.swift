@@ -80,7 +80,8 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     
     let peripherals = central.connectedPeripherals(serviceUuids: serviceUuids)
     
-    completion(.success(peripherals))}
+    completion(.success(peripherals))
+  }
   
   func connect(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void) {
     centralManager(session.session).connect(identifier: session.peripheralIdentifier)
@@ -100,9 +101,28 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     completion(.success(state))
   }
   
-  func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    Task { discoverServices(session: session, serviceUuids: serviceUuids, completion: completion) }
+  }
   
-  func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void) {}
+  func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) async {
+    let central = centralManager(session.session)
+    
+    do {
+      try await central.discoverServices(identifier: session.peripheralIdentifier, serviceUuids: serviceUuids)
+      completion(.success)
+    } catch {
+      completion(.failure(FlutterError()))
+    }
+  }
+  
+  func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void) {
+    let central = centralManager(session.session)
+    
+    let services = central.services(identifier: session.peripheralIdentifier)
+    
+    completion(.success(services))
+  }
   
   func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
   

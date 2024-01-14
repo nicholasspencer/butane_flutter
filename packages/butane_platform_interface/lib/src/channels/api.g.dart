@@ -1030,8 +1030,6 @@ abstract class ButaneFlutterApi {
   /// "Peripheral" APIs.
   void onConnectionState(Peripheral peripheral, ConnectionState state);
 
-  void onServicesDiscovered(Peripheral peripheral);
-
   void onCharacteristicsDiscovered(Peripheral peripheral, Service service);
 
   void onDescriptorsDiscovered(Peripheral peripheral, Characteristic characteristic);
@@ -1111,31 +1109,6 @@ abstract class ButaneFlutterApi {
               'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState was null, expected non-null ConnectionState.');
           try {
             api.onConnectionState(arg_peripheral!, arg_state!);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServicesDiscovered', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        __pigeon_channel.setMessageHandler(null);
-      } else {
-        __pigeon_channel.setMessageHandler((Object? message) async {
-          assert(message != null,
-          'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServicesDiscovered was null.');
-          final List<Object?> args = (message as List<Object?>?)!;
-          final Peripheral? arg_peripheral = (args[0] as Peripheral?);
-          assert(arg_peripheral != null,
-              'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServicesDiscovered was null, expected non-null Peripheral.');
-          try {
-            api.onServicesDiscovered(arg_peripheral!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

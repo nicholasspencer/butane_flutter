@@ -927,7 +927,6 @@ protocol ButaneFlutterApiProtocol {
   func onScanResult(scanResult scanResultArg: ScanResult, completion: @escaping (Result<Void, FlutterError>) -> Void)
   /// "Peripheral" APIs.
   func onConnectionState(peripheral peripheralArg: Peripheral, state stateArg: ConnectionState, completion: @escaping (Result<Void, FlutterError>) -> Void)
-  func onServicesDiscovered(peripheral peripheralArg: Peripheral, completion: @escaping (Result<Void, FlutterError>) -> Void)
   func onCharacteristicsDiscovered(peripheral peripheralArg: Peripheral, service serviceArg: Service, completion: @escaping (Result<Void, FlutterError>) -> Void)
   func onDescriptorsDiscovered(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, completion: @escaping (Result<Void, FlutterError>) -> Void)
   func onCharacteristicValue(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, FlutterError>) -> Void)
@@ -983,24 +982,6 @@ class ButaneFlutterApi: ButaneFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralArg, stateArg.rawValue] as [Any?]) { response in
-      guard let listResponse = response as? [Any?] else {
-        completion(.failure(createConnectionError(withChannelName:channelName)))
-        return
-      }
-      if (listResponse.count > 1) {
-        let code: String = listResponse[0] as! String
-        let message: String? = nilOrValue(listResponse[1])
-        let details: String? = nilOrValue(listResponse[2])
-        completion(.failure(FlutterError(code: code, message: message, details: details)));
-      } else {
-        completion(.success(Void()))
-      }
-    }
-  }
-  func onServicesDiscovered(peripheral peripheralArg: Peripheral, completion: @escaping (Result<Void, FlutterError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServicesDiscovered"
-    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([peripheralArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName:channelName)))
         return

@@ -62,7 +62,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   func connectedPeripherals(serviceUuids: [String]) -> [Peripheral] {
-    let uuids: [CBUUID] = serviceUuids.map { CBUUID(string: $0) }.compactMap { $0 }
+    let uuids: [CBUUID] = serviceUuids.map { CBUUID(string: $0) }
     
     return manager.retrieveConnectedPeripherals(withServices: uuids).map { $0.toPeripheral() }
   }
@@ -114,10 +114,38 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     return state
   }
   
-  func discoverServices(identifier: String, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
+  var serviceDiscoveryContinuations: [CBPeripheral: [CheckedContinuation<Void, Error>]] = [:]
+  
+  func discoverServices(identifier: String, serviceUuids: [String]?) async throws {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid]
+    else {
+      return
+    }
+    
+    let uuids = serviceUuids?.map( { CBUUID(string: $0) })
+    
+    return try await withCheckedThrowingContinuation { continuation in
+      var continuations = serviceDiscoveryContinuations[peripheral] ?? []
+      continuations.append(continuation)
+      serviceDiscoveryContinuations[peripheral] = continuations
+      peripheral.discoverServices(uuids)
+    }
+  }
+  
   
   func services(identifier: String) -> [Service] {
-    return []
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid]
+    else {
+      return []
+    }
+    
+    return peripheral.services?.map {
+      Service(uuid: $0.uuid.uuidString, isPrimary: $0.isPrimary)
+    } ?? []
   }
   
   func discoverCharacteristics(identifier: String, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
@@ -193,8 +221,6 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     )
   }
   
-  // Peripheral Delegate
-  
   func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
     flutterApi.onConnectionState(
       peripheral: peripheral.toPeripheral(session: session(peripheral)),
@@ -202,6 +228,8 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       completion: onNativeResult
     )
   }
+  
+  // Peripheral Delegate
   
   func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
     guard let continuations = rssiContinuations[peripheral] else {
@@ -211,7 +239,27 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     rssiContinuations[peripheral] = nil
     
     for continuation in continuations {
-      continuation.resume(returning: RSSI.int64Value)
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume(returning: RSSI.int64Value)
+      }
+    }
+  }
+  
+  func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+    guard let continuations = serviceDiscoveryContinuations[peripheral] else {
+      return
+    }
+    
+    serviceDiscoveryContinuations[peripheral] = nil
+    
+    for continuation in continuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume()
+      }
     }
   }
 }
