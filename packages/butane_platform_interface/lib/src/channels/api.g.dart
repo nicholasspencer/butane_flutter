@@ -784,7 +784,7 @@ class ButaneHostApi {
   }
 
   /// Writes the value of the characteristic.
-  Future<void> writeCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required List<int?> value, bool withoutResponse = false,}) async {
+  Future<void> writeCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required Uint8List value, bool withoutResponse = false,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeCharacteristic';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -852,7 +852,7 @@ class ButaneHostApi {
   }
 
   /// Reads the value of the descriptor.
-  Future<List<int?>> readDescriptor({required PeripheralSession session, required String serviceUuid, required String descriptorUuid,}) async {
+  Future<Uint8List> readDescriptor({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required String descriptorUuid,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readDescriptor';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -860,7 +860,7 @@ class ButaneHostApi {
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[session, serviceUuid, descriptorUuid]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[session, serviceUuid, characteristicUuid, descriptorUuid]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {
@@ -875,12 +875,12 @@ class ButaneHostApi {
         message: 'Host platform returned null value for non-null return value.',
       );
     } else {
-      return (__pigeon_replyList[0] as List<Object?>?)!.cast<int?>();
+      return (__pigeon_replyList[0] as Uint8List?)!;
     }
   }
 
   /// Writes the value of the descriptor.
-  Future<void> writeDescriptor({required PeripheralSession session, required String serviceUuid, required String descriptorUuid, required List<int?> value,}) async {
+  Future<void> writeDescriptor({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required String descriptorUuid, required Uint8List value,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeDescriptor';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -888,7 +888,7 @@ class ButaneHostApi {
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[session, serviceUuid, descriptorUuid, value]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[session, serviceUuid, characteristicUuid, descriptorUuid, value]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {
@@ -984,9 +984,6 @@ class _ButaneFlutterApiCodec extends StandardMessageCodec {
     } else if (value is ScanResult) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is Service) {
-      buffer.putUint8(135);
-      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -1009,8 +1006,6 @@ class _ButaneFlutterApiCodec extends StandardMessageCodec {
         return PeripheralSession.decode(readValue(buffer)!);
       case 134: 
         return ScanResult.decode(readValue(buffer)!);
-      case 135: 
-        return Service.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -1029,10 +1024,6 @@ abstract class ButaneFlutterApi {
 
   /// "Peripheral" APIs.
   void onConnectionState(Peripheral peripheral, ConnectionState state);
-
-  void onCharacteristicsDiscovered(Peripheral peripheral, Service service);
-
-  void onDescriptorsDiscovered(Peripheral peripheral, Characteristic characteristic);
 
   void onCharacteristicValue(Peripheral peripheral, Characteristic characteristic, Uint8List value);
 
@@ -1109,62 +1100,6 @@ abstract class ButaneFlutterApi {
               'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState was null, expected non-null ConnectionState.');
           try {
             api.onConnectionState(arg_peripheral!, arg_state!);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCharacteristicsDiscovered', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        __pigeon_channel.setMessageHandler(null);
-      } else {
-        __pigeon_channel.setMessageHandler((Object? message) async {
-          assert(message != null,
-          'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCharacteristicsDiscovered was null.');
-          final List<Object?> args = (message as List<Object?>?)!;
-          final Peripheral? arg_peripheral = (args[0] as Peripheral?);
-          assert(arg_peripheral != null,
-              'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCharacteristicsDiscovered was null, expected non-null Peripheral.');
-          final Service? arg_service = (args[1] as Service?);
-          assert(arg_service != null,
-              'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCharacteristicsDiscovered was null, expected non-null Service.');
-          try {
-            api.onCharacteristicsDiscovered(arg_peripheral!, arg_service!);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorsDiscovered', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        __pigeon_channel.setMessageHandler(null);
-      } else {
-        __pigeon_channel.setMessageHandler((Object? message) async {
-          assert(message != null,
-          'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorsDiscovered was null.');
-          final List<Object?> args = (message as List<Object?>?)!;
-          final Peripheral? arg_peripheral = (args[0] as Peripheral?);
-          assert(arg_peripheral != null,
-              'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorsDiscovered was null, expected non-null Peripheral.');
-          final Characteristic? arg_characteristic = (args[1] as Characteristic?);
-          assert(arg_characteristic != null,
-              'Argument for dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorsDiscovered was null, expected non-null Characteristic.');
-          try {
-            api.onDescriptorsDiscovered(arg_peripheral!, arg_characteristic!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

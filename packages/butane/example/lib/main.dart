@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
@@ -200,12 +201,31 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
 
   StreamSubscription<ConnectionState>? _connectionStateSubscription;
 
+  final Map<Service, Iterable<Characteristic>> _characteristics = {};
+
   @override
   void initState() {
     super.initState();
 
     _connectionStateSubscription =
         widget.scanResult.peripheral.stateStream.listen(onConnectionState);
+
+    initCharacteristics();
+  }
+
+  Future<void> initCharacteristics() async {
+    final Map<Service, Iterable<Characteristic>> characteristics = {};
+    final peripheral = widget.scanResult.peripheral;
+    final services = await peripheral.services;
+    for (final service in services) {
+      final char = await service.characteristics;
+      characteristics[service] = char;
+    }
+
+    setState(() {
+      _characteristics.clear();
+      _characteristics.addAll(characteristics);
+    });
   }
 
   @override
@@ -239,11 +259,32 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
               },
               IconButton(
                 icon: const Icon(Icons.search_rounded, size: 20),
-                onPressed: () {},
+                onPressed: discover,
               ),
             ],
           ),
-          ScanResultDetails(scanResult: widget.scanResult),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ScanResultDetails(scanResult: widget.scanResult),
+              if (_characteristics.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Text('Services: '),
+                      ],
+                    ),
+                    for (final entry in _characteristics.entries)
+                      ServiceDetails(
+                        service: entry.key,
+                        characteristics: entry.value,
+                      ),
+                  ],
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -263,6 +304,23 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
   void disconnect() async {
     final peripheral = widget.scanResult.peripheral;
     await peripheral.cancelConnection();
+  }
+
+  void discover() async {
+    final Map<Service, Iterable<Characteristic>> characteristics = {};
+    final peripheral = widget.scanResult.peripheral;
+    await peripheral.discoverServices();
+    final services = await peripheral.services;
+    for (final service in services) {
+      await service.discoverCharacteristics();
+      final char = await service.characteristics;
+      characteristics[service] = char;
+    }
+
+    setState(() {
+      _characteristics.clear();
+      _characteristics.addAll(characteristics);
+    });
   }
 
   @override
@@ -333,6 +391,127 @@ class ScanResultDetails extends StatelessWidget {
                   Text(service),
                 ],
               )
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class ServiceDetails extends StatelessWidget {
+  const ServiceDetails({
+    required this.service,
+    required this.characteristics,
+    super.key,
+  });
+
+  final Service service;
+
+  final Iterable<Characteristic> characteristics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.subdirectory_arrow_right_rounded,
+              size: 20,
+            ),
+            Text('Service: ${service.uuid}'),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                ),
+                Icon(
+                  Icons.subdirectory_arrow_right_rounded,
+                  size: 20,
+                ),
+                Text('Characteristics: '),
+              ],
+            ),
+            for (final characteristic in characteristics)
+              CharacteristicDetails(characteristic: characteristic)
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class CharacteristicDetails extends StatefulWidget {
+  const CharacteristicDetails({
+    super.key,
+    required this.characteristic,
+  });
+
+  final Characteristic characteristic;
+
+  @override
+  State<CharacteristicDetails> createState() => _CharacteristicDetailsState();
+}
+
+class _CharacteristicDetailsState extends State<CharacteristicDetails> {
+  Future<Uint8List>? _value;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _value = widget.characteristic.read();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const SizedBox(
+              width: 40,
+            ),
+            const Icon(
+              Icons.subdirectory_arrow_right_rounded,
+              size: 20,
+            ),
+            Text(widget.characteristic.uuid.toString()),
+          ],
+        ),
+        Row(
+          children: [
+            const SizedBox(
+              width: 60,
+            ),
+            const Icon(
+              Icons.subdirectory_arrow_right_rounded,
+              size: 20,
+            ),
+            Text('Value: '),
+            FutureBuilder<Uint8List>(
+              future: _value,
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Text(snapshot.data!.toString());
+                } else if (snapshot.hasError) {
+                  return Text(snapshot.error.toString());
+                } else {
+                  return const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(),
+                  );
+                }
+              },
+            ),
           ],
         ),
       ],

@@ -445,14 +445,14 @@ protocol ButaneHostApi {
   /// Reads the value of the characteristic.
   func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   /// Writes the value of the characteristic.
-  func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void)
+  func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData, withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
   /// Enables notifications or indications for the characteristic.
   func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   /// Reads the value of the descriptor.
-  func readDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void)
+  func readDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   /// Writes the value of the descriptor.
-  func writeDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void)
+  func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void)
   /// Requests a read of the RSSI for the peripheral.
   func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void)
   /// Requests a MTU size change.
@@ -712,7 +712,7 @@ class ButaneHostApiSetup {
         let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
         let characteristicUuidArg = args[2] as! String
-        let valueArg = args[3] as! [Int64]
+        let valueArg = args[3] as! FlutterStandardTypedData
         let withoutResponseArg = args[4] as! Bool
         api.writeCharacteristic(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg, value: valueArg, withoutResponse: withoutResponseArg) { result in
           switch result {
@@ -773,8 +773,9 @@ class ButaneHostApiSetup {
         let args = message as! [Any?]
         let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
-        let descriptorUuidArg = args[2] as! String
-        api.readDescriptor(session: sessionArg, serviceUuid: serviceUuidArg, descriptorUuid: descriptorUuidArg) { result in
+        let characteristicUuidArg = args[2] as! String
+        let descriptorUuidArg = args[3] as! String
+        api.readDescriptor(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg, descriptorUuid: descriptorUuidArg) { result in
           switch result {
             case .success(let res):
               reply(wrapResult(res))
@@ -793,9 +794,10 @@ class ButaneHostApiSetup {
         let args = message as! [Any?]
         let sessionArg = args[0] as! PeripheralSession
         let serviceUuidArg = args[1] as! String
-        let descriptorUuidArg = args[2] as! String
-        let valueArg = args[3] as! [Int64]
-        api.writeDescriptor(session: sessionArg, serviceUuid: serviceUuidArg, descriptorUuid: descriptorUuidArg, value: valueArg) { result in
+        let characteristicUuidArg = args[2] as! String
+        let descriptorUuidArg = args[3] as! String
+        let valueArg = args[4] as! FlutterStandardTypedData
+        api.writeDescriptor(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg, descriptorUuid: descriptorUuidArg, value: valueArg) { result in
           switch result {
             case .success:
               reply(wrapResult(nil))
@@ -863,8 +865,6 @@ private class ButaneFlutterApiCodecReader: FlutterStandardReader {
         return PeripheralSession.fromList(self.readValue() as! [Any?])
       case 134:
         return ScanResult.fromList(self.readValue() as! [Any?])
-      case 135:
-        return Service.fromList(self.readValue() as! [Any?])
       default:
         return super.readValue(ofType: type)
     }
@@ -893,9 +893,6 @@ private class ButaneFlutterApiCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? ScanResult {
       super.writeByte(134)
-      super.writeValue(value.toList())
-    } else if let value = value as? Service {
-      super.writeByte(135)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -927,8 +924,6 @@ protocol ButaneFlutterApiProtocol {
   func onScanResult(scanResult scanResultArg: ScanResult, completion: @escaping (Result<Void, FlutterError>) -> Void)
   /// "Peripheral" APIs.
   func onConnectionState(peripheral peripheralArg: Peripheral, state stateArg: ConnectionState, completion: @escaping (Result<Void, FlutterError>) -> Void)
-  func onCharacteristicsDiscovered(peripheral peripheralArg: Peripheral, service serviceArg: Service, completion: @escaping (Result<Void, FlutterError>) -> Void)
-  func onDescriptorsDiscovered(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, completion: @escaping (Result<Void, FlutterError>) -> Void)
   func onCharacteristicValue(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, FlutterError>) -> Void)
   func onDescriptorValue(peripheral peripheralArg: Peripheral, descriptor descriptorArg: Descriptor, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, FlutterError>) -> Void)
 }
@@ -982,42 +977,6 @@ class ButaneFlutterApi: ButaneFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralArg, stateArg.rawValue] as [Any?]) { response in
-      guard let listResponse = response as? [Any?] else {
-        completion(.failure(createConnectionError(withChannelName:channelName)))
-        return
-      }
-      if (listResponse.count > 1) {
-        let code: String = listResponse[0] as! String
-        let message: String? = nilOrValue(listResponse[1])
-        let details: String? = nilOrValue(listResponse[2])
-        completion(.failure(FlutterError(code: code, message: message, details: details)));
-      } else {
-        completion(.success(Void()))
-      }
-    }
-  }
-  func onCharacteristicsDiscovered(peripheral peripheralArg: Peripheral, service serviceArg: Service, completion: @escaping (Result<Void, FlutterError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCharacteristicsDiscovered"
-    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([peripheralArg, serviceArg] as [Any?]) { response in
-      guard let listResponse = response as? [Any?] else {
-        completion(.failure(createConnectionError(withChannelName:channelName)))
-        return
-      }
-      if (listResponse.count > 1) {
-        let code: String = listResponse[0] as! String
-        let message: String? = nilOrValue(listResponse[1])
-        let details: String? = nilOrValue(listResponse[2])
-        completion(.failure(FlutterError(code: code, message: message, details: details)));
-      } else {
-        completion(.success(Void()))
-      }
-    }
-  }
-  func onDescriptorsDiscovered(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, completion: @escaping (Result<Void, FlutterError>) -> Void) {
-    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorsDiscovered"
-    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([peripheralArg, characteristicArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName:channelName)))
         return

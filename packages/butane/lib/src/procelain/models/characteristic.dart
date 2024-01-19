@@ -34,9 +34,7 @@ base class Characteristic extends Attribute {
   }
 
   /// Streams characteristic value updates.
-  Stream<Uint8List> watch({
-    required bool enabled,
-  }) {
+  Stream<Uint8List?> watch() {
     return service?.peripheral?.manager.platform.watchCharacteristic(
           session: service!.peripheral!.session,
           serviceUuid: service!.uuid.toString(),

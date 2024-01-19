@@ -353,51 +353,15 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     );
   }
 
-  // Characteristic Discovery
-
-  @override
-  void onCharacteristicsDiscovered(
-    api.Peripheral peripheral,
-    api.Service service,
-  ) {
-    // TODO: implement onCharacteristicsDiscovered
-  }
-
   // Descriptor Value
 
   @override
   void onDescriptorValue(
     api.Peripheral peripheral,
     api.Descriptor descriptor,
-    Uint8List value,
+    dynamic value,
   ) {
     // TODO: implement onDescriptorValue
-  }
-
-  // Descriptor Discovery
-
-  @override
-  void onDescriptorsDiscovered(
-    api.Peripheral peripheral,
-    api.Characteristic characteristic,
-  ) {
-    // TODO: implement onDescriptorsDiscovered
-  }
-}
-
-// extension ScanResultStreamFilter on Stream<ScanResult> {
-//   Stream<ScanResult> forRequest(String? requestIdentifier) {
-//     return where((result) => result.requestIdentifier == requestIdentifier);
-//   }
-// }
-
-extension ConnectionStateResultStreamFilter on Stream<ConnectionStateResult> {
-  Stream<ConnectionStateResult> forPeripheral(String peripheralIdentifier) {
-    return where(
-      (result) =>
-          result.peripheral.session.peripheralIdentifier ==
-          peripheralIdentifier,
-    );
   }
 }
 
@@ -413,16 +377,6 @@ extension CharacteristicValueResultStreamFilter
               peripheralIdentifier &&
           result.characteristic.uuid == characteristicUuid,
     );
-  }
-
-  Stream<Uint8List> valueForCharacteristic({
-    required String characteristicUuid,
-    required String peripheralIdentifier,
-  }) {
-    return forCharacteristic(
-      characteristicUuid: characteristicUuid,
-      peripheralIdentifier: peripheralIdentifier,
-    ).map((result) => Uint8List.fromList(result.value.nonNulls.toList()));
   }
 }
 
@@ -817,9 +771,11 @@ extension CharacteristicConverter on Characteristic {
       descriptors: characteristic.descriptors?.nonNulls
           .map(DescriptorConverter.fromDescriptor)
           .toList(),
-      properties: CharacteristicPropertyConverter.fromCharacteristicProperty(
-        characteristic.properties!,
-      ),
+      properties: characteristic.properties != null
+          ? CharacteristicPropertyConverter.fromCharacteristicProperty(
+              characteristic.properties!,
+            )
+          : null,
     );
   }
 

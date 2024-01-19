@@ -53,7 +53,9 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     manager.scanForPeripherals(withServices: uuids)
   }
   
-  func cancelScan() {}
+  func cancelScan() {
+    manager.stopScan()
+  }
   
   func peripherals(peripheralIdentifiers: [String]) -> [Peripheral] {
     let uuids: [UUID] = peripheralIdentifiers.map { UUID(uuidString: $0) }.compactMap { $0 }
@@ -114,8 +116,6 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     return state
   }
   
-  var serviceDiscoveryContinuations: [CBPeripheral: [CheckedContinuation<Void, Error>]] = [:]
-  
   func discoverServices(identifier: String, serviceUuids: [String]?) async throws {
     guard
       let uuid = UUID(uuidString: identifier),
@@ -124,16 +124,15 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       return
     }
     
-    let uuids = serviceUuids?.map( { CBUUID(string: $0) })
+    let uuids = serviceUuids?.map { CBUUID(string: $0) }
     
+    serviceDiscoveryContinuations[peripheral] = serviceDiscoveryContinuations[peripheral] ?? []
+      
     return try await withCheckedThrowingContinuation { continuation in
-      var continuations = serviceDiscoveryContinuations[peripheral] ?? []
-      continuations.append(continuation)
-      serviceDiscoveryContinuations[peripheral] = continuations
+      serviceDiscoveryContinuations[peripheral]?.append(continuation)
       peripheral.discoverServices(uuids)
     }
   }
-  
   
   func services(identifier: String) -> [Service] {
     guard
@@ -148,25 +147,122 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     } ?? []
   }
   
-  func discoverCharacteristics(identifier: String, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
-  
-  func characteristics(identifier: String, serviceUuid: String) -> [Characteristic] {
-    return []
+  func discoverCharacteristics(identifier: String, serviceUuid: String, characteristicUuids: [String]?) async throws {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid],
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
+    else {
+      return
+    }
+      
+    let uuids = characteristicUuids?.map { CBUUID(string: $0) }
+    
+    characteristicDiscoveryContinuations[peripheral] = characteristicDiscoveryContinuations[peripheral] ?? []
+      
+    return try await withCheckedThrowingContinuation { continuation in
+      characteristicDiscoveryContinuations[peripheral]?.append(continuation)
+      peripheral.discoverCharacteristics(uuids, for: service)
+    }
   }
   
-  func readCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {}
+  func characteristics(identifier: String, serviceUuid: String) -> [Characteristic] {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid],
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
+    else {
+      return []
+    }
+    
+    return service.characteristics?.map {
+      Characteristic(
+        uuid: $0.uuid.uuidString,
+        descriptors: $0.descriptors?.map {
+          Descriptor(
+            uuid: $0.uuid.uuidString,
+            value: FlutterStandardTypedData(bytes: ($0.value as? Data? ?? Data())!)
+          )
+        }
+      )
+    } ?? []
+  }
   
-  func writeCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func readCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String) async throws -> Data {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid],
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
+    else {
+      // TODO: Throw
+      return Data()
+    }
+    
+    characteristicReadContinuations[characteristic] = characteristicReadContinuations[characteristic] ?? []
+    
+    return try await withCheckedThrowingContinuation { continuation in
+      characteristicReadContinuations[characteristic]?.append(continuation)
+      peripheral.readValue(for: characteristic)
+    }
+  }
   
-  func watchCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func writeCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String, value: Data, withoutResponse: Bool) async throws {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid],
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
+    else {
+      return
+    }
+    
+    if withoutResponse {
+      peripheral.writeValue(
+        value,
+        for: characteristic,
+        type: .withoutResponse
+      )
+      return
+    }
+    
+    characteristicWriteContinuations[characteristic] = characteristicWriteContinuations[characteristic] ?? []
+    
+    return try await withCheckedThrowingContinuation { continuation in
+      characteristicWriteContinuations[characteristic]?.append(continuation)
+      peripheral.writeValue(
+        value,
+        for: characteristic,
+        type: .withResponse
+      )
+    }
+  }
   
-  func setNotification(identifier: String, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func watchCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String) async throws {}
   
-  func readDescriptor(identifier: String, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {}
+  func setNotification(identifier: String, serviceUuid: String, characteristicUuid: String, enabled: Bool) async throws {}
   
-  func writeDescriptor(identifier: String, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {}
+  func readDescriptor(identifier: String, serviceUuid: String, characteristicUuid: String, descriptorUuid: String) async throws -> Data {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let peripheral = peripherals[uuid],
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
+      let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) })
+    else {
+      // TODO: Throw
+      return Data()
+    }
+    
+    descriptorReadContinuations[descriptor] = descriptorReadContinuations[descriptor] ?? []
+    
+    return try await withCheckedThrowingContinuation { continuation in
+      descriptorReadContinuations[descriptor]?.append(continuation)
+      peripheral.readValue(for: descriptor)
+    }
+  }
   
-  var rssiContinuations: [CBPeripheral: [CheckedContinuation<Int64, Error>]] = [:]
+  func writeDescriptor(identifier: String, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {}
   
   func readRssi(identifier: String) async throws -> Int64 {
     guard
@@ -176,15 +272,31 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       throw FlutterError()
     }
     
+    rssiContinuations[peripheral] = rssiContinuations[peripheral] ?? []
+    
     return try await withCheckedThrowingContinuation { continuation in
-      var continuations = rssiContinuations[peripheral] ?? []
-      continuations.append(continuation)
-      rssiContinuations[peripheral] = continuations
+      rssiContinuations[peripheral]?.append(continuation)
       peripheral.readRSSI()
     }
   }
   
-  func requestMtu(identifier: String, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {}
+  func requestMtu(identifier: String, mtu: Int64) {}
+  
+  // MARK: Continuation storage
+  
+  var serviceDiscoveryContinuations: [CBPeripheral: [CheckedContinuation<Void, Error>]] = [:]
+  
+  var characteristicDiscoveryContinuations: [CBPeripheral: [CheckedContinuation<Void, Error>]] = [:]
+  
+  var rssiContinuations: [CBPeripheral: [CheckedContinuation<Int64, Error>]] = [:]
+  
+  var characteristicReadContinuations: [CBCharacteristic: [CheckedContinuation<Data, Error>]] = [:]
+  
+  var characteristicWriteContinuations: [CBCharacteristic: [CheckedContinuation<Void, Error>]] = [:]
+  
+  var descriptorReadContinuations: [CBDescriptor: [CheckedContinuation<Data, Error>]] = [:]
+  
+  var descriptorWriteContinuations: [CBDescriptor: [CheckedContinuation<Void, Error>]] = [:]
   
   // MARK: Central Delegate
   
@@ -261,5 +373,64 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         continuation.resume()
       }
     }
+  }
+  
+  func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+    guard let continuations = characteristicDiscoveryContinuations[peripheral] else {
+      return
+    }
+    
+    characteristicDiscoveryContinuations[peripheral] = nil
+    
+    for continuation in continuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume()
+      }
+    }
+  }
+  
+  func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+    flutterApi.onCharacteristicValue(
+      peripheral: peripheral.toPeripheral(session: session(peripheral)),
+      characteristic: characteristic.toCharacteristic(),
+      value: FlutterStandardTypedData(bytes: characteristic.value ?? Data()),
+      completion: onNativeResult
+    )
+    
+    guard let continuations = characteristicReadContinuations[characteristic] else {
+      return
+    }
+    
+    characteristicReadContinuations[characteristic] = nil
+    
+    for continuation in continuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume(returning: characteristic.value ?? Data())
+      }
+    }
+  }
+  
+  func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+    guard let continuations = characteristicWriteContinuations[characteristic] else {
+      return
+    }
+    
+    characteristicWriteContinuations[characteristic] = nil
+    
+    for continuation in continuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume()
+      }
+    }
+  }
+  
+  func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+    
   }
 }

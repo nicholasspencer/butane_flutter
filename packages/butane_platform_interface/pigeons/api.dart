@@ -295,7 +295,7 @@ abstract class ButaneHostApi {
     required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
-    required List<int> value,
+    required Uint8List value,
     bool withoutResponse = false,
   });
 
@@ -317,9 +317,10 @@ abstract class ButaneHostApi {
 
   /// Reads the value of the descriptor.
   @async
-  List<int> readDescriptor({
+  Uint8List readDescriptor({
     required PeripheralSession session,
     required String serviceUuid,
+    required String characteristicUuid,
     required String descriptorUuid,
   });
 
@@ -328,8 +329,9 @@ abstract class ButaneHostApi {
   void writeDescriptor({
     required PeripheralSession session,
     required String serviceUuid,
+    required String characteristicUuid,
     required String descriptorUuid,
-    required List<int> value,
+    required Uint8List value,
   });
 
   /// Requests a read of the RSSI for the peripheral.
@@ -368,16 +370,6 @@ abstract class ButaneFlutterApi {
   void onConnectionState(
     Peripheral peripheral,
     ConnectionState state,
-  );
-
-  void onCharacteristicsDiscovered(
-    Peripheral peripheral,
-    Service service,
-  );
-
-  void onDescriptorsDiscovered(
-    Peripheral peripheral,
-    Characteristic characteristic,
   );
 
   void onCharacteristicValue(

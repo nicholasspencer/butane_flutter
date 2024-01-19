@@ -102,8 +102,54 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-    Task { discoverServices(session: session, serviceUuids: serviceUuids, completion: completion) }
+    Task { await discoverServices(session: session, serviceUuids: serviceUuids, completion: completion) }
   }
+  
+  func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void) {
+    let central = centralManager(session.session)
+    
+    let services = central.services(identifier: session.peripheralIdentifier)
+    
+    completion(.success(services))
+  }
+  
+  func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    Task {
+      await discoverCharacteristics(session: session, serviceUuid: serviceUuid, characteristicUuids: characteristicUuids, completion: completion)
+    }
+  }
+  
+  func characteristics(session: PeripheralSession, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {
+    let central = centralManager(session.session)
+      
+    let characteristics = central.characteristics(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid)
+      
+    completion(.success(characteristics))
+  }
+  
+  func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
+    Task { await readCharacteristic(session: session, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, completion: completion) }
+  }
+  
+  func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData, withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+    Task { await writeCharacteristic(session: session, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, value: value, withoutResponse: withoutResponse, completion: completion) }
+  }
+  
+  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {}
+  
+  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
+  
+  func readDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {}
+  
+  func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void) {}
+  
+  func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) {
+    Task { await readRssi(session: session, completion: completion) }
+  }
+  
+  func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {}
+  
+  // MARK: Async wrappers
   
   func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) async {
     let central = centralManager(session.session)
@@ -116,32 +162,74 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     }
   }
   
-  func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void) {
+  func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) async {
     let central = centralManager(session.session)
-    
-    let services = central.services(identifier: session.peripheralIdentifier)
-    
-    completion(.success(services))
+      
+    do {
+      try await central.discoverCharacteristics(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuids: characteristicUuids)
+      completion(.success)
+    } catch {
+      completion(.failure(FlutterError()))
+    }
   }
   
-  func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) async {
+    let central = centralManager(session.session)
+    
+    do {
+      let value = try await central.readCharacteristic(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
+      completion(.success(FlutterStandardTypedData(bytes: value)))
+    } catch {
+      completion(.failure(FlutterError()))
+    }
+  }
   
-  func characteristics(session: PeripheralSession, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {}
+  func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData, withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) async {
+    let central = centralManager(session.session)
+    
+    do {
+      try await central.writeCharacteristic(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, value: value.data, withoutResponse: withoutResponse)
+      completion(.success)
+    } catch {
+      completion(.failure(FlutterError()))
+    }
+  }
   
-  func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {}
+  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) async {
+    let central = centralManager(session.session)
+    
+    do {
+      try await central.watchCharacteristic(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
+      completion(.success)
+    } catch {
+      completion(.failure(FlutterError()))
+    }
+  }
   
-  func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: [Int64], withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) async {
+    let central = centralManager(session.session)
+    
+    do {
+      try await central.setNotification(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, enabled: enabled)
+      completion(.success)
+    } catch {
+      completion(.failure(FlutterError()))
+    }
+  }
   
-  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func readDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) async {
+    let central = centralManager(session.session)
+    
+    do {
+      let value = try await central.readDescriptor(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid)
+      completion(.success(FlutterStandardTypedData(bytes: value)))
+    } catch {
+      completion(.failure(FlutterError()))
+    }
+  }
   
-  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
-  
-  func readDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, completion: @escaping (Result<[Int64], Error>) -> Void) {}
-  
-  func writeDescriptor(session: PeripheralSession, serviceUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) {}
-  
-  func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) {
-    Task { readRssi(session: session, completion: completion) }
+  func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) async {
+//    let central = centralManager(session.session)
   }
   
   func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) async {
@@ -153,13 +241,17 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       completion(.failure(FlutterError()))
     }
   }
-  
-  func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {}
 }
 
 extension Result where Success == Void {
   static var success: Result {
     return .success(())
+  }
+}
+
+extension [Int64] {
+  var data: Data {
+    return Data(buffer: withUnsafeBufferPointer { $0 })
   }
 }
 
@@ -216,6 +308,15 @@ extension CBPeripheral {
       name: name,
       rssi: rssi.int64Value,
       state: state.connectionState
+    )
+  }
+}
+
+extension CBCharacteristic {
+  func toCharacteristic() -> Characteristic {
+    return Characteristic(
+      uuid: uuid.uuidString,
+      value: value != nil ? FlutterStandardTypedData(bytes: value!) : nil
     )
   }
 }
