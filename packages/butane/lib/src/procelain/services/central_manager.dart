@@ -9,6 +9,7 @@ base class CentralManager extends PeerManager<Peripheral> {
     @visibleForTesting super.platform,
   });
 
+  @protected
   PlatformStreamController<ScanResult, api.ScanResult>? scanController;
 
   Stream<ScanResult> scan({

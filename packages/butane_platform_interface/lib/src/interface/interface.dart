@@ -122,8 +122,17 @@ abstract base class ButanePlatformInterface {
     bool withoutResponse = false,
   });
 
-  /// Streams characteristic value updates.
-  Stream<Uint8List> watchCharacteristic({
+  /// Updates the observability of notifications and indications of
+  /// the characteristic.
+  Future<void> observeCharacteristic({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    bool observe = true,
+  });
+
+  /// A stream of characteristic value changes.
+  Stream<Uint8List> characteristicValueStream({
     required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,

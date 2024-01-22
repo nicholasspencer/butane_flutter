@@ -135,9 +135,9 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     Task { await writeCharacteristic(session: session, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, value: value, withoutResponse: withoutResponse, completion: completion) }
   }
   
-  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {}
-  
-  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func observeCharacteristic(observe: Bool, session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {
+    Task { await observeCharacteristic(observe: observe, session: session, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, completion: completion) }
+  }
   
   func readDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {}
   
@@ -195,22 +195,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     }
   }
   
-  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) async {
+  func observeCharacteristic(observe: Bool, session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void) async {
     let central = centralManager(session.session)
     
     do {
-      try await central.watchCharacteristic(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
-      completion(.success)
-    } catch {
-      completion(.failure(FlutterError()))
-    }
-  }
-  
-  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) async {
-    let central = centralManager(session.session)
-    
-    do {
-      try await central.setNotification(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, enabled: enabled)
+      try await central.observeCharacteristic(observe: observe, identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
       completion(.success)
     } catch {
       completion(.failure(FlutterError()))

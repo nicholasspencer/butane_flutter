@@ -300,19 +300,11 @@ abstract class ButaneHostApi {
   });
 
   @async
-  void watchCharacteristic({
+  void observeCharacteristic({
+    bool observe = true,
     required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
-  });
-
-  /// Enables notifications or indications for the characteristic.
-  @async
-  void setNotification({
-    required PeripheralSession session,
-    required String serviceUuid,
-    required String characteristicUuid,
-    required bool enabled,
   });
 
   /// Reads the value of the descriptor.

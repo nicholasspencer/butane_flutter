@@ -446,9 +446,7 @@ protocol ButaneHostApi {
   func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   /// Writes the value of the characteristic.
   func writeCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData, withoutResponse: Bool, completion: @escaping (Result<Void, Error>) -> Void)
-  func watchCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
-  /// Enables notifications or indications for the characteristic.
-  func setNotification(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
+  func observeCharacteristic(observe: Bool, session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
   /// Reads the value of the descriptor.
   func readDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   /// Writes the value of the descriptor.
@@ -726,14 +724,15 @@ class ButaneHostApiSetup {
     } else {
       writeCharacteristicChannel.setMessageHandler(nil)
     }
-    let watchCharacteristicChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.watchCharacteristic", binaryMessenger: binaryMessenger, codec: codec)
+    let observeCharacteristicChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.observeCharacteristic", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
-      watchCharacteristicChannel.setMessageHandler { message, reply in
+      observeCharacteristicChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
-        let sessionArg = args[0] as! PeripheralSession
-        let serviceUuidArg = args[1] as! String
-        let characteristicUuidArg = args[2] as! String
-        api.watchCharacteristic(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg) { result in
+        let observeArg = args[0] as! Bool
+        let sessionArg = args[1] as! PeripheralSession
+        let serviceUuidArg = args[2] as! String
+        let characteristicUuidArg = args[3] as! String
+        api.observeCharacteristic(observe: observeArg, session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg) { result in
           switch result {
             case .success:
               reply(wrapResult(nil))
@@ -743,28 +742,7 @@ class ButaneHostApiSetup {
         }
       }
     } else {
-      watchCharacteristicChannel.setMessageHandler(nil)
-    }
-    /// Enables notifications or indications for the characteristic.
-    let setNotificationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.setNotification", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      setNotificationChannel.setMessageHandler { message, reply in
-        let args = message as! [Any?]
-        let sessionArg = args[0] as! PeripheralSession
-        let serviceUuidArg = args[1] as! String
-        let characteristicUuidArg = args[2] as! String
-        let enabledArg = args[3] as! Bool
-        api.setNotification(session: sessionArg, serviceUuid: serviceUuidArg, characteristicUuid: characteristicUuidArg, enabled: enabledArg) { result in
-          switch result {
-            case .success:
-              reply(wrapResult(nil))
-            case .failure(let error):
-              reply(wrapError(error))
-          }
-        }
-      }
-    } else {
-      setNotificationChannel.setMessageHandler(nil)
+      observeCharacteristicChannel.setMessageHandler(nil)
     }
     /// Reads the value of the descriptor.
     let readDescriptorChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readDescriptor", binaryMessenger: binaryMessenger, codec: codec)

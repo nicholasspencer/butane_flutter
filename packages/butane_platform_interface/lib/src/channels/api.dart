@@ -235,18 +235,29 @@ base class ButanePlatform extends ButanePlatformInterface {
     );
   }
 
+  /// Updates the observability of notifications and indications of
+  /// the characteristic.
   @override
-  Stream<Uint8List> watchCharacteristic({
+  Future<void> observeCharacteristic({
     required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
+    bool observe = true,
   }) {
-    hostApi.watchCharacteristic(
+    return hostApi.observeCharacteristic(
+      observe: observe,
       session: session.toSession(),
       serviceUuid: serviceUuid,
       characteristicUuid: characteristicUuid,
     );
+  }
 
+  @override
+  Stream<Uint8List> characteristicValueStream({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) {
     return flutterApi.characteristicValueStream
         .forCharacteristic(
           characteristicUuid: characteristicUuid,

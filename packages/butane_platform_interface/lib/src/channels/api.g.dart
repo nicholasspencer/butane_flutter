@@ -806,38 +806,15 @@ class ButaneHostApi {
     }
   }
 
-  Future<void> watchCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid,}) async {
-    const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.watchCharacteristic';
+  Future<void> observeCharacteristic({bool observe = true, required PeripheralSession session, required String serviceUuid, required String characteristicUuid,}) async {
+    const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.observeCharacteristic';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
       pigeonChannelCodec,
       binaryMessenger: __pigeon_binaryMessenger,
     );
     final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[session, serviceUuid, characteristicUuid]) as List<Object?>?;
-    if (__pigeon_replyList == null) {
-      throw _createConnectionError(__pigeon_channelName);
-    } else if (__pigeon_replyList.length > 1) {
-      throw PlatformException(
-        code: __pigeon_replyList[0]! as String,
-        message: __pigeon_replyList[1] as String?,
-        details: __pigeon_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
-  /// Enables notifications or indications for the characteristic.
-  Future<void> setNotification({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required bool enabled,}) async {
-    const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.setNotification';
-    final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
-      __pigeon_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: __pigeon_binaryMessenger,
-    );
-    final List<Object?>? __pigeon_replyList =
-        await __pigeon_channel.send(<Object?>[session, serviceUuid, characteristicUuid, enabled]) as List<Object?>?;
+        await __pigeon_channel.send(<Object?>[observe, session, serviceUuid, characteristicUuid]) as List<Object?>?;
     if (__pigeon_replyList == null) {
       throw _createConnectionError(__pigeon_channelName);
     } else if (__pigeon_replyList.length > 1) {

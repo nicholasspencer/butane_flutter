@@ -18,6 +18,8 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   
   let flutterApi: ButaneFlutterApi
   
+  var actors: [UUID: PeripheralActor] = [:]
+  
   lazy var manager: CBCentralManager = {
     if let restorationIdentifier = restorationIdentifier {
       return .init(delegate: self, queue: queue, options: [CBCentralManagerRestoredStateScanOptionsKey: restorationIdentifier])
@@ -72,10 +74,12 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   func connect(identifier: String) {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid]
+      let actor = actors[uuid]
     else {
       return
     }
+    
+    let peripheral = actor.peripheral
     
     flutterApi.onConnectionState(
       peripheral: peripheral.toPeripheral(session: session(peripheral)),
@@ -89,10 +93,12 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   func cancelConnection(identifier: String) {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid]
+      let actor = actors[uuid]
     else {
       return
     }
+    
+    let peripheral = actor.peripheral
     
     flutterApi.onConnectionState(
       peripheral: peripheral.toPeripheral(session: session(peripheral)),
@@ -106,10 +112,12 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   func connectionState(identifier: String) -> ConnectionState {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid]
+      let actor = actors[uuid]
     else {
       return .disconnected
     }
+    
+    let peripheral = actor.peripheral
     
     let state = peripheral.state.connectionState
     
@@ -119,30 +127,23 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   func discoverServices(identifier: String, serviceUuids: [String]?) async throws {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid]
+      let actor = actors[uuid]
     else {
       return
     }
     
-    let uuids = serviceUuids?.map { CBUUID(string: $0) }
-    
-    serviceDiscoveryContinuations[peripheral] = serviceDiscoveryContinuations[peripheral] ?? []
-      
-    return try await withCheckedThrowingContinuation { continuation in
-      serviceDiscoveryContinuations[peripheral]?.append(continuation)
-      peripheral.discoverServices(uuids)
-    }
+    try await actor.discoverServices(serviceUuids: serviceUuids)
   }
   
   func services(identifier: String) -> [Service] {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid]
+      let actor = actors[uuid]
     else {
       return []
     }
     
-    return peripheral.services?.map {
+    return actor.peripheral.services?.map {
       Service(uuid: $0.uuid.uuidString, isPrimary: $0.isPrimary)
     } ?? []
   }
@@ -150,27 +151,19 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   func discoverCharacteristics(identifier: String, serviceUuid: String, characteristicUuids: [String]?) async throws {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid],
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
+      let actor = actors[uuid]
     else {
       return
     }
-      
-    let uuids = characteristicUuids?.map { CBUUID(string: $0) }
     
-    characteristicDiscoveryContinuations[peripheral] = characteristicDiscoveryContinuations[peripheral] ?? []
-      
-    return try await withCheckedThrowingContinuation { continuation in
-      characteristicDiscoveryContinuations[peripheral]?.append(continuation)
-      peripheral.discoverCharacteristics(uuids, for: service)
-    }
+    try await actor.discoverCharacteristics(serviceUuid: serviceUuid, characteristicUuids: characteristicUuids)
   }
   
   func characteristics(identifier: String, serviceUuid: String) -> [Characteristic] {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid],
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
+      let actor = actors[uuid],
+      let service = actor.peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
     else {
       return []
     }
@@ -191,31 +184,26 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   func readCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String) async throws -> Data {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid],
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
+      let actor = actors[uuid]
     else {
       // TODO: Throw
       return Data()
     }
     
-    characteristicReadContinuations[characteristic] = characteristicReadContinuations[characteristic] ?? []
-    
-    return try await withCheckedThrowingContinuation { continuation in
-      characteristicReadContinuations[characteristic]?.append(continuation)
-      peripheral.readValue(for: characteristic)
-    }
+    return try await actor.readCharacteristic(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
   }
   
   func writeCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String, value: Data, withoutResponse: Bool) async throws {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid],
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+      let actor = actors[uuid],
+      let service = actor.peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
       let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
     else {
       return
     }
+    
+    let peripheral = actor.peripheral
     
     if withoutResponse {
       peripheral.writeValue(
@@ -224,42 +212,33 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         type: .withoutResponse
       )
       return
-    }
-    
-    characteristicWriteContinuations[characteristic] = characteristicWriteContinuations[characteristic] ?? []
-    
-    return try await withCheckedThrowingContinuation { continuation in
-      characteristicWriteContinuations[characteristic]?.append(continuation)
-      peripheral.writeValue(
-        value,
-        for: characteristic,
-        type: .withResponse
-      )
+    } else {
+    return try await actor.writeCharacteristic(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, value: value, withoutResponse:  false)
     }
   }
   
-  func watchCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String) async throws {}
-  
-  func setNotification(identifier: String, serviceUuid: String, characteristicUuid: String, enabled: Bool) async throws {}
+  func observeCharacteristic(observe: Bool, identifier: String, serviceUuid: String, characteristicUuid: String) async throws {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let actor = actors[uuid]
+    else {
+      return
+    }
+    
+    return try await actor.observeCharacteristic(observe: observe, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
+  }
   
   func readDescriptor(identifier: String, serviceUuid: String, characteristicUuid: String, descriptorUuid: String) async throws -> Data {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid],
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
-      let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) })
+      let actor = actors[uuid]
     else {
       // TODO: Throw
       return Data()
     }
     
-    descriptorReadContinuations[descriptor] = descriptorReadContinuations[descriptor] ?? []
     
-    return try await withCheckedThrowingContinuation { continuation in
-      descriptorReadContinuations[descriptor]?.append(continuation)
-      peripheral.readValue(for: descriptor)
-    }
+    return try await actor.readDescriptor(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid)
   }
   
   func writeDescriptor(identifier: String, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {}
@@ -267,40 +246,17 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   func readRssi(identifier: String) async throws -> Int64 {
     guard
       let uuid = UUID(uuidString: identifier),
-      let peripheral = peripherals[uuid]
+      let actor = actors[uuid]
     else {
       throw FlutterError()
     }
     
-    rssiContinuations[peripheral] = rssiContinuations[peripheral] ?? []
-    
-    return try await withCheckedThrowingContinuation { continuation in
-      rssiContinuations[peripheral]?.append(continuation)
-      peripheral.readRSSI()
-    }
+    return try await actor.rssi()
   }
   
   func requestMtu(identifier: String, mtu: Int64) {}
   
-  // MARK: Continuation storage
-  
-  var serviceDiscoveryContinuations: [CBPeripheral: [CheckedContinuation<Void, Error>]] = [:]
-  
-  var characteristicDiscoveryContinuations: [CBPeripheral: [CheckedContinuation<Void, Error>]] = [:]
-  
-  var rssiContinuations: [CBPeripheral: [CheckedContinuation<Int64, Error>]] = [:]
-  
-  var characteristicReadContinuations: [CBCharacteristic: [CheckedContinuation<Data, Error>]] = [:]
-  
-  var characteristicWriteContinuations: [CBCharacteristic: [CheckedContinuation<Void, Error>]] = [:]
-  
-  var descriptorReadContinuations: [CBDescriptor: [CheckedContinuation<Data, Error>]] = [:]
-  
-  var descriptorWriteContinuations: [CBDescriptor: [CheckedContinuation<Void, Error>]] = [:]
-  
   // MARK: Central Delegate
-  
-  var peripherals: [UUID: CBPeripheral] = [:]
   
   func onNativeResult(_: Result<Void, FlutterError>) {}
   
@@ -314,7 +270,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   
   public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
     peripheral.delegate = self
-    peripherals[peripheral.identifier] = peripheral
+    actors[peripheral.identifier] = PeripheralActor(peripheral: peripheral, flutterApi: flutterApi)
     
     flutterApi.onScanResult(
       scanResult: ScanResult(
@@ -341,54 +297,31 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     )
   }
   
-  // Peripheral Delegate
+  // MARK: Peripheral Delegate
   
   func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
-    guard let continuations = rssiContinuations[peripheral] else {
+    guard let actor = actors[peripheral.identifier] else {
       return
     }
     
-    rssiContinuations[peripheral] = nil
-    
-    for continuation in continuations {
-      if let error = error {
-        continuation.resume(throwing: error)
-      } else {
-        continuation.resume(returning: RSSI.int64Value)
-      }
-    }
+    Task{ await actor.didReadRSSI(RSSI, error: error) }
   }
   
   func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-    guard let continuations = serviceDiscoveryContinuations[peripheral] else {
-      return
-    }
     
-    serviceDiscoveryContinuations[peripheral] = nil
-    
-    for continuation in continuations {
-      if let error = error {
-        continuation.resume(throwing: error)
-      } else {
-        continuation.resume()
+      guard let actor = actors[peripheral.identifier] else {
+        return
       }
-    }
+      
+      Task{ await actor.didDiscoverServices(error: error) }
   }
   
   func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-    guard let continuations = characteristicDiscoveryContinuations[peripheral] else {
+    guard let actor = actors[peripheral.identifier] else {
       return
     }
     
-    characteristicDiscoveryContinuations[peripheral] = nil
-    
-    for continuation in continuations {
-      if let error = error {
-        continuation.resume(throwing: error)
-      } else {
-        continuation.resume()
-      }
-    }
+    Task{ await actor.didDiscoverCharacteristicsFor(service: service, error: error) }
   }
   
   func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
@@ -399,38 +332,249 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       completion: onNativeResult
     )
     
-    guard let continuations = characteristicReadContinuations[characteristic] else {
+    guard let actor = actors[peripheral.identifier] else {
       return
     }
     
-    characteristicReadContinuations[characteristic] = nil
-    
-    for continuation in continuations {
-      if let error = error {
-        continuation.resume(throwing: error)
-      } else {
-        continuation.resume(returning: characteristic.value ?? Data())
-      }
-    }
+    Task { await actor.didUpdateValueFor(characteristic: characteristic, error: error) }
   }
   
   func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-    guard let continuations = characteristicWriteContinuations[characteristic] else {
+    guard let actor = actors[peripheral.identifier] else {
       return
     }
     
-    characteristicWriteContinuations[characteristic] = nil
+    Task { await actor.didWriteValueFor(characteristic: characteristic, error: error) }
+  }
+  
+  func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+    guard let actor = actors[peripheral.identifier] else {
+      return
+    }
     
-    for continuation in continuations {
+    Task { await actor.didUpdateNotificationStateFor(characteristic: characteristic, error: error) }
+  }
+  
+  func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+    guard let actor = actors[peripheral.identifier] else {
+      return
+    }
+    
+    Task { await actor.didModifyServices(invalidatedServices: invalidatedServices) }
+  }
+}
+
+// MARK: Peripheral Actor
+
+actor PeripheralActor: Equatable {
+  let peripheral: CBPeripheral
+  
+  let flutterApi: ButaneFlutterApi
+  
+  init(peripheral: CBPeripheral, flutterApi: ButaneFlutterApi) {
+    self.peripheral = peripheral
+    self.flutterApi = flutterApi
+  }
+  
+  static func == (lhs: PeripheralActor, rhs: PeripheralActor) -> Bool {
+    lhs.peripheral == rhs.peripheral
+  }
+  
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(peripheral)
+  }
+  
+  // MARK: Peripheral API
+  
+  func discoverServices(serviceUuids: [String]?) async throws {
+    let uuids = serviceUuids?.map { CBUUID(string: $0) }
+    
+    return try await withCheckedThrowingContinuation { continuation in
+      serviceDiscoveryContinuations.append(continuation)
+      peripheral.discoverServices(uuids)
+    }
+  }
+  
+  func discoverCharacteristics(serviceUuid: String, characteristicUuids: [String]?) async throws {
+    guard
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
+    else {
+      return
+    }
+      
+    let uuids = characteristicUuids?.map { CBUUID(string: $0) }
+      
+    return try await withCheckedThrowingContinuation { continuation in
+      characteristicDiscoveryContinuations.append(continuation)
+      peripheral.discoverCharacteristics(uuids, for: service)
+    }
+  }
+  
+  func readCharacteristic(serviceUuid: String, characteristicUuid: String) async throws -> Data {
+      guard
+        let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+        let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
+        characteristic.properties.contains(.read)
+      else {
+        // TODO: Throw
+        return Data()
+      }
+    
+    return try await withCheckedThrowingContinuation { continuation in
+      characteristicReadContinuations.append(continuation)
+      peripheral.readValue(for: characteristic)
+    }
+  }
+  
+  func writeCharacteristic(serviceUuid: String, characteristicUuid: String, value: Data, withoutResponse: Bool) async throws {
+      guard
+        let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+        let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
+      else {
+        return
+      }
+    
+  
+    return try await withCheckedThrowingContinuation { continuation in
+      characteristicWriteContinuations.append(continuation)
+      peripheral.writeValue(
+        value,
+        for: characteristic,
+        type: .withResponse
+      )
+    }
+  }
+  
+  func observeCharacteristic(observe: Bool, serviceUuid: String, characteristicUuid: String) async throws {
+      guard
+        let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+        let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
+      else {
+        return
+      }
+      
+      return try await withCheckedThrowingContinuation { continuation in
+        observeCharacteristicContinuations.append(continuation)
+        peripheral.setNotifyValue(observe, for: characteristic)
+      }
+  }
+  
+  func readDescriptor(serviceUuid: String, characteristicUuid: String, descriptorUuid: String) async throws -> Data {
+    guard
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
+      let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) })
+    else {
+      // TODO: Throw
+      return Data()
+    }
+    
+    return try await withCheckedThrowingContinuation { continuation in
+      descriptorReadContinuations.append(continuation)
+      peripheral.readValue(for: descriptor)
+    }
+  }
+  
+  func writeDescriptor(serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {}
+  
+  func rssi() async throws -> Int64 {
+    return try await withCheckedThrowingContinuation { continuation in
+      rssiContinuations.append(continuation)
+      peripheral.readRSSI()
+    }
+  }
+  
+  // MARK: Continuation storage
+  
+  var serviceDiscoveryContinuations: [CheckedContinuation<Void, Error>] = []
+  
+  var characteristicDiscoveryContinuations: [CheckedContinuation<Void, Error>] = []
+  
+  var rssiContinuations: [CheckedContinuation<Int64, Error>] = []
+  
+  var characteristicReadContinuations: [CheckedContinuation<Data, Error>] = []
+  
+  var characteristicWriteContinuations: [CheckedContinuation<Void, Error>] = []
+  
+  var observeCharacteristicContinuations: [CheckedContinuation<Void, Error>] = []
+  
+  var descriptorReadContinuations: [CheckedContinuation<Data, Error>] = []
+  
+  var descriptorWriteContinuations: [CheckedContinuation<Void, Error>] = []
+  
+  // MARK: Peripheral Delegate
+  
+  func didReadRSSI(_ RSSI: NSNumber, error: Error?) {
+    for continuation in rssiContinuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume(returning: RSSI.int64Value)
+      }
+    }
+    
+    rssiContinuations.removeAll()
+  }
+  
+  func didDiscoverServices(error: Error?) {
+    for continuation in serviceDiscoveryContinuations {
       if let error = error {
         continuation.resume(throwing: error)
       } else {
         continuation.resume()
       }
     }
+    
+    serviceDiscoveryContinuations.removeAll()
   }
   
-  func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+  func didDiscoverCharacteristicsFor(service: CBService, error: Error?) {
+    for continuation in characteristicDiscoveryContinuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume()
+      }
+    }
     
+    characteristicDiscoveryContinuations.removeAll()
   }
+  
+  func didUpdateValueFor(characteristic: CBCharacteristic, error: Error?) {
+    for continuation in characteristicReadContinuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume(returning: characteristic.value ?? Data())
+      }
+    }
+    
+    characteristicReadContinuations.removeAll()
+  }
+  
+  func didWriteValueFor(characteristic: CBCharacteristic, error: Error?) {
+    for continuation in characteristicWriteContinuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume()
+      }
+    }
+    
+    characteristicWriteContinuations.removeAll()
+  }
+  
+  func didUpdateNotificationStateFor(characteristic: CBCharacteristic, error: Error?) {
+    for continuation in observeCharacteristicContinuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume()
+      }
+    }
+    
+    observeCharacteristicContinuations.removeAll()
+  }
+  
+  func didModifyServices(invalidatedServices: [CBService]) {}
 }

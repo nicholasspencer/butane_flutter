@@ -460,13 +460,13 @@ class CharacteristicDetails extends StatefulWidget {
 }
 
 class _CharacteristicDetailsState extends State<CharacteristicDetails> {
-  Future<Uint8List>? _value;
+  Stream<Uint8List>? _values;
 
   @override
   void initState() {
     super.initState();
 
-    _value = widget.characteristic.read();
+    _values = widget.characteristic.observe();
   }
 
   @override
@@ -495,9 +495,9 @@ class _CharacteristicDetailsState extends State<CharacteristicDetails> {
               Icons.subdirectory_arrow_right_rounded,
               size: 20,
             ),
-            Text('Value: '),
-            FutureBuilder<Uint8List>(
-              future: _value,
+            const Text('Value: '),
+            StreamBuilder<Uint8List>(
+              stream: _values,
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
                   return Text(snapshot.data!.toString());
