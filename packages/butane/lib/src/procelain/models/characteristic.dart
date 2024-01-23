@@ -53,6 +53,14 @@ base class Characteristic extends Attribute {
           characteristicUuid: uuid.toString(),
         );
       },
+      onListen: (platform) {
+        return platform.observeCharacteristic(
+          observe: true,
+          session: service!.peripheral!.session,
+          serviceUuid: service!.uuid.toString(),
+          characteristicUuid: uuid.toString(),
+        );
+      },
       sinkValue: (platform) async {
         final value = await platform.readCharacteristic(
           session: service!.peripheral!.session,
@@ -62,8 +70,8 @@ base class Characteristic extends Attribute {
 
         return value;
       },
-      onCancel: (platform) {
-        return platform.observeCharacteristic(
+      onCancel: (platform) async {
+        return await platform.observeCharacteristic(
           observe: false,
           session: service!.peripheral!.session,
           serviceUuid: service!.uuid.toString(),

@@ -448,7 +448,8 @@ actor PeripheralActor: Equatable {
   func observeCharacteristic(observe: Bool, serviceUuid: String, characteristicUuid: String) async throws {
       guard
         let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-        let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
+        let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
+        characteristic.properties.contains([.notify, .indicate])
       else {
         return
       }
