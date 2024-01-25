@@ -45,7 +45,9 @@ base class Characteristic extends Attribute {
     valueStreamController ??= PlatformStreamController<Uint8List, Uint8List>(
       debugLabel: 'Characteristic($uuid).watch',
       platform: service?.peripheral?.manager.platform,
-      map: (value) => value,
+      map: (value) {
+        return value;
+      },
       createStream: (platform) {
         return platform.characteristicValueStream(
           session: service!.peripheral!.session,

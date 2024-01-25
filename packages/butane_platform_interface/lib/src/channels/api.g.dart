@@ -482,7 +482,7 @@ class ButaneHostApi {
   }
 
   /// Scans for peripherals that are advertising services.
-  Future<void> scan({Session? session, List<String?>? forServices = const []}) async {
+  Future<void> scan({Session? session, List<String?>? forServices}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.scan';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -656,7 +656,7 @@ class ButaneHostApi {
   }
 
   /// Discovers services offered by the peripheral.
-  Future<void> discoverServices({required PeripheralSession session, List<String?>? serviceUuids = const []}) async {
+  Future<void> discoverServices({required PeripheralSession session, List<String?>? serviceUuids}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverServices';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -706,7 +706,7 @@ class ButaneHostApi {
   }
 
   /// Discovers characteristics offered by the service.
-  Future<void> discoverCharacteristics({required PeripheralSession session, required String serviceUuid, List<String?>? characteristicUuids = const [],}) async {
+  Future<void> discoverCharacteristics({required PeripheralSession session, required String serviceUuid, List<String?>? characteristicUuids,}) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverCharacteristics';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,

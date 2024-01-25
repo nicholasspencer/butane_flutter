@@ -222,6 +222,10 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
       characteristics[service] = char;
     }
 
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _characteristics.clear();
       _characteristics.addAll(characteristics);
@@ -248,19 +252,23 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
                   ),
                 ConnectionState.connecting ||
                 ConnectionState.disconnecting =>
-                  const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(),
+                  IconButton(
+                    onPressed: disconnect,
+                    icon: const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(),
+                    ),
                   ),
                 _ => IconButton(
                     icon: const Icon(Icons.bluetooth_rounded, size: 20),
                     onPressed: connect,
                   ),
               },
-              IconButton(
-                icon: const Icon(Icons.search_rounded, size: 20),
-                onPressed: discover,
-              ),
+              if (_connectionState == ConnectionState.connected)
+                IconButton(
+                  icon: const Icon(Icons.search_rounded, size: 20),
+                  onPressed: discover,
+                ),
             ],
           ),
           Column(
@@ -311,9 +319,15 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
     final peripheral = widget.scanResult.peripheral;
     await peripheral.discoverServices();
     final services = await peripheral.services;
+    print('Discovered services: ${services.map((e) => e.uuid.toString())}');
     for (final service in services) {
+      print('Discovering characteristics for ${service.uuid.toString()}');
       await service.discoverCharacteristics();
+      print('Discovered characteristics for ${service.uuid.toString()}');
       final char = await service.characteristics;
+      print(
+        'Discovered characteristics for ${service.uuid.toString()}: ${char.map((e) => e.uuid.toString())}',
+      );
       characteristics[service] = char;
     }
 

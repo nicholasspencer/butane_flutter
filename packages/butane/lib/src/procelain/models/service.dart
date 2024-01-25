@@ -12,19 +12,18 @@ base class Service extends Attribute {
   final bool isPrimary;
 
   Future<void> discoverCharacteristics({
-    List<UuidIdentifier> characteristicUuids = const [],
+    List<UuidIdentifier>? characteristicUuids,
   }) async {
     assert(
       peripheral != null,
       'Cannot discover characteristics without a peripheral',
     );
 
-    return peripheral?.manager.platform.discoverCharacteristics(
-          session: peripheral!.session,
-          serviceUuid: uuid.toString(),
-          characteristicUuids: characteristicUuids.toStrings(),
-        ) ??
-        Future.value();
+    await peripheral?.manager.platform.discoverCharacteristics(
+      session: peripheral!.session,
+      serviceUuid: uuid.toString(),
+      characteristicUuids: characteristicUuids?.toStrings(),
+    );
   }
 
   Future<Iterable<Characteristic>> get characteristics async {
@@ -32,13 +31,13 @@ base class Service extends Attribute {
       peripheral != null,
       'Cannot get characteristics without a peripheral',
     );
-    final characteristics = await peripheral?.manager.platform.characteristics(
-          session: peripheral!.session,
-          serviceUuid: uuid.toString(),
-        ) ??
-        [];
 
-    return characteristics.map(characteristicFromData);
+    final characteristics = await peripheral?.manager.platform.characteristics(
+      session: peripheral!.session,
+      serviceUuid: uuid.toString(),
+    );
+
+    return characteristics?.map(characteristicFromData) ?? [];
   }
 
   @protected

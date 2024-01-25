@@ -85,7 +85,7 @@ abstract base class ButanePlatformInterface {
   /// Discovers services offered by the peripheral.
   Future<void> discoverServices({
     required PeripheralSession session,
-    Iterable<String> serviceUuids = const [],
+    Iterable<String>? serviceUuids,
   });
 
   /// A list of discovered services offered by the peripheral.
@@ -97,7 +97,7 @@ abstract base class ButanePlatformInterface {
   Future<void> discoverCharacteristics({
     required PeripheralSession session,
     required String serviceUuid,
-    Iterable<String> characteristicUuids = const [],
+    Iterable<String>? characteristicUuids,
   });
 
   /// A list of discovered characteristics offered by the service.

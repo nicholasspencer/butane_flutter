@@ -134,11 +134,11 @@ base class Peripheral extends Peer {
   }
 
   Future<void> discoverServices({
-    List<UuidIdentifier> serviceUuids = const [],
+    List<UuidIdentifier>? serviceUuids,
   }) {
     return manager.platform.discoverServices(
       session: session,
-      serviceUuids: serviceUuids.toStrings(),
+      serviceUuids: serviceUuids?.toStrings(),
     );
   }
 

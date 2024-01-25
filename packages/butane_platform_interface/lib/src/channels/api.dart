@@ -159,10 +159,11 @@ base class ButanePlatform extends ButanePlatformInterface {
   @override
   Future<void> discoverServices({
     required PeripheralSession session,
-    Iterable<String> serviceUuids = const [],
+    Iterable<String>? serviceUuids,
   }) async {
     await hostApi.discoverServices(
       session: session.toSession(),
+      serviceUuids: serviceUuids?.toList(),
     );
   }
 
@@ -181,12 +182,12 @@ base class ButanePlatform extends ButanePlatformInterface {
   Future<void> discoverCharacteristics({
     required PeripheralSession session,
     required String serviceUuid,
-    Iterable<String> characteristicUuids = const [],
+    Iterable<String>? characteristicUuids,
   }) async {
     await hostApi.discoverCharacteristics(
       session: session.toSession(),
       serviceUuid: serviceUuid,
-      characteristicUuids: characteristicUuids.toList(),
+      characteristicUuids: characteristicUuids?.toList(),
     );
   }
 

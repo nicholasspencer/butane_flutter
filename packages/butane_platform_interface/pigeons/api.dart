@@ -216,7 +216,7 @@ abstract class ButaneHostApi {
   @async
   void scan({
     Session? session,
-    List<String>? forServices = const [],
+    List<String>? forServices,
   });
 
   @async
@@ -259,7 +259,7 @@ abstract class ButaneHostApi {
   @async
   void discoverServices({
     required PeripheralSession session,
-    List<String>? serviceUuids = const [],
+    List<String>? serviceUuids,
   });
 
   @async
@@ -272,7 +272,7 @@ abstract class ButaneHostApi {
   void discoverCharacteristics({
     required PeripheralSession session,
     required String serviceUuid,
-    List<String>? characteristicUuids = const [],
+    List<String>? characteristicUuids,
   });
 
   @async

@@ -102,7 +102,10 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
-    Task { await discoverServices(session: session, serviceUuids: serviceUuids, completion: completion) }
+    print("outer discoverServices")
+    Task {
+      await discoverServices(session: session, serviceUuids: serviceUuids, completion: completion)
+    }
   }
   
   func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void) {
@@ -114,6 +117,7 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    print("outer discoverCharacteristics")
     Task {
       await discoverCharacteristics(session: session, serviceUuid: serviceUuid, characteristicUuids: characteristicUuids, completion: completion)
     }
@@ -154,6 +158,8 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) async {
     let central = centralManager(session.session)
     
+    print("outer async discoverServices")
+    
     do {
       try await central.discoverServices(identifier: session.peripheralIdentifier, serviceUuids: serviceUuids)
       completion(.success)
@@ -164,6 +170,8 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   
   func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) async {
     let central = centralManager(session.session)
+    
+    print("outer async discoverCharacteristics")
       
     do {
       try await central.discoverCharacteristics(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuids: characteristicUuids)
