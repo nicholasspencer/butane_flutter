@@ -268,6 +268,10 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+    guard actors.keys.contains(peripheral.identifier) == false else {
+      return
+    }
+    
     peripheral.delegate = self
     actors[peripheral.identifier] = PeripheralActor(peripheral: peripheral, flutterApi: flutterApi)
     
