@@ -1,5 +1,5 @@
-name: butane
-description: A new Flutter package project.
+name: butane_android
+description: "A new Flutter plugin project."
 version: 0.0.1
 homepage: https://github.com/nicholasspencer/butane
 publish_to: none
@@ -13,18 +13,15 @@ dependencies:
     sdk: flutter
   butane_platform_interface:
     path: ../butane_platform_interface
-  butane_core_bluetooth:
-    path: ../butane_core_bluetooth
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.1
+  flutter_lints: ^2.0.0
 
 flutter:
   plugin:
     platforms:
-      ios:
-        default_package: butane_core_bluetooth
-      macos:
-        default_package: butane_core_bluetooth
+      android:
+        package: com.nicospencer.butane_android
+        pluginClass: ButaneAndroidPlugin
