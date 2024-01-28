@@ -1,8 +1,8 @@
+import 'package:butane_platform_interface/butane_platform_interface.dart';
+import 'package:butane_platform_interface/channels.dart';
 
-import 'butane_android_platform_interface.dart';
-
-class ButaneAndroid {
-  Future<String?> getPlatformVersion() {
-    return ButaneAndroidPlatform.instance.getPlatformVersion();
+final class ButaneAndroid extends ButanePlatform {
+  static void registerWith() {
+    ButanePlatformInterface.instance = ButaneAndroid();
   }
 }

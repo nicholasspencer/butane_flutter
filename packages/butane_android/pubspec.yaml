@@ -25,3 +25,4 @@ flutter:
       android:
         package: com.nicospencer.butane_android
         pluginClass: ButaneAndroidPlugin
+        dartClass: ButaneAndroid

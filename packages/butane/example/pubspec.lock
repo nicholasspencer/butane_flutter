@@ -24,6 +24,13 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  butane_android:
+    dependency: "direct overridden"
+    description:
+      path: "../../butane_android"
+      relative: true
+    source: path
+    version: "0.0.1"
   butane_core_bluetooth:
     dependency: "direct overridden"
     description:
