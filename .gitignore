@@ -292,3 +292,7 @@ fabric.properties
 n
 
 **/pubspec_overrides.yaml
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
