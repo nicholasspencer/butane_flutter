@@ -1,9 +1,10 @@
 name: butane_example
 description: "Demonstrates how to use the butane plugin."
 publish_to: none
+resolution: workspace
 
 environment:
-  sdk: ">=3.2.3 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -23,11 +24,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-dependency_overrides:
-  butane_core_bluetooth:
-    path: ../../butane_core_bluetooth
-  butane_android:
-    path: ../../butane_android
-  butane_platform_interface:
-    path: ../../butane_platform_interface

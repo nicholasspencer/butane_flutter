@@ -280,7 +280,7 @@ base class ButanePlatform extends ButanePlatformInterface {
 
 base class ButaneFlutterApi extends api.ButaneFlutterApi {
   ButaneFlutterApi() {
-    api.ButaneFlutterApi.setup(this);
+    api.ButaneFlutterApi.setUp(this);
   }
 
   // Client State
@@ -371,7 +371,7 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   void onDescriptorValue(
     api.Peripheral peripheral,
     api.Descriptor descriptor,
-    dynamic value,
+    Uint8List value,
   ) {
     // TODO: implement onDescriptorValue
   }
@@ -395,7 +395,7 @@ extension CharacteristicValueResultStreamFilter
 /// Records
 
 extension SessionConverter on Session {
-  static Session fromSession(api.Session session) {
+  static Session fromClientSession(api.ClientSession session) {
     return Session(
       peripheralIdentifier: session.peripheralIdentifier,
       clientIdentifier: session.clientIdentifier,
@@ -404,28 +404,8 @@ extension SessionConverter on Session {
     );
   }
 
-  api.Session toSession() {
-    return api.Session(
-      peripheralIdentifier: peripheralIdentifier,
-      clientIdentifier: clientIdentifier,
-      adapterIdentifier: adapterIdentifier,
-      restorationIdentifier: restorationIdentifier,
-    );
-  }
-}
-
-extension SessionChannelConverter on api.Session {
-  static api.Session fromSession(Session session) {
-    return api.Session(
-      peripheralIdentifier: session.peripheralIdentifier,
-      clientIdentifier: session.clientIdentifier,
-      adapterIdentifier: session.adapterIdentifier,
-      restorationIdentifier: session.restorationIdentifier,
-    );
-  }
-
-  Session toSession() {
-    return Session(
+  api.ClientSession toSession() {
+    return api.ClientSession(
       peripheralIdentifier: peripheralIdentifier,
       clientIdentifier: clientIdentifier,
       adapterIdentifier: adapterIdentifier,

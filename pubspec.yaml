@@ -5,7 +5,13 @@ homepage: https://github.com/nicholasspencer/butane
 publish_to: none
 
 environment:
-  sdk: ^3.0.0
+  sdk: ^3.6.0
 
-dev_dependencies:
-  melos: ^3.4.0
+workspace:
+  - packages/butane
+  - packages/butane_platform_interface
+  - packages/butane_core_bluetooth
+  - packages/butane_android
+  - packages/butane/example
+  - packages/butane_core_bluetooth/example
+  - packages/butane_android/example

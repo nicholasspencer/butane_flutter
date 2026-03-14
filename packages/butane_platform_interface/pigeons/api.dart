@@ -27,12 +27,14 @@ enum ConnectionState {
 /// The [adapterIdentifier] is the identifier of the adapter that discovered the
 /// peripheral. This is useful when multiple adapters are available on the same
 /// device. If omitted, the default adapter is used.
-class Session {
-  Session({
-    required this.peripheralIdentifier,
-    required this.clientIdentifier,
-    required this.adapterIdentifier,
-    required this.restorationIdentifier,
+sealed class Session {}
+
+class ClientSession extends Session {
+  ClientSession({
+    this.peripheralIdentifier,
+    this.clientIdentifier,
+    this.adapterIdentifier,
+    this.restorationIdentifier,
   });
 
   final String? peripheralIdentifier;
@@ -44,24 +46,20 @@ class Session {
   final String? restorationIdentifier;
 }
 
-class PeripheralSession implements Session {
+class PeripheralSession extends Session {
   PeripheralSession({
     required this.peripheralIdentifier,
-    required this.clientIdentifier,
-    required this.adapterIdentifier,
-    required this.restorationIdentifier,
+    this.clientIdentifier,
+    this.adapterIdentifier,
+    this.restorationIdentifier,
   });
 
-  @override
   final String peripheralIdentifier;
 
-  @override
   final String? clientIdentifier;
 
-  @override
   final String? adapterIdentifier;
 
-  @override
   final String? restorationIdentifier;
 }
 
@@ -116,27 +114,20 @@ class ScanResult {
   final AdvertisementData advertisementData;
 }
 
-abstract interface class AttributeData {
-  AttributeData({
-    required this.uuid,
-  });
+sealed class AttributeData {}
 
-  final String uuid;
-}
-
-class Service implements AttributeData {
+class Service extends AttributeData {
   Service({
     required this.uuid,
     this.isPrimary = false,
   });
 
-  @override
   final String uuid;
 
   final bool isPrimary;
 }
 
-class Characteristic implements AttributeData {
+class Characteristic extends AttributeData {
   Characteristic({
     required this.uuid,
     this.value,
@@ -144,7 +135,6 @@ class Characteristic implements AttributeData {
     this.properties,
   });
 
-  @override
   final String uuid;
 
   final Uint8List? value;
@@ -154,13 +144,12 @@ class Characteristic implements AttributeData {
   final CharacteristicProperty? properties;
 }
 
-class Descriptor implements AttributeData {
+class Descriptor extends AttributeData {
   Descriptor({
     required this.uuid,
     this.value,
   });
 
-  @override
   final String uuid;
 
   final Uint8List? value;
@@ -209,32 +198,32 @@ abstract class ButaneHostApi {
 
   @async
   ClientState state({
-    Session? session,
+    ClientSession? session,
   });
 
   /// Scans for peripherals that are advertising services.
   @async
   void scan({
-    Session? session,
+    ClientSession? session,
     List<String>? forServices,
   });
 
   @async
   void cancelScan({
-    Session? session,
+    ClientSession? session,
   });
 
   /// A list of known peripherals optionally filtered by their identifiers.
   @async
   List<Peripheral> peripherals({
-    Session? session,
+    ClientSession? session,
     List<String> peripheralIdentifiers = const [],
   });
 
   /// A list of connected peripherals identified by an offered service.
   @async
   List<Peripheral> connectedPeripherals({
-    Session? session,
+    ClientSession? session,
     List<String> serviceUuids = const [],
   });
 

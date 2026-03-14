@@ -1,9 +1,10 @@
 name: butane_core_bluetooth_example
 description: "Demonstrates how to use the butane_core_bluetooth plugin."
 publish_to: none
+resolution: workspace
 
 environment:
-  sdk: ">=3.2.3 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:
