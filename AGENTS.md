@@ -121,28 +121,48 @@ bd automatically syncs with git:
 
 For more details, see README.md and docs/QUICKSTART.md.
 
+## Git Workflow — PR Required
+
+**Never push directly to `main`.** All work goes through pull requests.
+
+1. **Create a feature branch** from `main` before starting work
+2. **Commit to the branch** with conventional commits
+3. **Open a PR** via `gh pr create` when work is ready for review
+4. **Merge only after review** — squash merge is the standard
+
+```bash
+# Starting work on a bead
+git checkout -b feat/butane_flutter-v5c-pigeon-peripheral-api
+# ... do work, commit ...
+gh pr create --title "feat(pigeon): add Peripheral Manager API definitions" --body "Closes butane_flutter-v5c"
+```
+
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until the branch is pushed and a PR exists (or is ready to create).
 
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+4. **PUSH BRANCH TO REMOTE** - This is MANDATORY:
    ```bash
-   git pull --rebase
    bd dolt push
-   git push
+   git push -u origin HEAD
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+5. **Open a PR** if work is complete enough for review:
+   ```bash
+   gh pr create --title "type(scope): description" --body "Closes butane_flutter-XXX"
+   ```
+6. **Clean up** - Clear stashes, prune remote branches
+7. **Verify** - All changes committed AND pushed
+8. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
+- **NEVER push to `main`** — always use feature branches + PRs
+- Work is NOT complete until `git push` succeeds on the feature branch
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
