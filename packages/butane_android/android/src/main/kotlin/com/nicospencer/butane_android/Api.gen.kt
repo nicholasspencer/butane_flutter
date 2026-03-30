@@ -109,6 +109,22 @@ enum class ConnectionState(val raw: Int) {
   }
 }
 
+enum class AttResult(val raw: Int) {
+  SUCCESS(0),
+  INVALID_HANDLE(1),
+  READ_NOT_PERMITTED(2),
+  WRITE_NOT_PERMITTED(3),
+  INVALID_OFFSET(4),
+  ATTRIBUTE_NOT_FOUND(5),
+  UNLIKELY_ERROR(6);
+
+  companion object {
+    fun ofRaw(raw: Int): AttResult? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 /**
  * A unique identifier for a peripheral coupled with the [adapterIdentifier] and
  * [clientIdentifier] that discovered it.
@@ -189,6 +205,40 @@ data class PeripheralSession (
   }
   override fun equals(other: Any?): Boolean {
     if (other !is PeripheralSession) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return ApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class PeripheralManagerSession (
+  val clientIdentifier: String? = null,
+  val adapterIdentifier: String? = null,
+  val restorationIdentifier: String? = null
+) : Session()
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PeripheralManagerSession {
+      val clientIdentifier = pigeonVar_list[0] as String?
+      val adapterIdentifier = pigeonVar_list[1] as String?
+      val restorationIdentifier = pigeonVar_list[2] as String?
+      return PeripheralManagerSession(clientIdentifier, adapterIdentifier, restorationIdentifier)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      clientIdentifier,
+      adapterIdentifier,
+      restorationIdentifier,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is PeripheralManagerSession) {
       return false
     }
     if (this === other) {
@@ -468,6 +518,191 @@ data class CharacteristicProperty (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class CharacteristicPermission (
+  val readable: Boolean,
+  val writeable: Boolean,
+  val readEncryptionRequired: Boolean,
+  val writeEncryptionRequired: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): CharacteristicPermission {
+      val readable = pigeonVar_list[0] as Boolean
+      val writeable = pigeonVar_list[1] as Boolean
+      val readEncryptionRequired = pigeonVar_list[2] as Boolean
+      val writeEncryptionRequired = pigeonVar_list[3] as Boolean
+      return CharacteristicPermission(readable, writeable, readEncryptionRequired, writeEncryptionRequired)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      readable,
+      writeable,
+      readEncryptionRequired,
+      writeEncryptionRequired,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is CharacteristicPermission) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return ApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class AttRequest (
+  val requestId: Long,
+  val centralIdentifier: String,
+  val characteristicUuid: String,
+  val serviceUuid: String,
+  val offset: Long,
+  val value: ByteArray? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): AttRequest {
+      val requestId = pigeonVar_list[0] as Long
+      val centralIdentifier = pigeonVar_list[1] as String
+      val characteristicUuid = pigeonVar_list[2] as String
+      val serviceUuid = pigeonVar_list[3] as String
+      val offset = pigeonVar_list[4] as Long
+      val value = pigeonVar_list[5] as ByteArray?
+      return AttRequest(requestId, centralIdentifier, characteristicUuid, serviceUuid, offset, value)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      requestId,
+      centralIdentifier,
+      characteristicUuid,
+      serviceUuid,
+      offset,
+      value,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is AttRequest) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return ApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class MutableDescriptor (
+  val uuid: String,
+  val value: ByteArray? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): MutableDescriptor {
+      val uuid = pigeonVar_list[0] as String
+      val value = pigeonVar_list[1] as ByteArray?
+      return MutableDescriptor(uuid, value)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      uuid,
+      value,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is MutableDescriptor) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return ApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class MutableCharacteristic (
+  val uuid: String,
+  val properties: CharacteristicProperty? = null,
+  val permissions: CharacteristicPermission? = null,
+  val value: ByteArray? = null,
+  val descriptors: List<MutableDescriptor?>? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): MutableCharacteristic {
+      val uuid = pigeonVar_list[0] as String
+      val properties = pigeonVar_list[1] as CharacteristicProperty?
+      val permissions = pigeonVar_list[2] as CharacteristicPermission?
+      val value = pigeonVar_list[3] as ByteArray?
+      val descriptors = pigeonVar_list[4] as List<MutableDescriptor?>?
+      return MutableCharacteristic(uuid, properties, permissions, value, descriptors)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      uuid,
+      properties,
+      permissions,
+      value,
+      descriptors,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is MutableCharacteristic) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return ApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class MutableService (
+  val uuid: String,
+  val isPrimary: Boolean,
+  val characteristics: List<MutableCharacteristic?>
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): MutableService {
+      val uuid = pigeonVar_list[0] as String
+      val isPrimary = pigeonVar_list[1] as Boolean
+      val characteristics = pigeonVar_list[2] as List<MutableCharacteristic?>
+      return MutableService(uuid, isPrimary, characteristics)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      uuid,
+      isPrimary,
+      characteristics,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is MutableService) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return ApiPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class ApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -482,48 +717,83 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
         }
       }
       131.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ClientSession.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          AttResult.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PeripheralSession.fromList(it)
+          ClientSession.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Peripheral.fromList(it)
+          PeripheralSession.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AdvertisementData.fromList(it)
+          PeripheralManagerSession.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ScanResult.fromList(it)
+          Peripheral.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Service.fromList(it)
+          AdvertisementData.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Characteristic.fromList(it)
+          ScanResult.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Descriptor.fromList(it)
+          Service.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          Characteristic.fromList(it)
+        }
+      }
+      140.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          Descriptor.fromList(it)
+        }
+      }
+      141.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           CharacteristicProperty.fromList(it)
+        }
+      }
+      142.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          CharacteristicPermission.fromList(it)
+        }
+      }
+      143.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          AttRequest.fromList(it)
+        }
+      }
+      144.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MutableDescriptor.fromList(it)
+        }
+      }
+      145.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MutableCharacteristic.fromList(it)
+        }
+      }
+      146.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MutableService.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -539,40 +809,68 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is ClientSession -> {
+      is AttResult -> {
         stream.write(131)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is PeripheralSession -> {
+      is ClientSession -> {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is Peripheral -> {
+      is PeripheralSession -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is AdvertisementData -> {
+      is PeripheralManagerSession -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is ScanResult -> {
+      is Peripheral -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is Service -> {
+      is AdvertisementData -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is Characteristic -> {
+      is ScanResult -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is Descriptor -> {
+      is Service -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is CharacteristicProperty -> {
+      is Characteristic -> {
         stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is Descriptor -> {
+        stream.write(140)
+        writeValue(stream, value.toList())
+      }
+      is CharacteristicProperty -> {
+        stream.write(141)
+        writeValue(stream, value.toList())
+      }
+      is CharacteristicPermission -> {
+        stream.write(142)
+        writeValue(stream, value.toList())
+      }
+      is AttRequest -> {
+        stream.write(143)
+        writeValue(stream, value.toList())
+      }
+      is MutableDescriptor -> {
+        stream.write(144)
+        writeValue(stream, value.toList())
+      }
+      is MutableCharacteristic -> {
+        stream.write(145)
+        writeValue(stream, value.toList())
+      }
+      is MutableService -> {
+        stream.write(146)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -621,6 +919,15 @@ interface ButaneHostApi {
   fun readRssi(session: PeripheralSession, callback: (Result<Long>) -> Unit)
   /** Requests a MTU size change. */
   fun requestMtu(session: PeripheralSession, mtu: Long, callback: (Result<Long>) -> Unit)
+  /** "Peripheral" APIs. */
+  fun peripheralManagerState(session: PeripheralManagerSession, callback: (Result<ClientState>) -> Unit)
+  fun startAdvertising(session: PeripheralManagerSession, localName: String?, serviceUuids: List<String>?, callback: (Result<Unit>) -> Unit)
+  fun stopAdvertising(session: PeripheralManagerSession, callback: (Result<Unit>) -> Unit)
+  fun addService(session: PeripheralManagerSession, service: MutableService, callback: (Result<Unit>) -> Unit)
+  fun removeService(session: PeripheralManagerSession, serviceUuid: String, callback: (Result<Unit>) -> Unit)
+  fun removeAllServices(session: PeripheralManagerSession, callback: (Result<Unit>) -> Unit)
+  fun respondToRequest(session: PeripheralManagerSession, requestId: Long, result: AttResult, value: ByteArray?, callback: (Result<Unit>) -> Unit)
+  fun updateValue(session: PeripheralManagerSession, serviceUuid: String, characteristicUuid: String, value: ByteArray, callback: (Result<Boolean>) -> Unit)
 
   companion object {
     /** The codec used by ButaneHostApi. */
@@ -1026,6 +1333,170 @@ interface ButaneHostApi {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.peripheralManagerState$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            api.peripheralManagerState(sessionArg) { result: Result<ClientState> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(ApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.startAdvertising$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            val localNameArg = args[1] as String?
+            val serviceUuidsArg = args[2] as List<String>?
+            api.startAdvertising(sessionArg, localNameArg, serviceUuidsArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.stopAdvertising$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            api.stopAdvertising(sessionArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.addService$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            val serviceArg = args[1] as MutableService
+            api.addService(sessionArg, serviceArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeService$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            val serviceUuidArg = args[1] as String
+            api.removeService(sessionArg, serviceUuidArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeAllServices$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            api.removeAllServices(sessionArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.respondToRequest$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            val requestIdArg = args[1] as Long
+            val resultArg = args[2] as AttResult
+            val valueArg = args[3] as ByteArray?
+            api.respondToRequest(sessionArg, requestIdArg, resultArg, valueArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.updateValue$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralManagerSession
+            val serviceUuidArg = args[1] as String
+            val characteristicUuidArg = args[2] as String
+            val valueArg = args[3] as ByteArray
+            api.updateValue(sessionArg, serviceUuidArg, characteristicUuidArg, valueArg) { result: Result<Boolean> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(ApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -1118,6 +1589,75 @@ class ButaneFlutterApi(private val binaryMessenger: BinaryMessenger, private val
     val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorValue$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(peripheralArg, descriptorArg, valueArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** "Peripheral Manager" APIs. */
+  fun onPeripheralManagerState(clientIdentifierArg: String?, stateArg: ClientState, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onPeripheralManagerState$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(clientIdentifierArg, stateArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onServiceAdded(serviceUuidArg: String, errorArg: String?, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServiceAdded$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(serviceUuidArg, errorArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onReadRequest(requestArg: AttRequest, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadRequest$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(requestArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onWriteRequests(requestsArg: List<AttRequest>, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onWriteRequests$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(requestsArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
