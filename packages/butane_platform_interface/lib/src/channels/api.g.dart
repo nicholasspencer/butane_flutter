@@ -76,6 +76,16 @@ enum ConnectionState {
   disconnecting,
 }
 
+enum AttResult {
+  success,
+  invalidHandle,
+  readNotPermitted,
+  writeNotPermitted,
+  invalidOffset,
+  attributeNotFound,
+  unlikelyError,
+}
+
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
 /// [clientIdentifier] that discovered it.
 ///
@@ -187,6 +197,57 @@ class PeripheralSession extends Session {
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
     if (other is! PeripheralSession || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
+class PeripheralManagerSession extends Session {
+  PeripheralManagerSession({
+    this.clientIdentifier,
+    this.adapterIdentifier,
+    this.restorationIdentifier,
+  });
+
+  String? clientIdentifier;
+
+  String? adapterIdentifier;
+
+  String? restorationIdentifier;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      clientIdentifier,
+      adapterIdentifier,
+      restorationIdentifier,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PeripheralManagerSession decode(Object result) {
+    result as List<Object?>;
+    return PeripheralManagerSession(
+      clientIdentifier: result[0] as String?,
+      adapterIdentifier: result[1] as String?,
+      restorationIdentifier: result[2] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PeripheralManagerSession || other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
@@ -606,6 +667,286 @@ class CharacteristicProperty {
 ;
 }
 
+class CharacteristicPermission {
+  CharacteristicPermission({
+    this.readable = false,
+    this.writeable = false,
+    this.readEncryptionRequired = false,
+    this.writeEncryptionRequired = false,
+  });
+
+  bool readable;
+
+  bool writeable;
+
+  bool readEncryptionRequired;
+
+  bool writeEncryptionRequired;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      readable,
+      writeable,
+      readEncryptionRequired,
+      writeEncryptionRequired,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static CharacteristicPermission decode(Object result) {
+    result as List<Object?>;
+    return CharacteristicPermission(
+      readable: result[0]! as bool,
+      writeable: result[1]! as bool,
+      readEncryptionRequired: result[2]! as bool,
+      writeEncryptionRequired: result[3]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! CharacteristicPermission || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
+class AttRequest {
+  AttRequest({
+    required this.requestId,
+    required this.centralIdentifier,
+    required this.characteristicUuid,
+    required this.serviceUuid,
+    this.offset = 0,
+    this.value,
+  });
+
+  int requestId;
+
+  String centralIdentifier;
+
+  String characteristicUuid;
+
+  String serviceUuid;
+
+  int offset;
+
+  Uint8List? value;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      requestId,
+      centralIdentifier,
+      characteristicUuid,
+      serviceUuid,
+      offset,
+      value,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static AttRequest decode(Object result) {
+    result as List<Object?>;
+    return AttRequest(
+      requestId: result[0]! as int,
+      centralIdentifier: result[1]! as String,
+      characteristicUuid: result[2]! as String,
+      serviceUuid: result[3]! as String,
+      offset: result[4]! as int,
+      value: result[5] as Uint8List?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! AttRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
+class MutableDescriptor {
+  MutableDescriptor({
+    required this.uuid,
+    this.value,
+  });
+
+  String uuid;
+
+  Uint8List? value;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      uuid,
+      value,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static MutableDescriptor decode(Object result) {
+    result as List<Object?>;
+    return MutableDescriptor(
+      uuid: result[0]! as String,
+      value: result[1] as Uint8List?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! MutableDescriptor || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
+class MutableCharacteristic {
+  MutableCharacteristic({
+    required this.uuid,
+    this.properties,
+    this.permissions,
+    this.value,
+    this.descriptors,
+  });
+
+  String uuid;
+
+  CharacteristicProperty? properties;
+
+  CharacteristicPermission? permissions;
+
+  Uint8List? value;
+
+  List<MutableDescriptor?>? descriptors;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      uuid,
+      properties,
+      permissions,
+      value,
+      descriptors,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static MutableCharacteristic decode(Object result) {
+    result as List<Object?>;
+    return MutableCharacteristic(
+      uuid: result[0]! as String,
+      properties: result[1] as CharacteristicProperty?,
+      permissions: result[2] as CharacteristicPermission?,
+      value: result[3] as Uint8List?,
+      descriptors: (result[4] as List<Object?>?)?.cast<MutableDescriptor?>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! MutableCharacteristic || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
+class MutableService {
+  MutableService({
+    required this.uuid,
+    this.isPrimary = true,
+    required this.characteristics,
+  });
+
+  String uuid;
+
+  bool isPrimary;
+
+  List<MutableCharacteristic?> characteristics;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      uuid,
+      isPrimary,
+      characteristics,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static MutableService decode(Object result) {
+    result as List<Object?>;
+    return MutableService(
+      uuid: result[0]! as String,
+      isPrimary: result[1]! as bool,
+      characteristics: (result[2]! as List<Object?>).cast<MutableCharacteristic?>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! MutableService || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -620,32 +961,53 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is ConnectionState) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    }    else if (value is ClientSession) {
+    }    else if (value is AttResult) {
       buffer.putUint8(131);
-      writeValue(buffer, value.encode());
-    }    else if (value is PeripheralSession) {
+      writeValue(buffer, value.index);
+    }    else if (value is ClientSession) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is Peripheral) {
+    }    else if (value is PeripheralSession) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is AdvertisementData) {
+    }    else if (value is PeripheralManagerSession) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is ScanResult) {
+    }    else if (value is Peripheral) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is Service) {
+    }    else if (value is AdvertisementData) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is Characteristic) {
+    }    else if (value is ScanResult) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is Descriptor) {
+    }    else if (value is Service) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is CharacteristicProperty) {
+    }    else if (value is Characteristic) {
       buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    }    else if (value is Descriptor) {
+      buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    }    else if (value is CharacteristicProperty) {
+      buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    }    else if (value is CharacteristicPermission) {
+      buffer.putUint8(142);
+      writeValue(buffer, value.encode());
+    }    else if (value is AttRequest) {
+      buffer.putUint8(143);
+      writeValue(buffer, value.encode());
+    }    else if (value is MutableDescriptor) {
+      buffer.putUint8(144);
+      writeValue(buffer, value.encode());
+    }    else if (value is MutableCharacteristic) {
+      buffer.putUint8(145);
+      writeValue(buffer, value.encode());
+    }    else if (value is MutableService) {
+      buffer.putUint8(146);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -662,23 +1024,38 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : ConnectionState.values[value];
       case 131:
-        return ClientSession.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : AttResult.values[value];
       case 132:
-        return PeripheralSession.decode(readValue(buffer)!);
+        return ClientSession.decode(readValue(buffer)!);
       case 133:
-        return Peripheral.decode(readValue(buffer)!);
+        return PeripheralSession.decode(readValue(buffer)!);
       case 134:
-        return AdvertisementData.decode(readValue(buffer)!);
+        return PeripheralManagerSession.decode(readValue(buffer)!);
       case 135:
-        return ScanResult.decode(readValue(buffer)!);
+        return Peripheral.decode(readValue(buffer)!);
       case 136:
-        return Service.decode(readValue(buffer)!);
+        return AdvertisementData.decode(readValue(buffer)!);
       case 137:
-        return Characteristic.decode(readValue(buffer)!);
+        return ScanResult.decode(readValue(buffer)!);
       case 138:
-        return Descriptor.decode(readValue(buffer)!);
+        return Service.decode(readValue(buffer)!);
       case 139:
+        return Characteristic.decode(readValue(buffer)!);
+      case 140:
+        return Descriptor.decode(readValue(buffer)!);
+      case 141:
         return CharacteristicProperty.decode(readValue(buffer)!);
+      case 142:
+        return CharacteristicPermission.decode(readValue(buffer)!);
+      case 143:
+        return AttRequest.decode(readValue(buffer)!);
+      case 144:
+        return MutableDescriptor.decode(readValue(buffer)!);
+      case 145:
+        return MutableCharacteristic.decode(readValue(buffer)!);
+      case 146:
+        return MutableService.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -1065,6 +1442,153 @@ class ButaneHostApi {
     ;
     return pigeonVar_replyValue! as int;
   }
+
+  /// "Peripheral" APIs.
+  Future<ClientState> peripheralManagerState({required PeripheralManagerSession session}) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.peripheralManagerState$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as ClientState;
+  }
+
+  Future<void> startAdvertising({required PeripheralManagerSession session, String? localName, List<String>? serviceUuids, }) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.startAdvertising$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, localName, serviceUuids]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> stopAdvertising({required PeripheralManagerSession session}) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.stopAdvertising$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> addService({required PeripheralManagerSession session, required MutableService service}) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.addService$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, service]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> removeService({required PeripheralManagerSession session, required String serviceUuid}) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeService$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> removeAllServices({required PeripheralManagerSession session}) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeAllServices$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> respondToRequest({required PeripheralManagerSession session, required int requestId, required AttResult result, Uint8List? value, }) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.respondToRequest$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, requestId, result, value]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<bool> updateValue({required PeripheralManagerSession session, required String serviceUuid, required String characteristicUuid, required Uint8List value, }) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.updateValue$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid, characteristicUuid, value]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as bool;
+  }
 }
 
 /// The APIs that are used from the host platform to communicate with the
@@ -1083,6 +1607,15 @@ abstract class ButaneFlutterApi {
   void onCharacteristicValue(Peripheral peripheral, Characteristic characteristic, Uint8List value);
 
   void onDescriptorValue(Peripheral peripheral, Descriptor descriptor, Uint8List value);
+
+  /// "Peripheral Manager" APIs.
+  void onPeripheralManagerState(String? clientIdentifier, ClientState state);
+
+  void onServiceAdded(String serviceUuid, String? error);
+
+  void onReadRequest(AttRequest request);
+
+  void onWriteRequests(List<AttRequest> requests);
 
   static void setUp(ButaneFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -1188,6 +1721,92 @@ abstract class ButaneFlutterApi {
           final Uint8List arg_value = args[2]! as Uint8List;
           try {
             api.onDescriptorValue(arg_peripheral, arg_descriptor, arg_value);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onPeripheralManagerState$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String? arg_clientIdentifier = args[0] as String?;
+          final ClientState arg_state = args[1]! as ClientState;
+          try {
+            api.onPeripheralManagerState(arg_clientIdentifier, arg_state);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServiceAdded$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String arg_serviceUuid = args[0]! as String;
+          final String? arg_error = args[1] as String?;
+          try {
+            api.onServiceAdded(arg_serviceUuid, arg_error);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadRequest$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final AttRequest arg_request = args[0]! as AttRequest;
+          try {
+            api.onReadRequest(arg_request);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onWriteRequests$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final List<AttRequest> arg_requests = (args[0]! as List<Object?>).cast<AttRequest>();
+          try {
+            api.onWriteRequests(arg_requests);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

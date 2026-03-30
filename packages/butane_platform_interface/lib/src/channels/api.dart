@@ -27,6 +27,11 @@ typedef RssiResult = ({
   int rssi,
 });
 
+typedef ServiceAddedResult = ({
+  String serviceUuid,
+  String? error,
+});
+
 /// A default implementation of [ButanePlatformInterface] which uses generated
 /// method channels to call platform-specific code.
 base class ButanePlatform extends ButanePlatformInterface {
@@ -374,6 +379,81 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
     Uint8List value,
   ) {
     // TODO: implement onDescriptorValue
+  }
+
+  // Peripheral Manager State
+
+  Stream<ClientStateResult> get peripheralManagerStateStream =>
+      peripheralManagerStateController.stream;
+
+  @protected
+  final peripheralManagerStateController =
+      StreamController<ClientStateResult>.broadcast();
+
+  @protected
+  @override
+  void onPeripheralManagerState(
+    String? clientIdentifier,
+    api.ClientState state,
+  ) {
+    peripheralManagerStateController.sink.add(
+      (
+        session: Session(
+          clientIdentifier: clientIdentifier,
+        ),
+        state: state,
+      ),
+    );
+  }
+
+  // Service Added
+
+  Stream<ServiceAddedResult> get serviceAddedStream =>
+      serviceAddedController.stream;
+
+  @protected
+  final serviceAddedController =
+      StreamController<ServiceAddedResult>.broadcast();
+
+  @protected
+  @override
+  void onServiceAdded(String serviceUuid, String? error) {
+    serviceAddedController.sink.add(
+      (
+        serviceUuid: serviceUuid,
+        error: error,
+      ),
+    );
+  }
+
+  // Read Request
+
+  Stream<api.AttRequest> get readRequestStream =>
+      readRequestController.stream;
+
+  @protected
+  final readRequestController =
+      StreamController<api.AttRequest>.broadcast();
+
+  @protected
+  @override
+  void onReadRequest(api.AttRequest request) {
+    readRequestController.sink.add(request);
+  }
+
+  // Write Requests
+
+  Stream<List<api.AttRequest>> get writeRequestsStream =>
+      writeRequestsController.stream;
+
+  @protected
+  final writeRequestsController =
+      StreamController<List<api.AttRequest>>.broadcast();
+
+  @protected
+  @override
+  void onWriteRequests(List<api.AttRequest> requests) {
+    writeRequestsController.sink.add(requests);
   }
 }
 
