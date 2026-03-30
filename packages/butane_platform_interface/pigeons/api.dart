@@ -63,6 +63,20 @@ class PeripheralSession extends Session {
   final String? restorationIdentifier;
 }
 
+class PeripheralManagerSession extends Session {
+  PeripheralManagerSession({
+    this.clientIdentifier,
+    this.adapterIdentifier,
+    this.restorationIdentifier,
+  });
+
+  final String? clientIdentifier;
+
+  final String? adapterIdentifier;
+
+  final String? restorationIdentifier;
+}
+
 class Peripheral {
   Peripheral({
     required this.session,
@@ -188,6 +202,101 @@ class CharacteristicProperty {
   final bool notifyEncryptionRequired;
 
   final bool indicateEncryptionRequired;
+}
+
+class CharacteristicPermission {
+  const CharacteristicPermission({
+    this.readable = false,
+    this.writeable = false,
+    this.readEncryptionRequired = false,
+    this.writeEncryptionRequired = false,
+  });
+
+  final bool readable;
+
+  final bool writeable;
+
+  final bool readEncryptionRequired;
+
+  final bool writeEncryptionRequired;
+}
+
+enum AttResult {
+  success,
+  invalidHandle,
+  readNotPermitted,
+  writeNotPermitted,
+  invalidOffset,
+  attributeNotFound,
+  unlikelyError,
+}
+
+class AttRequest {
+  AttRequest({
+    required this.requestId,
+    required this.centralIdentifier,
+    required this.characteristicUuid,
+    required this.serviceUuid,
+    this.offset = 0,
+    this.value,
+  });
+
+  final int requestId;
+
+  final String centralIdentifier;
+
+  final String characteristicUuid;
+
+  final String serviceUuid;
+
+  final int offset;
+
+  final Uint8List? value;
+}
+
+class MutableDescriptor {
+  MutableDescriptor({
+    required this.uuid,
+    this.value,
+  });
+
+  final String uuid;
+
+  final Uint8List? value;
+}
+
+class MutableCharacteristic {
+  MutableCharacteristic({
+    required this.uuid,
+    this.properties,
+    this.permissions,
+    this.value,
+    this.descriptors,
+  });
+
+  final String uuid;
+
+  final CharacteristicProperty? properties;
+
+  final CharacteristicPermission? permissions;
+
+  final Uint8List? value;
+
+  final List<MutableDescriptor?>? descriptors;
+}
+
+class MutableService {
+  MutableService({
+    required this.uuid,
+    this.isPrimary = true,
+    required this.characteristics,
+  });
+
+  final String uuid;
+
+  final bool isPrimary;
+
+  final List<MutableCharacteristic?> characteristics;
 }
 
 /// The APIs that are used to communicate from the flutter plugin to the
