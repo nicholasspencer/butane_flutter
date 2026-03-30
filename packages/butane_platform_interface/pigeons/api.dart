@@ -438,6 +438,56 @@ abstract class ButaneHostApi {
   });
 
   /// "Peripheral" APIs.
+
+  @async
+  ClientState peripheralManagerState({
+    required PeripheralManagerSession session,
+  });
+
+  @async
+  void startAdvertising({
+    required PeripheralManagerSession session,
+    String? localName,
+    List<String>? serviceUuids,
+  });
+
+  @async
+  void stopAdvertising({
+    required PeripheralManagerSession session,
+  });
+
+  @async
+  void addService({
+    required PeripheralManagerSession session,
+    required MutableService service,
+  });
+
+  @async
+  void removeService({
+    required PeripheralManagerSession session,
+    required String serviceUuid,
+  });
+
+  @async
+  void removeAllServices({
+    required PeripheralManagerSession session,
+  });
+
+  @async
+  void respondToRequest({
+    required PeripheralManagerSession session,
+    required int requestId,
+    required AttResult result,
+    Uint8List? value,
+  });
+
+  @async
+  bool updateValue({
+    required PeripheralManagerSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required Uint8List value,
+  });
 }
 
 /// The APIs that are used from the host platform to communicate with the
@@ -472,5 +522,25 @@ abstract class ButaneFlutterApi {
     Peripheral peripheral,
     Descriptor descriptor,
     Uint8List value,
+  );
+
+  /// "Peripheral Manager" APIs.
+
+  void onPeripheralManagerState(
+    String? clientIdentifier,
+    ClientState state,
+  );
+
+  void onServiceAdded(
+    String serviceUuid,
+    String? error,
+  );
+
+  void onReadRequest(
+    AttRequest request,
+  );
+
+  void onWriteRequests(
+    List<AttRequest> requests,
   );
 }
