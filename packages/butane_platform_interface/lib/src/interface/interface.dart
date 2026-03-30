@@ -318,3 +318,108 @@ final class CharacteristicProperty {
 
   final bool indicateEncryptionRequired;
 }
+
+/// Peripheral Manager Models
+
+final class PeripheralManagerSession extends Session {
+  const PeripheralManagerSession({
+    super.clientIdentifier,
+    super.adapterIdentifier,
+    super.restorationIdentifier,
+  });
+}
+
+final class CharacteristicPermission {
+  const CharacteristicPermission({
+    this.readable = false,
+    this.writeable = false,
+    this.readEncryptionRequired = false,
+    this.writeEncryptionRequired = false,
+  });
+
+  final bool readable;
+
+  final bool writeable;
+
+  final bool readEncryptionRequired;
+
+  final bool writeEncryptionRequired;
+}
+
+enum AttResult {
+  success,
+  invalidHandle,
+  readNotPermitted,
+  writeNotPermitted,
+  invalidOffset,
+  attributeNotFound,
+  unlikelyError,
+}
+
+final class AttRequest {
+  const AttRequest({
+    required this.requestId,
+    required this.centralIdentifier,
+    required this.characteristicUuid,
+    required this.serviceUuid,
+    this.offset = 0,
+    this.value,
+  });
+
+  final int requestId;
+
+  final String centralIdentifier;
+
+  final String characteristicUuid;
+
+  final String serviceUuid;
+
+  final int offset;
+
+  final Uint8List? value;
+}
+
+final class MutableDescriptor {
+  const MutableDescriptor({
+    required this.uuid,
+    this.value,
+  });
+
+  final String uuid;
+
+  final Uint8List? value;
+}
+
+final class MutableCharacteristic {
+  const MutableCharacteristic({
+    required this.uuid,
+    this.properties,
+    this.permissions,
+    this.value,
+    this.descriptors,
+  });
+
+  final String uuid;
+
+  final CharacteristicProperty? properties;
+
+  final CharacteristicPermission? permissions;
+
+  final Uint8List? value;
+
+  final List<MutableDescriptor>? descriptors;
+}
+
+final class MutableService {
+  const MutableService({
+    required this.uuid,
+    this.isPrimary = true,
+    required this.characteristics,
+  });
+
+  final String uuid;
+
+  final bool isPrimary;
+
+  final List<MutableCharacteristic> characteristics;
+}
