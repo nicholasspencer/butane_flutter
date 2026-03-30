@@ -143,7 +143,65 @@ abstract base class ButanePlatformInterface {
     required PeripheralSession session,
   });
 
-  /// TODO The platform-specific implementation of [PeripheralManager].
+  /// "Peripheral Manager" APIs.
+
+  Future<ClientState> peripheralManagerState([
+    PeripheralManagerSession? session,
+  ]);
+
+  Stream<ClientState> peripheralManagerStateStream([
+    PeripheralManagerSession? session,
+  ]);
+
+  Future<void> startAdvertising({
+    PeripheralManagerSession? session,
+    String? localName,
+    Iterable<String>? serviceUuids,
+  });
+
+  Future<void> stopAdvertising({
+    PeripheralManagerSession? session,
+  });
+
+  Future<void> addService({
+    PeripheralManagerSession? session,
+    required MutableService service,
+  });
+
+  Stream<({String serviceUuid, String? error})> serviceAddedStream([
+    PeripheralManagerSession? session,
+  ]);
+
+  Future<void> removeService({
+    PeripheralManagerSession? session,
+    required String serviceUuid,
+  });
+
+  Future<void> removeAllServices({
+    PeripheralManagerSession? session,
+  });
+
+  Future<void> respondToRequest({
+    PeripheralManagerSession? session,
+    required int requestId,
+    required AttResult result,
+    Uint8List? value,
+  });
+
+  Future<bool> updateValue({
+    PeripheralManagerSession? session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required Uint8List value,
+  });
+
+  Stream<AttRequest> readRequestStream([
+    PeripheralManagerSession? session,
+  ]);
+
+  Stream<List<AttRequest>> writeRequestsStream([
+    PeripheralManagerSession? session,
+  ]);
 }
 
 /// Models
