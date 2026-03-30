@@ -281,6 +281,144 @@ base class ButanePlatform extends ButanePlatformInterface {
       session: session.toSession(),
     );
   }
+
+  // Peripheral Manager
+
+  @override
+  Future<ClientState> peripheralManagerState([
+    PeripheralManagerSession? session,
+  ]) async {
+    final state = await hostApi.peripheralManagerState(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+    );
+    return state.toClientState();
+  }
+
+  @override
+  Stream<ClientState> peripheralManagerStateStream([
+    PeripheralManagerSession? session,
+  ]) =>
+      flutterApi.peripheralManagerStateStream
+          .where(
+            (e) =>
+                e.session?.clientIdentifier == session?.clientIdentifier,
+          )
+          .map((e) => e.state.toClientState());
+
+  @override
+  Future<void> startAdvertising({
+    PeripheralManagerSession? session,
+    String? localName,
+    Iterable<String>? serviceUuids,
+  }) {
+    return hostApi.startAdvertising(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+      localName: localName,
+      serviceUuids: serviceUuids?.toList(),
+    );
+  }
+
+  @override
+  Future<void> stopAdvertising({
+    PeripheralManagerSession? session,
+  }) {
+    return hostApi.stopAdvertising(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+    );
+  }
+
+  @override
+  Future<void> addService({
+    PeripheralManagerSession? session,
+    required MutableService service,
+  }) {
+    return hostApi.addService(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+      service: service.toMutableService(),
+    );
+  }
+
+  @override
+  Stream<({String serviceUuid, String? error})> serviceAddedStream([
+    PeripheralManagerSession? session,
+  ]) =>
+      flutterApi.serviceAddedStream.map(
+        (e) => (serviceUuid: e.serviceUuid, error: e.error),
+      );
+
+  @override
+  Future<void> removeService({
+    PeripheralManagerSession? session,
+    required String serviceUuid,
+  }) {
+    return hostApi.removeService(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+      serviceUuid: serviceUuid,
+    );
+  }
+
+  @override
+  Future<void> removeAllServices({
+    PeripheralManagerSession? session,
+  }) {
+    return hostApi.removeAllServices(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+    );
+  }
+
+  @override
+  Future<void> respondToRequest({
+    PeripheralManagerSession? session,
+    required int requestId,
+    required AttResult result,
+    Uint8List? value,
+  }) {
+    return hostApi.respondToRequest(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+      requestId: requestId,
+      result: result.toAttResult(),
+      value: value,
+    );
+  }
+
+  @override
+  Future<bool> updateValue({
+    PeripheralManagerSession? session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required Uint8List value,
+  }) {
+    return hostApi.updateValue(
+      session: session?.toPeripheralManagerSession() ??
+          api.PeripheralManagerSession(),
+      serviceUuid: serviceUuid,
+      characteristicUuid: characteristicUuid,
+      value: value,
+    );
+  }
+
+  @override
+  Stream<AttRequest> readRequestStream([
+    PeripheralManagerSession? session,
+  ]) =>
+      flutterApi.readRequestStream.map(
+        (e) => e.toAttRequest(),
+      );
+
+  @override
+  Stream<List<AttRequest>> writeRequestsStream([
+    PeripheralManagerSession? session,
+  ]) =>
+      flutterApi.writeRequestsStream.map(
+        (requests) => requests.map((e) => e.toAttRequest()).toList(),
+      );
 }
 
 base class ButaneFlutterApi extends api.ButaneFlutterApi {
