@@ -10,10 +10,11 @@ supervisor_name=supervisor
 
 # Announcement channel for supervisor status updates
 # Format: provider:channel_id (e.g., slack:C0AAF4DHR7H)
-announce_channel=
+announce_channel=slack:C0AAF4DHR7H
 
 # Announcement level: all, significant (default), or none
 announce_level=significant
 
 # Maximum concurrent factory agents per project (default: 2)
 max_concurrent=2
+automation=enabled
