@@ -987,6 +987,371 @@ extension CharacteristicPropertyChannelConverter on api.CharacteristicProperty {
   }
 }
 
+extension PeripheralManagerSessionConverter on PeripheralManagerSession {
+  static PeripheralManagerSession fromPeripheralManagerSession(
+    api.PeripheralManagerSession session,
+  ) {
+    return PeripheralManagerSession(
+      clientIdentifier: session.clientIdentifier,
+      adapterIdentifier: session.adapterIdentifier,
+      restorationIdentifier: session.restorationIdentifier,
+    );
+  }
+
+  api.PeripheralManagerSession toPeripheralManagerSession() {
+    return api.PeripheralManagerSession(
+      clientIdentifier: clientIdentifier,
+      adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier,
+    );
+  }
+}
+
+extension PeripheralManagerSessionChannelConverter
+    on api.PeripheralManagerSession {
+  static api.PeripheralManagerSession fromPeripheralManagerSession(
+    PeripheralManagerSession session,
+  ) {
+    return api.PeripheralManagerSession(
+      clientIdentifier: session.clientIdentifier,
+      adapterIdentifier: session.adapterIdentifier,
+      restorationIdentifier: session.restorationIdentifier,
+    );
+  }
+
+  PeripheralManagerSession toPeripheralManagerSession() {
+    return PeripheralManagerSession(
+      clientIdentifier: clientIdentifier,
+      adapterIdentifier: adapterIdentifier,
+      restorationIdentifier: restorationIdentifier,
+    );
+  }
+}
+
+extension CharacteristicPermissionConverter on CharacteristicPermission {
+  static CharacteristicPermission fromCharacteristicPermission(
+    api.CharacteristicPermission permission,
+  ) {
+    return CharacteristicPermission(
+      readable: permission.readable,
+      writeable: permission.writeable,
+      readEncryptionRequired: permission.readEncryptionRequired,
+      writeEncryptionRequired: permission.writeEncryptionRequired,
+    );
+  }
+
+  api.CharacteristicPermission toCharacteristicPermission() {
+    return api.CharacteristicPermission(
+      readable: readable,
+      writeable: writeable,
+      readEncryptionRequired: readEncryptionRequired,
+      writeEncryptionRequired: writeEncryptionRequired,
+    );
+  }
+}
+
+extension CharacteristicPermissionChannelConverter
+    on api.CharacteristicPermission {
+  static api.CharacteristicPermission fromCharacteristicPermission(
+    CharacteristicPermission permission,
+  ) {
+    return api.CharacteristicPermission(
+      readable: permission.readable,
+      writeable: permission.writeable,
+      readEncryptionRequired: permission.readEncryptionRequired,
+      writeEncryptionRequired: permission.writeEncryptionRequired,
+    );
+  }
+
+  CharacteristicPermission toCharacteristicPermission() {
+    return CharacteristicPermission(
+      readable: readable,
+      writeable: writeable,
+      readEncryptionRequired: readEncryptionRequired,
+      writeEncryptionRequired: writeEncryptionRequired,
+    );
+  }
+}
+
+extension AttResultConverter on AttResult {
+  static AttResult fromAttResult(api.AttResult result) {
+    switch (result) {
+      case api.AttResult.success:
+        return AttResult.success;
+      case api.AttResult.invalidHandle:
+        return AttResult.invalidHandle;
+      case api.AttResult.readNotPermitted:
+        return AttResult.readNotPermitted;
+      case api.AttResult.writeNotPermitted:
+        return AttResult.writeNotPermitted;
+      case api.AttResult.invalidOffset:
+        return AttResult.invalidOffset;
+      case api.AttResult.attributeNotFound:
+        return AttResult.attributeNotFound;
+      case api.AttResult.unlikelyError:
+        return AttResult.unlikelyError;
+    }
+  }
+
+  api.AttResult toAttResult() {
+    switch (this) {
+      case AttResult.success:
+        return api.AttResult.success;
+      case AttResult.invalidHandle:
+        return api.AttResult.invalidHandle;
+      case AttResult.readNotPermitted:
+        return api.AttResult.readNotPermitted;
+      case AttResult.writeNotPermitted:
+        return api.AttResult.writeNotPermitted;
+      case AttResult.invalidOffset:
+        return api.AttResult.invalidOffset;
+      case AttResult.attributeNotFound:
+        return api.AttResult.attributeNotFound;
+      case AttResult.unlikelyError:
+        return api.AttResult.unlikelyError;
+    }
+  }
+}
+
+extension AttResultChannelConverter on api.AttResult {
+  static api.AttResult fromAttResult(AttResult result) {
+    switch (result) {
+      case AttResult.success:
+        return api.AttResult.success;
+      case AttResult.invalidHandle:
+        return api.AttResult.invalidHandle;
+      case AttResult.readNotPermitted:
+        return api.AttResult.readNotPermitted;
+      case AttResult.writeNotPermitted:
+        return api.AttResult.writeNotPermitted;
+      case AttResult.invalidOffset:
+        return api.AttResult.invalidOffset;
+      case AttResult.attributeNotFound:
+        return api.AttResult.attributeNotFound;
+      case AttResult.unlikelyError:
+        return api.AttResult.unlikelyError;
+    }
+  }
+
+  AttResult toAttResult() {
+    switch (this) {
+      case api.AttResult.success:
+        return AttResult.success;
+      case api.AttResult.invalidHandle:
+        return AttResult.invalidHandle;
+      case api.AttResult.readNotPermitted:
+        return AttResult.readNotPermitted;
+      case api.AttResult.writeNotPermitted:
+        return AttResult.writeNotPermitted;
+      case api.AttResult.invalidOffset:
+        return AttResult.invalidOffset;
+      case api.AttResult.attributeNotFound:
+        return AttResult.attributeNotFound;
+      case api.AttResult.unlikelyError:
+        return AttResult.unlikelyError;
+    }
+  }
+}
+
+extension AttRequestConverter on AttRequest {
+  static AttRequest fromAttRequest(api.AttRequest request) {
+    return AttRequest(
+      requestId: request.requestId,
+      centralIdentifier: request.centralIdentifier,
+      characteristicUuid: request.characteristicUuid,
+      serviceUuid: request.serviceUuid,
+      offset: request.offset,
+      value: request.value,
+    );
+  }
+
+  api.AttRequest toAttRequest() {
+    return api.AttRequest(
+      requestId: requestId,
+      centralIdentifier: centralIdentifier,
+      characteristicUuid: characteristicUuid,
+      serviceUuid: serviceUuid,
+      offset: offset,
+      value: value,
+    );
+  }
+}
+
+extension AttRequestChannelConverter on api.AttRequest {
+  static api.AttRequest fromAttRequest(AttRequest request) {
+    return api.AttRequest(
+      requestId: request.requestId,
+      centralIdentifier: request.centralIdentifier,
+      characteristicUuid: request.characteristicUuid,
+      serviceUuid: request.serviceUuid,
+      offset: request.offset,
+      value: request.value,
+    );
+  }
+
+  AttRequest toAttRequest() {
+    return AttRequest(
+      requestId: requestId,
+      centralIdentifier: centralIdentifier,
+      characteristicUuid: characteristicUuid,
+      serviceUuid: serviceUuid,
+      offset: offset,
+      value: value,
+    );
+  }
+}
+
+extension MutableDescriptorConverter on MutableDescriptor {
+  static MutableDescriptor fromMutableDescriptor(
+    api.MutableDescriptor descriptor,
+  ) {
+    return MutableDescriptor(
+      uuid: descriptor.uuid,
+      value: descriptor.value,
+    );
+  }
+
+  api.MutableDescriptor toMutableDescriptor() {
+    return api.MutableDescriptor(
+      uuid: uuid,
+      value: value,
+    );
+  }
+}
+
+extension MutableDescriptorChannelConverter on api.MutableDescriptor {
+  static api.MutableDescriptor fromMutableDescriptor(
+    MutableDescriptor descriptor,
+  ) {
+    return api.MutableDescriptor(
+      uuid: descriptor.uuid,
+      value: descriptor.value,
+    );
+  }
+
+  MutableDescriptor toMutableDescriptor() {
+    return MutableDescriptor(
+      uuid: uuid,
+      value: value,
+    );
+  }
+}
+
+extension MutableCharacteristicConverter on MutableCharacteristic {
+  static MutableCharacteristic fromMutableCharacteristic(
+    api.MutableCharacteristic characteristic,
+  ) {
+    return MutableCharacteristic(
+      uuid: characteristic.uuid,
+      properties: characteristic.properties != null
+          ? CharacteristicPropertyConverter.fromCharacteristicProperty(
+              characteristic.properties!,
+            )
+          : null,
+      permissions: characteristic.permissions != null
+          ? CharacteristicPermissionConverter.fromCharacteristicPermission(
+              characteristic.permissions!,
+            )
+          : null,
+      value: characteristic.value,
+      descriptors: characteristic.descriptors?.nonNulls
+          .map(MutableDescriptorConverter.fromMutableDescriptor)
+          .toList(),
+    );
+  }
+
+  api.MutableCharacteristic toMutableCharacteristic() {
+    return api.MutableCharacteristic(
+      uuid: uuid,
+      properties: properties?.toCharacteristicProperty(),
+      permissions: permissions?.toCharacteristicPermission(),
+      value: value,
+      descriptors:
+          descriptors?.map((e) => e.toMutableDescriptor()).toList(),
+    );
+  }
+}
+
+extension MutableCharacteristicChannelConverter on api.MutableCharacteristic {
+  static api.MutableCharacteristic fromMutableCharacteristic(
+    MutableCharacteristic characteristic,
+  ) {
+    return api.MutableCharacteristic(
+      uuid: characteristic.uuid,
+      properties: characteristic.properties != null
+          ? CharacteristicPropertyChannelConverter.fromCharacteristicProperty(
+              characteristic.properties!,
+            )
+          : null,
+      permissions: characteristic.permissions != null
+          ? CharacteristicPermissionChannelConverter
+              .fromCharacteristicPermission(
+            characteristic.permissions!,
+          )
+          : null,
+      value: characteristic.value,
+      descriptors: characteristic.descriptors
+          ?.map(MutableDescriptorChannelConverter.fromMutableDescriptor)
+          .toList(),
+    );
+  }
+
+  MutableCharacteristic toMutableCharacteristic() {
+    return MutableCharacteristic(
+      uuid: uuid,
+      properties: properties?.toCharacteristicProperty(),
+      permissions: permissions?.toCharacteristicPermission(),
+      value: value,
+      descriptors: descriptors?.nonNulls
+          .map((e) => e.toMutableDescriptor())
+          .toList(),
+    );
+  }
+}
+
+extension MutableServiceConverter on MutableService {
+  static MutableService fromMutableService(api.MutableService service) {
+    return MutableService(
+      uuid: service.uuid,
+      isPrimary: service.isPrimary,
+      characteristics: service.characteristics.nonNulls
+          .map(MutableCharacteristicConverter.fromMutableCharacteristic)
+          .toList(),
+    );
+  }
+
+  api.MutableService toMutableService() {
+    return api.MutableService(
+      uuid: uuid,
+      isPrimary: isPrimary,
+      characteristics:
+          characteristics.map((e) => e.toMutableCharacteristic()).toList(),
+    );
+  }
+}
+
+extension MutableServiceChannelConverter on api.MutableService {
+  static api.MutableService fromMutableService(MutableService service) {
+    return api.MutableService(
+      uuid: service.uuid,
+      isPrimary: service.isPrimary,
+      characteristics: service.characteristics
+          .map(MutableCharacteristicChannelConverter.fromMutableCharacteristic)
+          .toList(),
+    );
+  }
+
+  MutableService toMutableService() {
+    return MutableService(
+      uuid: uuid,
+      isPrimary: isPrimary,
+      characteristics: characteristics.nonNulls
+          .map((e) => e.toMutableCharacteristic())
+          .toList(),
+    );
+  }
+}
+
 extension NonNullMapEntries<K, V> on Map<K, V> {
   Map<K, V> get nonNulls {
     final entries = this.entries.where((element) => element.value != null);
