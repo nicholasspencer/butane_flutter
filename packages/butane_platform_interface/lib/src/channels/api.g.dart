@@ -1617,6 +1617,12 @@ abstract class ButaneFlutterApi {
 
   void onWriteRequests(List<AttRequest> requests);
 
+  void onCentralSubscribed(String? clientIdentifier, String centralIdentifier, String serviceUuid, String characteristicUuid);
+
+  void onCentralUnsubscribed(String? clientIdentifier, String centralIdentifier, String serviceUuid, String characteristicUuid);
+
+  void onReadyToUpdateSubscribers(String? clientIdentifier);
+
   static void setUp(ButaneFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -1807,6 +1813,75 @@ abstract class ButaneFlutterApi {
           final List<AttRequest> arg_requests = (args[0]! as List<Object?>).cast<AttRequest>();
           try {
             api.onWriteRequests(arg_requests);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralSubscribed$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String? arg_clientIdentifier = args[0] as String?;
+          final String arg_centralIdentifier = args[1]! as String;
+          final String arg_serviceUuid = args[2]! as String;
+          final String arg_characteristicUuid = args[3]! as String;
+          try {
+            api.onCentralSubscribed(arg_clientIdentifier, arg_centralIdentifier, arg_serviceUuid, arg_characteristicUuid);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralUnsubscribed$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String? arg_clientIdentifier = args[0] as String?;
+          final String arg_centralIdentifier = args[1]! as String;
+          final String arg_serviceUuid = args[2]! as String;
+          final String arg_characteristicUuid = args[3]! as String;
+          try {
+            api.onCentralUnsubscribed(arg_clientIdentifier, arg_centralIdentifier, arg_serviceUuid, arg_characteristicUuid);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadyToUpdateSubscribers$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String? arg_clientIdentifier = args[0] as String?;
+          try {
+            api.onReadyToUpdateSubscribers(arg_clientIdentifier);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

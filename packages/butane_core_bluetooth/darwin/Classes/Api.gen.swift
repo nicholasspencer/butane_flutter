@@ -1457,6 +1457,9 @@ protocol ButaneFlutterApiProtocol {
   func onServiceAdded(serviceUuid serviceUuidArg: String, error errorArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onReadRequest(request requestArg: AttRequest, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onWriteRequests(requests requestsArg: [AttRequest], completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onCentralSubscribed(clientIdentifier clientIdentifierArg: String?, centralIdentifier centralIdentifierArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onCentralUnsubscribed(clientIdentifier clientIdentifierArg: String?, centralIdentifier centralIdentifierArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onReadyToUpdateSubscribers(clientIdentifier clientIdentifierArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class ButaneFlutterApi: ButaneFlutterApiProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -1619,6 +1622,60 @@ class ButaneFlutterApi: ButaneFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onWriteRequests\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([requestsArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onCentralSubscribed(clientIdentifier clientIdentifierArg: String?, centralIdentifier centralIdentifierArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralSubscribed\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([clientIdentifierArg, centralIdentifierArg, serviceUuidArg, characteristicUuidArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onCentralUnsubscribed(clientIdentifier clientIdentifierArg: String?, centralIdentifier centralIdentifierArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralUnsubscribed\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([clientIdentifierArg, centralIdentifierArg, serviceUuidArg, characteristicUuidArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onReadyToUpdateSubscribers(clientIdentifier clientIdentifierArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadyToUpdateSubscribers\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([clientIdentifierArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

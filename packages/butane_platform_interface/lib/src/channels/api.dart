@@ -32,6 +32,13 @@ typedef ServiceAddedResult = ({
   String? error,
 });
 
+typedef CentralSubscriptionResult = ({
+  String? clientIdentifier,
+  String centralIdentifier,
+  String serviceUuid,
+  String characteristicUuid,
+});
+
 /// A default implementation of [ButanePlatformInterface] which uses generated
 /// method channels to call platform-specific code.
 base class ButanePlatform extends ButanePlatformInterface {
@@ -454,6 +461,75 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   @override
   void onWriteRequests(List<api.AttRequest> requests) {
     writeRequestsController.sink.add(requests);
+  }
+
+  // Central Subscribed
+
+  Stream<CentralSubscriptionResult> get centralSubscribedStream =>
+      centralSubscribedController.stream;
+
+  @protected
+  final centralSubscribedController =
+      StreamController<CentralSubscriptionResult>.broadcast();
+
+  @protected
+  @override
+  void onCentralSubscribed(
+    String? clientIdentifier,
+    String centralIdentifier,
+    String serviceUuid,
+    String characteristicUuid,
+  ) {
+    centralSubscribedController.sink.add(
+      (
+        clientIdentifier: clientIdentifier,
+        centralIdentifier: centralIdentifier,
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+      ),
+    );
+  }
+
+  // Central Unsubscribed
+
+  Stream<CentralSubscriptionResult> get centralUnsubscribedStream =>
+      centralUnsubscribedController.stream;
+
+  @protected
+  final centralUnsubscribedController =
+      StreamController<CentralSubscriptionResult>.broadcast();
+
+  @protected
+  @override
+  void onCentralUnsubscribed(
+    String? clientIdentifier,
+    String centralIdentifier,
+    String serviceUuid,
+    String characteristicUuid,
+  ) {
+    centralUnsubscribedController.sink.add(
+      (
+        clientIdentifier: clientIdentifier,
+        centralIdentifier: centralIdentifier,
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+      ),
+    );
+  }
+
+  // Ready to Update Subscribers
+
+  Stream<String?> get readyToUpdateSubscribersStream =>
+      readyToUpdateSubscribersController.stream;
+
+  @protected
+  final readyToUpdateSubscribersController =
+      StreamController<String?>.broadcast();
+
+  @protected
+  @override
+  void onReadyToUpdateSubscribers(String? clientIdentifier) {
+    readyToUpdateSubscribersController.sink.add(clientIdentifier);
   }
 }
 
