@@ -1669,4 +1669,55 @@ class ButaneFlutterApi(private val binaryMessenger: BinaryMessenger, private val
       } 
     }
   }
+  fun onCentralSubscribed(clientIdentifierArg: String?, centralIdentifierArg: String, serviceUuidArg: String, characteristicUuidArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralSubscribed$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(clientIdentifierArg, centralIdentifierArg, serviceUuidArg, characteristicUuidArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onCentralUnsubscribed(clientIdentifierArg: String?, centralIdentifierArg: String, serviceUuidArg: String, characteristicUuidArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralUnsubscribed$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(clientIdentifierArg, centralIdentifierArg, serviceUuidArg, characteristicUuidArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onReadyToUpdateSubscribers(clientIdentifierArg: String?, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadyToUpdateSubscribers$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(clientIdentifierArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
 }
