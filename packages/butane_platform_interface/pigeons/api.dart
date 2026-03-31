@@ -543,4 +543,22 @@ abstract class ButaneFlutterApi {
   void onWriteRequests(
     List<AttRequest> requests,
   );
+
+  void onCentralSubscribed(
+    String? clientIdentifier,
+    String centralIdentifier,
+    String serviceUuid,
+    String characteristicUuid,
+  );
+
+  void onCentralUnsubscribed(
+    String? clientIdentifier,
+    String centralIdentifier,
+    String serviceUuid,
+    String characteristicUuid,
+  );
+
+  void onReadyToUpdateSubscribers(
+    String? clientIdentifier,
+  );
 }
