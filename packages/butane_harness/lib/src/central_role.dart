@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
+import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
 import 'harness_connection.dart';
 import 'harness_log.dart';
@@ -276,12 +277,39 @@ class CentralRole {
     // Cancel existing subscription if any.
     await _notificationSubscriptions[key]?.cancel();
 
-    // Get the normalized (uppercase) UUID from the discovered characteristic.
+    // Use the normalized (uppercase) UUID from discovered characteristic
+    // to match CoreBluetooth's format in stream events.
     final normalizedCharUuid = characteristic.uuid.toString();
+    final normalizedServiceUuid =
+        characteristic.service?.uuid.toString() ?? serviceUuid;
 
-    // Enable notifications via observe() — this triggers setNotifyValue.
-    // Skip empty values (initial sinkValue read emits empty data).
-    final subscription = characteristic.observe().listen((value) {
+    // Build a PeripheralSession matching the one used by the platform.
+    final session = api.PeripheralSession(
+      peripheralIdentifier: peripheralId,
+      clientIdentifier: _manager.clientIdentifier,
+    );
+
+    // Explicitly enable notifications and await completion.
+    // The porcelain observe() does this internally but doesn't
+    // expose the await to the caller.
+    final platform = api.ButanePlatformInterface.instance;
+    await platform.observeCharacteristic(
+      observe: true,
+      session: session,
+      serviceUuid: normalizedServiceUuid,
+      characteristicUuid: normalizedCharUuid,
+    );
+
+    _log.add('Notifications enabled for $normalizedCharUuid');
+
+    // Listen to the raw characteristic value stream from the platform.
+    final subscription = platform
+        .characteristicValueStream(
+          session: session,
+          serviceUuid: normalizedServiceUuid,
+          characteristicUuid: normalizedCharUuid,
+        )
+        .listen((value) {
       if (value.isEmpty) return;
 
       final encoded = base64Encode(value);
