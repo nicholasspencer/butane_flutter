@@ -16,6 +16,15 @@ class TestUuids {
   /// Test notify characteristic UUID.
   static const String notifyCharacteristic =
       '12345678-1234-5678-1234-56789abcdef2';
+
+  /// Base64 of "BUTANE" — preconfigured read response.
+  static const String readValue = 'QlVUQU5F';
+
+  /// Base64 of "HELLO" — write test value.
+  static const String writeValue = 'SEVMTE8=';
+
+  /// Base64 of "NOTIFIED" — notification test value.
+  static const String notifyValue = 'Tk9USUZZRUQ=';
 }
 
 /// Runs BLE test scenarios against central and peripheral harness instances.
@@ -31,118 +40,357 @@ class ScenarioRunner {
   /// The peripheral-role harness client.
   final HarnessClient peripheral;
 
-  /// Run the full BLE flow: advertise → scan → connect → discover → read →
-  /// write → subscribe → notify → disconnect.
+  /// Discovered peripheral ID, populated by scan step.
+  String? _peripheralId;
+
+  /// Run the full BLE flow: check_state → add_service → advertise → scan →
+  /// connect → discover → read → write → subscribe → notify → disconnect.
   ///
-  /// Returns results for all 12 steps. Failed steps do not abort the run.
+  /// Returns results for all steps. A failed step aborts remaining steps
+  /// that depend on it.
   Future<List<StepResult>> runFullBleFlow() async {
     final results = <StepResult>[];
 
-    // 1. Check BLE state (central)
-    results.add(await _runStep(
-      'Check BLE state (central)',
-      () => central.sendCommand('getState'),
-    ),);
+    // 1. Check BLE state (central) — polls until poweredOn or timeout.
+    results.add(
+      await _runStep(
+        'Check BLE state (central)',
+        () => _waitForPoweredOn(central, 'central'),
+      ),
+    );
 
-    // 2. Check BLE state (peripheral)
-    results.add(await _runStep(
-      'Check BLE state (peripheral)',
-      () => peripheral.sendCommand('getState'),
-    ),);
+    // 2. Check BLE state (peripheral) — polls until poweredOn or timeout.
+    results.add(
+      await _runStep(
+        'Check BLE state (peripheral)',
+        () => _waitForPoweredOn(peripheral, 'peripheral'),
+      ),
+    );
 
-    // 3. Add service (peripheral)
-    results.add(await _runStep(
-      'Add service (peripheral)',
-      () => peripheral.sendCommand('addService', params: {
-        'uuid': TestUuids.service,
-        'characteristics': [
-          {
-            'uuid': TestUuids.characteristic,
-            'properties': ['read', 'write'],
+    // Abort early if BLE is not powered on.
+    if (!results.every((r) => r.success)) {
+      return results;
+    }
+
+    // 3. Set read response on peripheral (so central can read a known value).
+    results.add(
+      await _runStep(
+        'Set read response (peripheral)',
+        () => peripheral.sendCommand(
+          'set_read_response',
+          params: {
+            'serviceUuid': TestUuids.service,
+            'characteristicUuid': TestUuids.characteristic,
+            'value': TestUuids.readValue,
           },
-          {
-            'uuid': TestUuids.notifyCharacteristic,
-            'properties': ['notify'],
+        ),
+      ),
+    );
+
+    // 4. Add service (peripheral)
+    results.add(
+      await _runStep(
+        'Add service (peripheral)',
+        () => peripheral.sendCommand(
+          'add_service',
+          params: {
+            'uuid': TestUuids.service,
+            'isPrimary': true,
+            'characteristics': [
+              {
+                'uuid': TestUuids.characteristic,
+                'properties': {
+                  'read': true,
+                  'write': true,
+                },
+                'permissions': {
+                  'readable': true,
+                  'writeable': true,
+                },
+                // No 'value' — dynamic characteristics must have nil value
+                // for CoreBluetooth to invoke delegate callbacks.
+              },
+              {
+                'uuid': TestUuids.notifyCharacteristic,
+                'properties': {
+                  'read': true,
+                  'notify': true,
+                },
+                'permissions': {
+                  'readable': true,
+                },
+                // No 'value' — notifications are sent via updateValue.
+              },
+            ],
           },
-        ],
-      },),
-    ),);
+        ),
+      ),
+    );
 
-    // 4. Start advertising (peripheral)
-    results.add(await _runStep(
-      'Start advertising (peripheral)',
-      () => peripheral.sendCommand('startAdvertising', params: {
-        'serviceUuids': [TestUuids.service],
-      },),
-    ),);
+    // 5. Start advertising (peripheral)
+    results.add(
+      await _runStep(
+        'Start advertising (peripheral)',
+        () => peripheral.sendCommand(
+          'start_advertising',
+          params: {
+            'serviceUuids': [TestUuids.service],
+          },
+        ),
+      ),
+    );
 
-    // 5. Scan (central)
-    results.add(await _runStep(
-      'Scan for peripheral (central)',
-      () => central.sendCommand('scan', params: {
-        'serviceUuids': [TestUuids.service],
-      },),
-    ),);
+    // 6. Scan (central) — captures peripheral ID for subsequent steps
+    results.add(
+      await _runStep(
+        'Scan for peripheral (central)',
+        () async {
+          final resp = await central.sendCommand(
+            'scan',
+            params: {
+              'serviceUuids': [TestUuids.service],
+            },
+          );
+          // Extract peripheral ID from scan result.
+          final data = resp['data'] as Map<String, dynamic>?;
+          final peripheralMap =
+              data?['peripheral'] as Map<String, dynamic>?;
+          _peripheralId = peripheralMap?['id'] as String?;
+          if (_peripheralId == null) {
+            throw StateError('Scan returned no peripheral ID');
+          }
+          return resp;
+        },
+      ),
+    );
 
-    // 6. Connect (central)
-    results.add(await _runStep(
-      'Connect to peripheral (central)',
-      () => central.sendCommand('connect'),
-    ),);
+    // Abort if scan failed (no peripheral ID for subsequent steps).
+    if (_peripheralId == null) {
+      return results;
+    }
 
-    // 7. Discover services (central)
-    results.add(await _runStep(
-      'Discover services (central)',
-      () => central.sendCommand('discoverServices'),
-    ),);
+    // 7. Connect (central)
+    results.add(
+      await _runStep(
+        'Connect to peripheral (central)',
+        () => central.sendCommand(
+          'connect',
+          params: {
+            'peripheralId': _peripheralId,
+          },
+        ),
+      ),
+    );
 
-    // 8. Discover characteristics (central)
-    results.add(await _runStep(
-      'Discover characteristics (central)',
-      () => central.sendCommand('discoverCharacteristics', params: {
-        'serviceUuid': TestUuids.service,
-      },),
-    ),);
+    // Abort if connect failed.
+    if (!results.last.success) {
+      return results;
+    }
 
-    // 9. Read characteristic (central)
-    results.add(await _runStep(
-      'Read characteristic (central)',
-      () => central.sendCommand('readCharacteristic', params: {
-        'serviceUuid': TestUuids.service,
-        'characteristicUuid': TestUuids.characteristic,
-      },),
-    ),);
+    // 8. Discover services (central)
+    results.add(
+      await _runStep(
+        'Discover services (central)',
+        () async {
+          final resp = await central.sendCommand(
+            'discover_services',
+            params: {
+              'peripheralId': _peripheralId,
+            },
+          );
+          final data = resp['data'] as Map<String, dynamic>?;
+          final services = data?['services'] as List<dynamic>?;
+          if (services == null || services.isEmpty) {
+            throw StateError('No services discovered');
+          }
+          return resp;
+        },
+      ),
+    );
 
-    // 10. Write characteristic (central)
-    results.add(await _runStep(
-      'Write characteristic (central)',
-      () => central.sendCommand('writeCharacteristic', params: {
-        'serviceUuid': TestUuids.service,
-        'characteristicUuid': TestUuids.characteristic,
-        'value': 'SEVMTE8=', // base64 "HELLO"
-      },),
-    ),);
+    // 9. Discover characteristics (central)
+    results.add(
+      await _runStep(
+        'Discover characteristics (central)',
+        () async {
+          final resp = await central.sendCommand(
+            'discover_characteristics',
+            params: {
+              'peripheralId': _peripheralId,
+              'serviceUuid': TestUuids.service,
+            },
+          );
+          final data = resp['data'] as Map<String, dynamic>?;
+          final chars = data?['characteristics'] as List<dynamic>?;
+          if (chars == null || chars.isEmpty) {
+            throw StateError('No characteristics discovered');
+          }
+          return resp;
+        },
+      ),
+    );
 
-    // 11. Subscribe to notifications (central)
-    results.add(await _runStep(
-      'Subscribe to notifications (central)',
-      () => central.sendCommand('subscribe', params: {
-        'serviceUuid': TestUuids.service,
-        'characteristicUuid': TestUuids.notifyCharacteristic,
-      },),
-    ),);
+    // 10. Read characteristic (central)
+    results.add(
+      await _runStep(
+        'Read characteristic (central)',
+        () async {
+          final resp = await central.sendCommand(
+            'read_characteristic',
+            params: {
+              'peripheralId': _peripheralId,
+              'serviceUuid': TestUuids.service,
+              'characteristicUuid': TestUuids.characteristic,
+            },
+          );
+          final data = resp['data'] as Map<String, dynamic>?;
+          final value = data?['value'] as String?;
+          if (value != TestUuids.readValue) {
+            throw StateError(
+              'Read value "$value" != expected "${TestUuids.readValue}"',
+            );
+          }
+          return resp;
+        },
+      ),
+    );
 
-    // 12. Trigger notification (peripheral)
-    results.add(await _runStep(
-      'Trigger notification (peripheral)',
-      () => peripheral.sendCommand('updateValue', params: {
-        'serviceUuid': TestUuids.service,
-        'characteristicUuid': TestUuids.notifyCharacteristic,
-        'value': 'Tk9USUZZPQ==', // base64 "NOTIFIED"
-      },),
-    ),);
+    // 11. Write characteristic (central)
+    results.add(
+      await _runStep(
+        'Write characteristic (central)',
+        () => central.sendCommand(
+          'write_characteristic',
+          params: {
+            'peripheralId': _peripheralId,
+            'serviceUuid': TestUuids.service,
+            'characteristicUuid': TestUuids.characteristic,
+            'value': TestUuids.writeValue,
+          },
+        ),
+      ),
+    );
+
+    // 11b. Verify write was received by peripheral.
+    results.add(
+      await _runStep(
+        'Verify write (peripheral)',
+        () async {
+          // Small delay for write to propagate.
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+          final resp = await peripheral.sendCommand(
+            'get_written_value',
+            params: {
+              'serviceUuid': TestUuids.service,
+              'characteristicUuid': TestUuids.characteristic,
+            },
+          );
+          final data = resp['data'] as Map<String, dynamic>?;
+          final value = data?['value'] as String?;
+          if (value != TestUuids.writeValue) {
+            throw StateError(
+              'Written value "$value" != expected "${TestUuids.writeValue}"',
+            );
+          }
+          return resp;
+        },
+      ),
+    );
+
+    // 12. Subscribe to notifications (central)
+    results.add(
+      await _runStep(
+        'Subscribe to notifications (central)',
+        () => central.sendCommand(
+          'subscribe',
+          params: {
+            'peripheralId': _peripheralId,
+            'serviceUuid': TestUuids.service,
+            'characteristicUuid': TestUuids.notifyCharacteristic,
+          },
+        ),
+      ),
+    );
+
+    // 13. Trigger notification (peripheral) and verify central receives it.
+    results.add(
+      await _runStep(
+        'Notification round-trip',
+        () async {
+          // Listen for notification event on central.
+          final notificationFuture = central.events
+              .firstWhere(
+                (event) => event['event'] == 'notification',
+              )
+              .timeout(
+                const Duration(seconds: 10),
+                onTimeout: () => throw TimeoutException(
+                  'No notification received within 10s',
+                ),
+              );
+
+          // Trigger notification from peripheral.
+          await peripheral.sendCommand(
+            'update_value',
+            params: {
+              'serviceUuid': TestUuids.service,
+              'characteristicUuid': TestUuids.notifyCharacteristic,
+              'value': TestUuids.notifyValue,
+            },
+          );
+
+          final event = await notificationFuture;
+          final value = event['value'] as String?;
+          if (value != TestUuids.notifyValue) {
+            throw StateError(
+              'Notification value "$value" != '
+              'expected "${TestUuids.notifyValue}"',
+            );
+          }
+          return <String, dynamic>{'notified': true, 'value': value};
+        },
+      ),
+    );
+
+    // 14. Disconnect (central)
+    results.add(
+      await _runStep(
+        'Disconnect (central)',
+        () => central.sendCommand(
+          'disconnect',
+          params: {
+            'peripheralId': _peripheralId,
+          },
+        ),
+      ),
+    );
 
     return results;
+  }
+
+  /// Polls check_state until BLE reports poweredOn, or throws after ~15s.
+  Future<Map<String, dynamic>> _waitForPoweredOn(
+    HarnessClient client,
+    String label,
+  ) async {
+    const maxAttempts = 60;
+    for (var i = 0; i < maxAttempts; i++) {
+      final resp = await client.sendCommand('check_state');
+      final state = resp['data']?['state'] as String?;
+      if (state == 'poweredOn') {
+        return resp;
+      }
+      if (state == 'unsupported' || state == 'unauthorized') {
+        throw StateError(
+          '$label BLE state is "$state" — cannot proceed. '
+          'Check Bluetooth permission and hardware.',
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    throw TimeoutException(
+      '$label BLE did not reach poweredOn within ${maxAttempts ~/ 2}s',
+    );
   }
 
   Future<StepResult> _runStep(
@@ -153,7 +401,7 @@ class ScenarioRunner {
     try {
       final response = await action();
       stopwatch.stop();
-      final success = response['success'] as bool? ?? false;
+      final success = response['success'] as bool? ?? true;
       return StepResult(
         name: name,
         success: success,
