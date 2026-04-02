@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
+import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
 import 'harness_connection.dart';
 import 'harness_log.dart';
@@ -253,6 +254,10 @@ class CentralRole {
 
   /// Subscribes to characteristic notifications, streaming events to the
   /// coordinator via unsolicited WebSocket events.
+  ///
+  /// Uses the platform interface directly to enable notifications and listen
+  /// to value updates, bypassing the porcelain `observe()` which emits an
+  /// initial sinkValue read that can interfere with the test flow.
   Future<Map<String, dynamic>> _handleSubscribe(
     Map<String, dynamic> params,
   ) async {
@@ -261,21 +266,51 @@ class CentralRole {
     final characteristicUuid =
         _requireParam<String>(params, 'characteristicUuid');
 
+    // Look up the characteristic object to get the normalized UUID
+    // (CoreBluetooth returns uppercase UUIDs).
     final characteristic = await _findCharacteristic(
       peripheralId,
       serviceUuid,
       characteristicUuid,
     );
 
+    final peripheral = _findPeripheral(peripheralId);
+
     final key = '$peripheralId:$serviceUuid:$characteristicUuid';
 
     // Cancel existing subscription if any.
     await _notificationSubscriptions[key]?.cancel();
 
-    final subscription = characteristic.observe().listen((value) {
-      // Skip empty values — the PlatformStreamController emits an initial
-      // sinkValue (a read of the current characteristic) which is typically
-      // empty. Only forward real notification payloads.
+    // Enable notifications via the platform directly.
+    final platform = api.ButanePlatformInterface.instance;
+    // Use the characteristic's actual UUID (uppercase from CoreBluetooth)
+    // to match the format used in characteristicValueStream events.
+    final normalizedCharUuid = characteristic.uuid.toString();
+    final normalizedServiceUuid =
+        characteristic.service?.uuid.toString() ?? serviceUuid;
+    final session = api.PeripheralSession(
+      peripheralIdentifier: peripheralId,
+      clientIdentifier: peripheral.manager.clientIdentifier,
+    );
+
+    await platform.observeCharacteristic(
+      observe: true,
+      session: session,
+      serviceUuid: normalizedServiceUuid,
+      characteristicUuid: normalizedCharUuid,
+    );
+
+    // Listen to the raw value stream from the platform, using the
+    // normalized (uppercase) characteristic UUID to match events
+    // from CoreBluetooth.
+    final subscription = platform
+        .characteristicValueStream(
+          session: session,
+          serviceUuid: normalizedServiceUuid,
+          characteristicUuid: normalizedCharUuid,
+        )
+        .listen((value) {
+      // Skip empty values (e.g. from a read that returned no data).
       if (value.isEmpty) return;
 
       final encoded = base64Encode(value);
