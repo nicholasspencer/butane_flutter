@@ -418,12 +418,15 @@ class ScenarioRunner {
     return results;
   }
 
-  /// Polls check_state until BLE reports poweredOn, or throws after ~15s.
+  /// Polls check_state until BLE reports poweredOn, or throws after ~60s.
+  ///
+  /// After a clean build, macOS may take 1-2 minutes to deliver
+  /// the Bluetooth authorization callback to the app.
   Future<Map<String, dynamic>> _waitForPoweredOn(
     HarnessClient client,
     String label,
   ) async {
-    const maxAttempts = 60;
+    const maxAttempts = 120;
     for (var i = 0; i < maxAttempts; i++) {
       final resp = await client.sendCommand('check_state');
       final state = resp['data']?['state'] as String?;
@@ -439,7 +442,10 @@ class ScenarioRunner {
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
     throw TimeoutException(
-      '$label BLE did not reach poweredOn within ${maxAttempts ~/ 2}s',
+      '$label BLE did not reach poweredOn within ${maxAttempts ~/ 2}s. '
+      'If this is the first run after a clean build, macOS may need to '
+      're-authorize Bluetooth access. Check System Settings > Privacy & '
+      'Security > Bluetooth.',
     );
   }
 
