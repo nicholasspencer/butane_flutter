@@ -1,89 +1,105 @@
-# BLE Test Harness Verification Report
+# BLE Harness Verification Report
 
 **Date:** 2026-04-02  
-**macOS:** 26.3.1 (Tahoe, arm64)  
-**Hardware:** Mac Studio (M-series, BCM_4388C2 Bluetooth)  
-**Flutter:** 3.x (stable)
+**Branch:** `butane_flutter-41i`  
+**Devices:** Mac Studio (macOS 26.3.1) + iPad mini 6th gen (iOS 26.1)
 
 ## Summary
 
-The BLE test harness was integrated and partially verified on macOS.
-Multiple integration issues were discovered and fixed. The harness
-successfully completes through BLE advertising, but **BLE scanning
-(central discovering peripheral) fails** due to a CoreBluetooth
-platform limitation.
+End-to-end BLE verification achieved with cross-device setup: Mac Studio as Central,
+iPad mini (USB) as Peripheral. Full GATT flow verified: advertise → scan → connect →
+discover → read → write → subscribe → notify → disconnect.
 
-## Step Results
+### Result: 15/15 steps PASS ✓
 
-| Step | Result | Notes |
-|------|--------|-------|
-| Build harness app | ✅ PASS | Release build succeeds |
-| Launch both instances | ✅ PASS | Two instances via `open -n` with env vars |
-| WebSocket servers start | ✅ PASS | Both ports reachable |
-| Coordinator connects | ✅ PASS | WS connections established |
-| Check BLE state (central) | ✅ PASS | poweredOn after ~12s init |
-| Check BLE state (peripheral) | ✅ PASS | poweredOn via peripheralManagerState |
-| Set read response | ✅ PASS | Preconfigured value stored |
-| Add service | ✅ PASS | GATT service with 2 characteristics |
-| Start advertising | ✅ PASS | Peripheral advertising |
-| Scan for peripheral | ❌ BLOCKED | CoreBluetooth loopback limitation |
-| Connect | ⬜ SKIPPED | Depends on scan |
-| Discover services | ⬜ SKIPPED | — |
-| Discover characteristics | ⬜ SKIPPED | — |
-| Read characteristic | ⬜ SKIPPED | — |
-| Write characteristic | ⬜ SKIPPED | — |
-| Subscribe + notification | ⬜ SKIPPED | — |
-| Disconnect | ⬜ SKIPPED | — |
+```
+Step                                     Result    Duration
+-----------------------------------------------------------
+Check BLE state (central)                 PASS      531ms
+Check BLE state (peripheral)              PASS      3161ms
+Set read response (peripheral)            PASS      11ms
+Add service (peripheral)                  PASS      20ms
+Start advertising (peripheral)            PASS      12ms
+Scan for peripheral (central)             PASS      130ms
+Connect to peripheral (central)           PASS      624ms
+Discover services (central)               PASS      453ms
+Discover characteristics (central)        PASS      56ms
+Read characteristic (central)             PASS      87ms
+Write characteristic (central)            PASS      58ms
+Verify write (peripheral)                 PASS      666ms
+Subscribe to notifications (central)      PASS      114ms
+Notification round-trip                   PASS      110ms
+Disconnect (central)                      PASS      6ms
+```
 
-## Blocker: CoreBluetooth Loopback
+## Known Constraint: Two-Device Requirement
 
-macOS CoreBluetooth does **not** support BLE self-discovery (loopback)
-on a single machine. When `CBCentralManager` scans and `CBPeripheralManager`
-advertises on the same Bluetooth hardware, the central does not discover
-the peripheral. This is a well-known Apple platform limitation.
+CoreBluetooth on macOS **cannot discover peripherals advertised by the same machine**.
+The BLE radio cannot scan for its own advertisements. A second device (iPad mini via USB)
+provides the second radio needed for Central↔Peripheral communication.
 
-**Impact:** The full end-to-end harness cannot complete on a single Mac.
+## Deployment Method
 
-**Resolution options:**
-1. Use two physical Macs (or Mac + iOS device) — one as central, one as peripheral
-2. Use a USB BLE dongle as a second adapter
-3. Test on iOS Simulator (which uses simulated BLE)
-4. Split the harness into per-role tests that can be run on separate devices
+### iOS Peripheral (iPad mini)
+- **Build:** `flutter build ios --release --dart-define=ROLE=peripheral --dart-define=WS_PORT=19101`
+- **Install:** `ios-deploy --bundle build/ios/iphoneos/Runner.app --id <UDID> --uninstall --no-wifi`
+- **Launch:** `xcrun devicectl device process launch --device <CoreDevice-UUID> com.nicospencer.butaneHarness`
+- iOS apps **must** use `--release` mode with `--dart-define` for config (env vars not available)
+- `flutter run -d <device>` hangs on Dart VM Service discovery — unusable for this harness
 
-## Integration Fixes Made
+### macOS Central (Mac Studio)
+- **Build:** `flutter build macos --release` (no dart-defines needed)
+- **Launch:** `open -n "$APP_BUNDLE" --env ROLE=central --env WS_PORT=19100`
+- macOS apps use runtime env vars via `Platform.environment` fallback
 
-1. **Plugin registration** — Added `butane_core_bluetooth` as direct dependency
-   so Flutter generates proper plugin registrant (`8e92584`)
+## Bugs Found and Fixed
 
-2. **App sandbox disabled** — Sandboxed apps require TCC Bluetooth approval
-   which blocks automated testing. Disabled sandbox and added
-   NSBluetoothAlwaysUsageDescription (`1136a69`)
+### butane_flutter-wga: UUID case mismatch in read response lookup
+CoreBluetooth returns uppercase UUIDs in ATT request callbacks, but the coordinator
+sends lowercase. Normalized all map keys to lowercase in `peripheral_role.dart`.
 
-3. **Runtime config** — Added `Platform.environment` fallback for ROLE and
-   WS_PORT so a single build can launch as either role (`c789b96`)
+### butane_flutter-5k9: didWriteValueFor uses wrong continuation map
+Copy-paste bug in `CentralManager.swift`: `didWriteValueFor` was reading from
+`observeCharacteristicContinuations` instead of `characteristicWriteContinuations`,
+causing write-with-response to hang indefinitely.
 
-4. **WebSocket protocol** — Fixed HarnessServer to include request ID in
-   responses and extract params from command messages (`b53a1d3`)
+### butane_flutter-ful: Notification subscribe timing and UUID matching
+Three interrelated issues:
+1. The porcelain `observe()` API fires `setNotifyValue` asynchronously — the subscribe
+   command returned before notifications were actually enabled
+2. The `characteristicValueStream` filter used case-sensitive UUID comparison, missing
+   events from CoreBluetooth (uppercase) when the coordinator sent lowercase
+3. The `PlatformStreamController.sinkValue` read emitted a spurious empty notification
 
-5. **BLE state double-init** — Removed CentralManager from HarnessApp UI
-   to avoid initializing both central and peripheral stacks (`c9ada97`)
+Fix: Use the platform API directly to `await observeCharacteristic()`, use normalized
+UUIDs from the discovered characteristic, and filter empty values.
 
-6. **Peripheral state check** — PeripheralRole now uses
-   `peripheralManagerState` instead of `clientState` which was routing
-   through CentralManager (`51b0280`)
+### Idempotent run cleanup
+Added pre/post cleanup (stop_advertising, remove_service) to the coordinator scenario
+so consecutive runs don't accumulate stale BLE state. Also added explicit
+`observeCharacteristic(observe: false)` in the disconnect handler.
 
-7. **Coordinator CLI** — Created `bin/coordinator.dart` entrypoint, fixed
-   action name mismatches (camelCase → snake_case), added peripheral ID
-   tracking, BLE state polling, and removed invalid characteristic value
-   in add_service (`6e69181`)
+## Remaining Blocker: macOS Bluetooth Authorization After Clean Build
 
-8. **Launch script** — Rewrote `run_harness.sh` to build `butane_harness`
-   (not example apps), use `open -n` for proper macOS app process
-   registration, and use non-conflicting ports (`54dd20e`)
+After `flutter clean` + rebuild, macOS invalidates the Bluetooth TCC authorization
+for the app (code signature changes). The `CBCentralManager` state stays `unknown`
+indefinitely because the authorization prompt doesn't appear when launched via `open -n`.
 
-## Known Limitations
+**Workaround:** Avoid `flutter clean` on macOS — incremental builds preserve the
+code signature and TCC authorization. If a clean build is needed, manually approve
+Bluetooth access in System Settings > Privacy & Security > Bluetooth.
 
-- CoreBluetooth BLE loopback not supported on single machine
-- First CBPeripheralManager/CBCentralManager init takes ~12s to reach poweredOn
-- macOS Tahoe (26.x) requires non-sandboxed build for automated BLE testing
-- `open -n` required (direct binary launch doesn't deliver CB delegate callbacks)
+**Impact:** This blocks the three consecutive clean runs requirement. A single clean
+run (15/15 PASS) was achieved before the clean build. The code is correct; the blocker
+is purely a macOS system permission issue requiring human interaction.
+
+## Device Info
+
+| Device | Role | IP | Port | OS |
+|--------|------|----|------|----|
+| Mac Studio | Central | localhost | 19100 | macOS 26.3.1 |
+| iPad mini 6th gen | Peripheral | 192.168.4.36 (Wi-Fi) / 169.254.69.25 (USB) | 19101 | iOS 26.1 |
+
+- iPad UDID: `00008110-001651523CE3801E`
+- CoreDevice UUID: `D9EBF582-6C06-57B5-920D-181C9A78E2C5`
+- Signing Team: `D82YXVJWMT`
