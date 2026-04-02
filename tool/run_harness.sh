@@ -13,7 +13,8 @@ set -euo pipefail
 #   HOST              — Coordinator host address (default: localhost)
 #   TIMEOUT           — Command timeout in seconds (default: 30)
 #   SKIP_BUILD        — Set to 1 to skip the build step
-#   IOS_DEVICE        — iOS device ID for peripheral role (enables cross-device mode)
+#   IOS_DEVICE        — iOS device UDID for peripheral role (enables cross-device mode)
+#   IOS_DEVICE_UUID   — CoreDevice UUID for devicectl (auto-detected if not set)
 #   PERIPHERAL_HOST   — IP/hostname of the iOS device for coordinator to reach it
 #                       (required when IOS_DEVICE is set)
 
@@ -26,6 +27,7 @@ HOST="${HOST:-localhost}"
 TIMEOUT="${TIMEOUT:-30}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 IOS_DEVICE="${IOS_DEVICE:-}"
+IOS_DEVICE_UUID="${IOS_DEVICE_UUID:-}"
 PERIPHERAL_HOST="${PERIPHERAL_HOST:-}"
 
 # If IOS_DEVICE is set, we're in cross-device mode.
@@ -39,11 +41,23 @@ if [[ -n "$IOS_DEVICE" ]]; then
   fi
 fi
 
+# Auto-detect CoreDevice UUID if not provided.
+if [[ "$CROSS_DEVICE" == "1" && -z "$IOS_DEVICE_UUID" ]]; then
+  IOS_DEVICE_UUID=$(xcrun devicectl list devices 2>/dev/null | grep -i "iPad\|iPhone" | grep "connected" | awk '{print $NF}' | head -1 || true)
+  if [[ -z "$IOS_DEVICE_UUID" ]]; then
+    # Try to find from the devices list by matching device name/state
+    IOS_DEVICE_UUID=$(xcrun devicectl list devices 2>/dev/null | awk '/connected/{for(i=1;i<=NF;i++) if($i ~ /^[A-F0-9-]{36}$/) print $i}' | head -1 || true)
+  fi
+  if [[ -z "$IOS_DEVICE_UUID" ]]; then
+    echo "WARNING: Could not auto-detect CoreDevice UUID for devicectl."
+    echo "  Set IOS_DEVICE_UUID environment variable manually."
+  fi
+fi
+
 cleanup() {
   echo ""
   echo "Cleaning up..."
   killall butane_harness 2>/dev/null || true
-  # Uninstall from iOS device is not automatic — app stays installed.
   sleep 1
   echo "Done."
 }
@@ -74,6 +88,7 @@ echo ""
 if [[ "$CROSS_DEVICE" == "1" ]]; then
   echo "Mode:            Cross-device (macOS central + iOS peripheral)"
   echo "iOS device:      $IOS_DEVICE"
+  echo "CoreDevice UUID: ${IOS_DEVICE_UUID:-<not detected>}"
   echo "Peripheral host: $PERIPHERAL_HOST"
 else
   echo "Mode:            macOS-only (both roles on this machine)"
@@ -94,16 +109,27 @@ echo ""
 if [[ "$SKIP_BUILD" != "1" ]]; then
   cd "$PROJECT_DIR/packages/butane_harness"
 
-  # Always build macOS for the central role.
+  # Always build macOS for the central role (no dart-defines — uses runtime env vars).
   echo "Building harness app (macOS release)..."
   flutter build macos --release 2>&1
   echo "  macOS build complete."
   echo ""
 
   if [[ "$CROSS_DEVICE" == "1" ]]; then
-    echo "Building harness app (iOS debug) for device $IOS_DEVICE..."
-    flutter build ios --debug 2>&1
+    # iOS build with dart-defines baked in (iOS can't use runtime env vars via open).
+    echo "Building harness app (iOS release) for device $IOS_DEVICE..."
+    flutter build ios --release \
+      --dart-define=ROLE=peripheral \
+      --dart-define=WS_PORT="$PERIPHERAL_PORT" \
+      2>&1
     echo "  iOS build complete."
+    echo ""
+
+    # Install via ios-deploy (preserves the dart-defines from the build).
+    echo "Installing iOS app via ios-deploy..."
+    ios-deploy --bundle build/ios/iphoneos/Runner.app \
+      --id "$IOS_DEVICE" --uninstall --no-wifi 2>&1 | tail -3
+    echo "  iOS install complete."
     echo ""
   fi
 fi
@@ -127,25 +153,28 @@ echo "Launching harness instances..."
 
 if [[ "$CROSS_DEVICE" == "1" ]]; then
   # Cross-device: peripheral on iOS, central on macOS.
-  echo "  Installing and launching peripheral on iOS device..."
-  cd "$PROJECT_DIR/packages/butane_harness"
-  flutter run -d "$IOS_DEVICE" \
-    --dart-define=ROLE=peripheral \
-    --dart-define=WS_PORT="$PERIPHERAL_PORT" \
-    --no-hot-reload \
-    --debug &
-  IOS_PID=$!
-  echo "  Peripheral launching on iOS (pid $IOS_PID)"
+
+  if [[ -n "$IOS_DEVICE_UUID" ]]; then
+    echo "  Launching peripheral on iOS device via devicectl..."
+    xcrun devicectl device process launch \
+      --device "$IOS_DEVICE_UUID" \
+      --terminate-existing \
+      com.nicospencer.butaneHarness 2>&1
+  else
+    echo "  WARNING: No CoreDevice UUID. Attempting manual launch..."
+    echo "  Please tap the butane_harness app icon on the iPad."
+  fi
+  echo "  Peripheral launching on iOS"
 
   # Launch central on macOS.
-  open -n -a "$APP_BUNDLE" --env ROLE=central --env WS_PORT="$CENTRAL_PORT"
+  open -n "$APP_BUNDLE" --env ROLE=central --env WS_PORT="$CENTRAL_PORT"
   echo "  Central harness launched (macOS)"
 else
   # macOS-only: both roles on this machine.
-  open -n -a "$APP_BUNDLE" --env ROLE=peripheral --env WS_PORT="$PERIPHERAL_PORT"
+  open -n "$APP_BUNDLE" --env ROLE=peripheral --env WS_PORT="$PERIPHERAL_PORT"
   echo "  Peripheral harness launched"
 
-  open -n -a "$APP_BUNDLE" --env ROLE=central --env WS_PORT="$CENTRAL_PORT"
+  open -n "$APP_BUNDLE" --env ROLE=central --env WS_PORT="$CENTRAL_PORT"
   echo "  Central harness launched"
 fi
 
@@ -167,7 +196,6 @@ echo ""
 
 # --- Determine coordinator args ---
 if [[ "$CROSS_DEVICE" == "1" ]]; then
-  # Coordinator connects to peripheral on the iOS device's IP.
   COORD_PERIPHERAL_HOST="$PERIPHERAL_HOST"
 else
   COORD_PERIPHERAL_HOST="$HOST"
