@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:butane/butane.dart';
 import 'package:flutter/material.dart';
 
 import 'config.dart';
@@ -60,25 +59,16 @@ class _HarnessHome extends StatefulWidget {
 }
 
 class _HarnessHomeState extends State<_HarnessHome> {
-  late final CentralManager _centralManager;
-  PeerManagerState _bleState = PeerManagerState.unknown;
   String _wsStatus = 'Starting...';
   final List<String> _logEntries = [];
   final _scrollController = ScrollController();
 
-  late final StreamSubscription<PeerManagerState> _bleSub;
   late final StreamSubscription<String> _wsStatusSub;
   late final StreamSubscription<String> _logSub;
 
   @override
   void initState() {
     super.initState();
-    _centralManager = CentralManager();
-
-    _bleSub = _centralManager.stateStream.listen((state) {
-      setState(() => _bleState = state);
-      widget.log.add('BLE: ${state.name}');
-    });
 
     _wsStatusSub = widget.server.statusStream.listen((status) {
       setState(() => _wsStatus = status);
@@ -114,10 +104,8 @@ class _HarnessHomeState extends State<_HarnessHome> {
 
   @override
   void dispose() {
-    _bleSub.cancel();
     _wsStatusSub.cancel();
     _logSub.cancel();
-    _centralManager.dispose();
     widget.server.stop();
     widget.onDispose?.call();
     _scrollController.dispose();
@@ -131,21 +119,6 @@ class _HarnessHomeState extends State<_HarnessHome> {
         title: Text(
           '${widget.config.role.displayName} · :${widget.config.wsPort}',
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Center(
-              child: Text(
-                'BLE: ${_bleState.name}',
-                style: TextStyle(
-                  color: _bleState == PeerManagerState.poweredOn
-                      ? Colors.greenAccent
-                      : Colors.orangeAccent,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -156,9 +129,7 @@ class _HarnessHomeState extends State<_HarnessHome> {
             child: Row(
               children: [
                 Icon(
-                  widget.server.isConnected
-                      ? Icons.link
-                      : Icons.link_off,
+                  widget.server.isConnected ? Icons.link : Icons.link_off,
                   size: 16,
                   color: widget.server.isConnected
                       ? Colors.greenAccent
