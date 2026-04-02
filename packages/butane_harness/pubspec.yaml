@@ -1,0 +1,23 @@
+name: butane_harness
+description: "BLE harness app for testing butane central/peripheral roles."
+publish_to: 'none'
+version: 1.0.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  butane:
+    path: ../butane
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
