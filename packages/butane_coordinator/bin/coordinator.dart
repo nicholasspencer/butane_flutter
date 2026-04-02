@@ -29,6 +29,11 @@ Future<void> main(List<String> arguments) async {
       defaultsTo: '15',
       help: 'Command timeout in seconds',
     )
+    ..addOption(
+      'runs',
+      defaultsTo: '1',
+      help: 'Number of consecutive BLE flow runs',
+    )
     ..addFlag(
       'help',
       abbr: 'h',
@@ -49,6 +54,7 @@ Future<void> main(List<String> arguments) async {
   final centralPort = int.parse(results.option('central-port')!);
   final peripheralPort = int.parse(results.option('peripheral-port')!);
   final timeout = Duration(seconds: int.parse(results.option('timeout')!));
+  final runs = int.parse(results.option('runs')!);
 
   print('=== Butane BLE Coordinator ===');
   print('');
@@ -111,39 +117,64 @@ Future<void> main(List<String> arguments) async {
       peripheral: peripheral,
     );
 
-    print('Running full BLE flow...');
-    print('');
+    var allRunsPassed = true;
 
-    final results = await runner.runFullBleFlow();
-
-    // Print results table.
-    print('Step                                     Result    Duration');
-    print('-----------------------------------------------------------');
-
-    var allPassed = true;
-    for (final result in results) {
-      final status = result.success ? 'PASS' : 'FAIL';
-      final ms = '${result.duration.inMilliseconds}ms';
-      final name = result.name.padRight(40);
-      print('$name  $status      $ms');
-      if (!result.success && result.error != null) {
-        print('  Error: ${result.error}');
+    for (var run = 1; run <= runs; run++) {
+      if (runs > 1) {
+        print('=== Run $run/$runs ===');
+        print('');
       }
-      if (!result.success) allPassed = false;
+
+      print('Running full BLE flow...');
+      print('');
+
+      final results = await runner.runFullBleFlow();
+
+      // Print results table.
+      print('Step                                     Result    Duration');
+      print('-----------------------------------------------------------');
+
+      var allPassed = true;
+      for (final result in results) {
+        final status = result.success ? 'PASS' : 'FAIL';
+        final ms = '${result.duration.inMilliseconds}ms';
+        final name = result.name.padRight(40);
+        print('$name  $status      $ms');
+        if (!result.success && result.error != null) {
+          print('  Error: ${result.error}');
+        }
+        if (!result.success) allPassed = false;
+      }
+
+      print('');
+      final passed = results.where((r) => r.success).length;
+      final total = results.length;
+      print('Results: $passed/$total passed');
+
+      if (allPassed) {
+        print('');
+        print('RUN $run PASSED ✓');
+      } else {
+        print('');
+        print('RUN $run FAILED ✗');
+        allRunsPassed = false;
+        break; // Stop on first failure.
+      }
+
+      if (run < runs) {
+        print('');
+        print('Waiting 2s before next run...');
+        await Future<void>.delayed(const Duration(seconds: 2));
+        print('');
+      }
     }
 
     print('');
-    final passed = results.where((r) => r.success).length;
-    final total = results.length;
-    print('Results: $passed/$total passed');
-
-    if (allPassed) {
-      print('');
-      print('ALL STEPS PASSED ✓');
+    if (allRunsPassed) {
+      print('ALL $runs RUNS PASSED ✓');
       exit(0);
     } else {
-      print('');
-      print('SOME STEPS FAILED ✗');
+      print('FAILED — not all runs passed ✗');
       exit(1);
     }
   } catch (e) {
