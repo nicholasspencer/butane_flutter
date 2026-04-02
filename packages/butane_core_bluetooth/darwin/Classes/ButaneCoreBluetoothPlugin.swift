@@ -16,6 +16,8 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   
   var centralManagers: [String?: CentralManager] = [:]
   
+  var peripheralManagers: [String?: PeripheralManager] = [:]
+  
   public static func register(with registrar: FlutterPluginRegistrar) {
     let flutterApi = ButaneFlutterApi(binaryMessenger: registrar.messenger)
     let instance = ButaneCoreBluetoothPlugin(flutterApi: flutterApi)
@@ -26,7 +28,7 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     self.flutterApi = flutterApi
   }
   
-  func centralManager(_ session: Session?) -> CentralManager {
+  func centralManager(_ session: ClientSession?) -> CentralManager {
     if let manager = centralManagers[session?.clientIdentifier] {
       return manager
     }
@@ -43,15 +45,32 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     return manager
   }
   
+  func peripheralManager(_ session: PeripheralManagerSession?) -> PeripheralManager {
+    if let manager = peripheralManagers[session?.clientIdentifier] {
+      return manager
+    }
+    
+    let manager = PeripheralManager(
+      identifier: session?.clientIdentifier,
+      restorationIdentifier: session?.restorationIdentifier,
+      flutterApi: flutterApi,
+      queue: nil
+    )
+    
+    peripheralManagers[session?.clientIdentifier] = manager
+    
+    return manager
+  }
+  
   // MARK: Flutter API
   
-  func state(session: Session?, completion: @escaping (Result<ClientState, Error>) -> Void) {
+  func state(session: ClientSession?, completion: @escaping (Result<ClientState, Error>) -> Void) {
     let central = centralManager(session)
     
     completion(.success(central.state))
   }
   
-  func scan(session: Session?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+  func scan(session: ClientSession?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     let central = centralManager(session)
     
     central.scan(forServices: forServices)
@@ -59,7 +78,7 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     completion(.success)
   }
   
-  func cancelScan(session: Session?, completion: @escaping (Result<Void, Error>) -> Void) {
+  func cancelScan(session: ClientSession?, completion: @escaping (Result<Void, Error>) -> Void) {
     let central = centralManager(session)
       
     central.cancelScan()
@@ -67,7 +86,7 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     completion(.success)
   }
   
-  func peripherals(session: Session?, peripheralIdentifiers: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void) {
+  func peripherals(session: ClientSession?, peripheralIdentifiers: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void) {
     let central = centralManager(session)
     
     let peripherals = central.peripherals(peripheralIdentifiers: peripheralIdentifiers)
@@ -75,7 +94,7 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     completion(.success(peripherals))
   }
   
-  func connectedPeripherals(session: Session?, serviceUuids: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void) {
+  func connectedPeripherals(session: ClientSession?, serviceUuids: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void) {
     let central = centralManager(session)
     
     let peripherals = central.connectedPeripherals(serviceUuids: serviceUuids)
@@ -152,6 +171,73 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {}
+  
+  // MARK: Peripheral Manager API
+  
+  func peripheralManagerState(session: PeripheralManagerSession, completion: @escaping (Result<ClientState, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    completion(.success(pm.state))
+  }
+  
+  func startAdvertising(session: PeripheralManagerSession, localName: String?, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    pm.startAdvertising(localName: localName, serviceUuids: serviceUuids)
+    completion(.success)
+  }
+  
+  func stopAdvertising(session: PeripheralManagerSession, completion: @escaping (Result<Void, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    pm.stopAdvertising()
+    completion(.success)
+  }
+  
+  func addService(session: PeripheralManagerSession, service: MutableService, completion: @escaping (Result<Void, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    Task {
+      do {
+        try await pm.addService(service: service)
+        completion(.success)
+      } catch {
+        completion(.failure(error))
+      }
+    }
+  }
+  
+  func removeService(session: PeripheralManagerSession, serviceUuid: String, completion: @escaping (Result<Void, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    do {
+      try pm.removeService(serviceUuid: serviceUuid)
+      completion(.success)
+    } catch {
+      completion(.failure(error))
+    }
+  }
+  
+  func removeAllServices(session: PeripheralManagerSession, completion: @escaping (Result<Void, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    pm.removeAllServices()
+    completion(.success)
+  }
+  
+  func respondToRequest(session: PeripheralManagerSession, requestId: Int64, result: AttResult, value: FlutterStandardTypedData?, completion: @escaping (Result<Void, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    do {
+      try pm.respondToRequest(requestId: requestId, result: result, value: value)
+      completion(.success)
+    } catch {
+      completion(.failure(error))
+    }
+  }
+  
+  func updateValue(session: PeripheralManagerSession, serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Bool, Error>) -> Void) {
+    let pm = peripheralManager(session)
+    do {
+      let result = try pm.updateValue(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, value: value)
+      completion(.success(result))
+    } catch {
+      completion(.failure(error))
+    }
+  }
   
   // MARK: Async wrappers
   
@@ -253,8 +339,8 @@ extension [Int64] {
 }
 
 extension PeripheralSession {
-  var session: Session {
-    Session(
+  var session: ClientSession {
+    ClientSession(
       peripheralIdentifier: peripheralIdentifier,
       clientIdentifier: clientIdentifier,
       adapterIdentifier: adapterIdentifier,

@@ -257,7 +257,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   
   // MARK: Central Delegate
   
-  func onNativeResult(_: Result<Void, FlutterError>) {}
+  func onNativeResult(_: Result<Void, PigeonError>) {}
   
   public func centralManagerDidUpdateState(_ central: CBCentralManager) {
     flutterApi.onClientState(
