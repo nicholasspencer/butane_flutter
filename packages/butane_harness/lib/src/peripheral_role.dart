@@ -5,8 +5,8 @@ import 'dart:typed_data';
 import 'package:butane/butane.dart';
 import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
+import 'harness_connection.dart';
 import 'harness_log.dart';
-import 'harness_server.dart';
 
 /// Implements the BLE Peripheral role for the harness app.
 ///
@@ -15,7 +15,7 @@ import 'harness_server.dart';
 /// and update characteristic values.
 class PeripheralRole {
   PeripheralRole({
-    required HarnessServer server,
+    required HarnessConnection server,
     required HarnessLog log,
   })  : _server = server,
         _log = log {
@@ -24,7 +24,7 @@ class PeripheralRole {
     _setupRequestHandlers();
   }
 
-  final HarnessServer _server;
+  final HarnessConnection _server;
   final HarnessLog _log;
   late final PeripheralManager _manager;
 

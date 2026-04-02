@@ -4,8 +4,8 @@ import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
 
+import 'harness_connection.dart';
 import 'harness_log.dart';
-import 'harness_server.dart';
 
 /// Implements the BLE Central role for the harness app.
 ///
@@ -14,7 +14,7 @@ import 'harness_server.dart';
 /// to notifications, and disconnect from peripherals.
 class CentralRole {
   CentralRole({
-    required HarnessServer server,
+    required HarnessConnection server,
     required HarnessLog log,
   })  : _server = server,
         _log = log {
@@ -22,7 +22,7 @@ class CentralRole {
     server.onCommand(_handleCommand);
   }
 
-  final HarnessServer _server;
+  final HarnessConnection _server;
   final HarnessLog _log;
   late final CentralManager _manager;
 

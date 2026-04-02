@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-class HarnessServer {
+import 'harness_connection.dart';
+
+class HarnessServer implements HarnessConnection {
   HarnessServer({required this.port});
 
   final int port;
@@ -13,11 +15,15 @@ class HarnessServer {
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
   final _statusController = StreamController<String>.broadcast();
 
+  @override
   Stream<Map<String, dynamic>> get commands => _commandController.stream;
+  @override
   Stream<String> get statusStream => _statusController.stream;
 
+  @override
   bool get isConnected => _client != null;
 
+  @override
   Future<void> start() async {
     _httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
     _statusController.add('Listening on 0.0.0.0:$port');
@@ -64,10 +70,7 @@ class HarnessServer {
     );
   }
 
-  /// Registers a command handler that receives commands and returns results.
-  ///
-  /// When a command arrives, [handler] is called with a map containing
-  /// the `action` and all params. The returned map is sent back as a result.
+  @override
   void onCommand(
     Future<Map<String, dynamic>> Function(Map<String, dynamic>) handler,
   ) {
@@ -76,13 +79,14 @@ class HarnessServer {
 
   Future<Map<String, dynamic>> Function(Map<String, dynamic>)? _commandHandler;
 
+  @override
   void send(Map<String, dynamic> message) {
     if (_client != null) {
       _client!.add(jsonEncode(message));
     }
   }
 
-  /// Sends an unsolicited event to the connected coordinator.
+  @override
   void sendEvent({
     required String event,
     required Map<String, dynamic> data,
@@ -121,6 +125,7 @@ class HarnessServer {
     }
   }
 
+  @override
   Future<void> stop() async {
     await _client?.close();
     await _httpServer?.close();
