@@ -72,6 +72,25 @@ class ScenarioRunner {
       return results;
     }
 
+    // 2b. Clean up any stale state from previous runs.
+    try {
+      await peripheral.sendCommand(
+        'stop_advertising',
+        timeout: const Duration(seconds: 5),
+      );
+    } catch (_) {
+      // Ignore — may not be advertising.
+    }
+    try {
+      await peripheral.sendCommand(
+        'remove_service',
+        params: {'uuid': TestUuids.service},
+        timeout: const Duration(seconds: 5),
+      );
+    } catch (_) {
+      // Ignore — service may not exist.
+    }
+
     // 3. Set read response on peripheral (so central can read a known value).
     results.add(
       await _runStep(
@@ -379,6 +398,22 @@ class ScenarioRunner {
         ),
       ),
     );
+
+    // 15. Post-run cleanup: stop advertising and remove service so
+    //     subsequent runs start fresh.
+    try {
+      await peripheral.sendCommand(
+        'stop_advertising',
+        timeout: const Duration(seconds: 5),
+      );
+    } catch (_) {}
+    try {
+      await peripheral.sendCommand(
+        'remove_service',
+        params: {'uuid': TestUuids.service},
+        timeout: const Duration(seconds: 5),
+      );
+    } catch (_) {}
 
     return results;
   }
