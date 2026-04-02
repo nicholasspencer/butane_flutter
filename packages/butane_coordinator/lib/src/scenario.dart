@@ -42,13 +42,13 @@ class ScenarioRunner {
     results.add(await _runStep(
       'Check BLE state (central)',
       () => central.sendCommand('getState'),
-    ));
+    ),);
 
     // 2. Check BLE state (peripheral)
     results.add(await _runStep(
       'Check BLE state (peripheral)',
       () => peripheral.sendCommand('getState'),
-    ));
+    ),);
 
     // 3. Add service (peripheral)
     results.add(await _runStep(
@@ -65,44 +65,44 @@ class ScenarioRunner {
             'properties': ['notify'],
           },
         ],
-      }),
-    ));
+      },),
+    ),);
 
     // 4. Start advertising (peripheral)
     results.add(await _runStep(
       'Start advertising (peripheral)',
       () => peripheral.sendCommand('startAdvertising', params: {
         'serviceUuids': [TestUuids.service],
-      }),
-    ));
+      },),
+    ),);
 
     // 5. Scan (central)
     results.add(await _runStep(
       'Scan for peripheral (central)',
       () => central.sendCommand('scan', params: {
         'serviceUuids': [TestUuids.service],
-      }),
-    ));
+      },),
+    ),);
 
     // 6. Connect (central)
     results.add(await _runStep(
       'Connect to peripheral (central)',
       () => central.sendCommand('connect'),
-    ));
+    ),);
 
     // 7. Discover services (central)
     results.add(await _runStep(
       'Discover services (central)',
       () => central.sendCommand('discoverServices'),
-    ));
+    ),);
 
     // 8. Discover characteristics (central)
     results.add(await _runStep(
       'Discover characteristics (central)',
       () => central.sendCommand('discoverCharacteristics', params: {
         'serviceUuid': TestUuids.service,
-      }),
-    ));
+      },),
+    ),);
 
     // 9. Read characteristic (central)
     results.add(await _runStep(
@@ -110,8 +110,8 @@ class ScenarioRunner {
       () => central.sendCommand('readCharacteristic', params: {
         'serviceUuid': TestUuids.service,
         'characteristicUuid': TestUuids.characteristic,
-      }),
-    ));
+      },),
+    ),);
 
     // 10. Write characteristic (central)
     results.add(await _runStep(
@@ -120,8 +120,8 @@ class ScenarioRunner {
         'serviceUuid': TestUuids.service,
         'characteristicUuid': TestUuids.characteristic,
         'value': 'SEVMTE8=', // base64 "HELLO"
-      }),
-    ));
+      },),
+    ),);
 
     // 11. Subscribe to notifications (central)
     results.add(await _runStep(
@@ -129,8 +129,8 @@ class ScenarioRunner {
       () => central.sendCommand('subscribe', params: {
         'serviceUuid': TestUuids.service,
         'characteristicUuid': TestUuids.notifyCharacteristic,
-      }),
-    ));
+      },),
+    ),);
 
     // 12. Trigger notification (peripheral)
     results.add(await _runStep(
@@ -139,8 +139,8 @@ class ScenarioRunner {
         'serviceUuid': TestUuids.service,
         'characteristicUuid': TestUuids.notifyCharacteristic,
         'value': 'Tk9USUZZPQ==', // base64 "NOTIFIED"
-      }),
-    ));
+      },),
+    ),);
 
     return results;
   }
