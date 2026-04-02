@@ -51,7 +51,7 @@ class PeripheralRole {
     // Normalize to lowercase — CoreBluetooth returns uppercase UUIDs
     // but coordinator sends lowercase.
     final key =
-        '${request.serviceUuid.toLowerCase()}:${request.characteristicUuid.toLowerCase()}';
+        '${request.serviceUuid.toString().toLowerCase()}:${request.characteristicUuid.toString().toLowerCase()}';
     final value = _readResponses[key];
 
     if (value != null) {
@@ -98,7 +98,7 @@ class PeripheralRole {
     for (final request in requests) {
       // Normalize to lowercase — CoreBluetooth returns uppercase UUIDs.
       final key =
-          '${request.serviceUuid.toLowerCase()}:${request.characteristicUuid.toLowerCase()}';
+          '${request.serviceUuid.toString().toLowerCase()}:${request.characteristicUuid.toString().toLowerCase()}';
 
       if (_autoAcceptWrites) {
         if (request.value != null) {
