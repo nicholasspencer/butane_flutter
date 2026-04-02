@@ -45,6 +45,9 @@ class HarnessServer {
           try {
             final message = jsonDecode(data) as Map<String, dynamic>;
             _commandController.add(message);
+            if (_commandHandler != null) {
+              _dispatchCommand(message);
+            }
           } catch (e) {
             _statusController.add('Invalid JSON: $e');
           }
@@ -61,9 +64,50 @@ class HarnessServer {
     );
   }
 
+  /// Registers a command handler that receives commands and returns results.
+  ///
+  /// When a command arrives, [handler] is called with the command map.
+  /// The returned map is sent back as a result message.
+  /// If [handler] throws, an error result is sent instead.
+  void onCommand(
+    Future<Map<String, dynamic>> Function(Map<String, dynamic>) handler,
+  ) {
+    _commandHandler = handler;
+  }
+
+  Future<Map<String, dynamic>> Function(Map<String, dynamic>)? _commandHandler;
+
   void send(Map<String, dynamic> message) {
     if (_client != null) {
       _client!.add(jsonEncode(message));
+    }
+  }
+
+  /// Sends an unsolicited event to the connected coordinator.
+  void sendEvent({
+    required String event,
+    required Map<String, dynamic> data,
+  }) {
+    send({'type': 'event', 'event': event, ...data});
+  }
+
+  Future<void> _dispatchCommand(Map<String, dynamic> command) async {
+    final action = command['action'] as String?;
+    try {
+      final result = await _commandHandler!(command);
+      send({
+        'type': 'result',
+        'action': action,
+        'success': true,
+        'data': result,
+      });
+    } catch (e) {
+      send({
+        'type': 'result',
+        'action': action,
+        'success': false,
+        'error': e.toString(),
+      });
     }
   }
 

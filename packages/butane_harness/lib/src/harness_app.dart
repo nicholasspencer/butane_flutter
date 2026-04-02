@@ -4,6 +4,7 @@ import 'package:butane/butane.dart';
 import 'package:flutter/material.dart';
 
 import 'config.dart';
+import 'harness_log.dart';
 import 'harness_server.dart';
 
 class HarnessApp extends StatelessWidget {
@@ -11,10 +12,14 @@ class HarnessApp extends StatelessWidget {
     super.key,
     required this.config,
     required this.server,
+    required this.log,
+    this.onDispose,
   });
 
   final HarnessConfig config;
   final HarnessServer server;
+  final HarnessLog log;
+  final VoidCallback? onDispose;
 
   @override
   Widget build(BuildContext context) {
@@ -27,16 +32,28 @@ class HarnessApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
-      home: _HarnessHome(config: config, server: server),
+      home: _HarnessHome(
+        config: config,
+        server: server,
+        log: log,
+        onDispose: onDispose,
+      ),
     );
   }
 }
 
 class _HarnessHome extends StatefulWidget {
-  const _HarnessHome({required this.config, required this.server});
+  const _HarnessHome({
+    required this.config,
+    required this.server,
+    required this.log,
+    this.onDispose,
+  });
 
   final HarnessConfig config;
   final HarnessServer server;
+  final HarnessLog log;
+  final VoidCallback? onDispose;
 
   @override
   State<_HarnessHome> createState() => _HarnessHomeState();
@@ -46,12 +63,12 @@ class _HarnessHomeState extends State<_HarnessHome> {
   late final CentralManager _centralManager;
   PeerManagerState _bleState = PeerManagerState.unknown;
   String _wsStatus = 'Starting...';
-  final List<String> _log = [];
+  final List<String> _logEntries = [];
   final _scrollController = ScrollController();
 
   late final StreamSubscription<PeerManagerState> _bleSub;
   late final StreamSubscription<String> _wsStatusSub;
-  late final StreamSubscription<Map<String, dynamic>> _commandSub;
+  late final StreamSubscription<String> _logSub;
 
   @override
   void initState() {
@@ -60,22 +77,26 @@ class _HarnessHomeState extends State<_HarnessHome> {
 
     _bleSub = _centralManager.stateStream.listen((state) {
       setState(() => _bleState = state);
-      _addLog('BLE: ${state.name}');
+      widget.log.add('BLE: ${state.name}');
     });
 
     _wsStatusSub = widget.server.statusStream.listen((status) {
       setState(() => _wsStatus = status);
-      _addLog('WS: $status');
+      widget.log.add('WS: $status');
     });
 
-    _commandSub = widget.server.commands.listen((cmd) {
-      _addLog('CMD: $cmd');
-      // Echo back a result
-      widget.server.send({
-        'type': 'result',
-        'action': cmd['action'],
-        'success': true,
-        'data': {},
+    _logSub = widget.log.entries.listen((entry) {
+      setState(() {
+        _logEntries.add(entry);
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 100),
+            curve: Curves.easeOut,
+          );
+        }
       });
     });
 
@@ -86,35 +107,19 @@ class _HarnessHomeState extends State<_HarnessHome> {
     try {
       await widget.server.start();
     } catch (e) {
-      _addLog('Server start failed: $e');
+      widget.log.add('Server start failed: $e');
       setState(() => _wsStatus = 'Failed: $e');
     }
-  }
-
-  void _addLog(String entry) {
-    setState(() {
-      _log.add(
-        '${DateTime.now().toIso8601String().substring(11, 19)} $entry',
-      );
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 100),
-          curve: Curves.easeOut,
-        );
-      }
-    });
   }
 
   @override
   void dispose() {
     _bleSub.cancel();
     _wsStatusSub.cancel();
-    _commandSub.cancel();
+    _logSub.cancel();
     _centralManager.dispose();
     widget.server.stop();
+    widget.onDispose?.call();
     _scrollController.dispose();
     super.dispose();
   }
@@ -171,10 +176,10 @@ class _HarnessHomeState extends State<_HarnessHome> {
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(8),
-              itemCount: _log.length,
+              itemCount: _logEntries.length,
               itemBuilder: (context, index) {
                 return Text(
-                  _log[index],
+                  _logEntries[index],
                   style: const TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
