@@ -19,9 +19,14 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   var peripheralManagers: [String?: PeripheralManager] = [:]
   
   public static func register(with registrar: FlutterPluginRegistrar) {
-    let flutterApi = ButaneFlutterApi(binaryMessenger: registrar.messenger)
+    #if os(iOS)
+    let messenger = registrar.messenger()
+    #elseif os(macOS)
+    let messenger = registrar.messenger
+    #endif
+    let flutterApi = ButaneFlutterApi(binaryMessenger: messenger)
     let instance = ButaneCoreBluetoothPlugin(flutterApi: flutterApi)
-    ButaneHostApiSetup.setUp(binaryMessenger: registrar.messenger, api: instance)
+    ButaneHostApiSetup.setUp(binaryMessenger: messenger, api: instance)
   }
   
   init(flutterApi: ButaneFlutterApi) {

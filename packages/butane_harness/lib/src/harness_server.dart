@@ -19,8 +19,8 @@ class HarnessServer {
   bool get isConnected => _client != null;
 
   Future<void> start() async {
-    _httpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
-    _statusController.add('Listening on localhost:$port');
+    _httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    _statusController.add('Listening on 0.0.0.0:$port');
 
     _httpServer!.transform(WebSocketTransformer()).listen(
       _handleConnection,

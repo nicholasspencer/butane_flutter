@@ -18,7 +18,11 @@ Future<void> main(List<String> arguments) async {
     ..addOption(
       'host',
       defaultsTo: 'localhost',
-      help: 'Host address',
+      help: 'Host address for central harness (and peripheral if --peripheral-host is not set)',
+    )
+    ..addOption(
+      'peripheral-host',
+      help: 'Host address for peripheral harness (defaults to --host)',
     )
     ..addOption(
       'timeout',
@@ -41,6 +45,7 @@ Future<void> main(List<String> arguments) async {
   }
 
   final host = results.option('host')!;
+  final peripheralHost = results.option('peripheral-host') ?? host;
   final centralPort = int.parse(results.option('central-port')!);
   final peripheralPort = int.parse(results.option('peripheral-port')!);
   final timeout = Duration(seconds: int.parse(results.option('timeout')!));
@@ -48,7 +53,7 @@ Future<void> main(List<String> arguments) async {
   print('=== Butane BLE Coordinator ===');
   print('');
   print('Central:    ws://$host:$centralPort');
-  print('Peripheral: ws://$host:$peripheralPort');
+  print('Peripheral: ws://$peripheralHost:$peripheralPort');
   print('Timeout:    ${timeout.inSeconds}s');
   print('');
 
@@ -61,7 +66,7 @@ Future<void> main(List<String> arguments) async {
   );
   final peripheral = HarnessClient(
     role: 'peripheral',
-    host: host,
+    host: peripheralHost,
     port: peripheralPort,
     defaultTimeout: timeout,
   );
