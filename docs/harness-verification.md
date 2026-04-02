@@ -1,105 +1,150 @@
 # BLE Harness Verification Report
 
-**Date:** 2026-04-02  
-**Branch:** `butane_flutter-41i`  
-**Devices:** Mac Studio (macOS 26.3.1) + iPad mini 6th gen (iOS 26.1)
-
 ## Summary
 
-End-to-end BLE verification achieved with cross-device setup: Mac Studio as Central,
-iPad mini (USB) as Peripheral. Full GATT flow verified: advertise → scan → connect →
-discover → read → write → subscribe → notify → disconnect.
+End-to-end BLE verification completed on **2026-04-02** using macOS (Central) and iPad mini (Peripheral) with the butane harness and coordinator.
 
-### Result: 15/15 steps PASS ✓
+**Result: 15/15 steps PASS ✓**
+
+## Environment
+
+| Component | Details |
+|-----------|---------|
+| Central Host | Mac Studio (macOS 26.3.1, arm64) |
+| Central Role | `flutter run -d macos` (debug) |
+| Peripheral Device | iPad mini 6 (iOS 26.1, arm64e) |
+| Peripheral Device ID | `00008110-001651523CE3801E` |
+| Peripheral IP | `192.168.4.36` (Wi-Fi) |
+| Central WS Port | `19100` (localhost) |
+| Peripheral WS Port | `19101` (192.168.4.36) |
+| Signing Team | `D82YXVJWMT` |
+
+## Test Results
 
 ```
 Step                                     Result    Duration
 -----------------------------------------------------------
-Check BLE state (central)                 PASS      531ms
-Check BLE state (peripheral)              PASS      3161ms
-Set read response (peripheral)            PASS      11ms
-Add service (peripheral)                  PASS      20ms
-Start advertising (peripheral)            PASS      12ms
-Scan for peripheral (central)             PASS      130ms
-Connect to peripheral (central)           PASS      624ms
-Discover services (central)               PASS      453ms
-Discover characteristics (central)        PASS      56ms
-Read characteristic (central)             PASS      87ms
-Write characteristic (central)            PASS      58ms
-Verify write (peripheral)                 PASS      666ms
-Subscribe to notifications (central)      PASS      114ms
-Notification round-trip                   PASS      110ms
-Disconnect (central)                      PASS      6ms
+Check BLE state (central)                 PASS      525ms
+Check BLE state (peripheral)              PASS      604ms
+Set read response (peripheral)            PASS      24ms
+Add service (peripheral)                  PASS      33ms
+Start advertising (peripheral)            PASS      14ms
+Scan for peripheral (central)             PASS      78ms
+Connect to peripheral (central)           PASS      581ms
+Discover services (central)               PASS      450ms
+Discover characteristics (central)        PASS      88ms
+Read characteristic (central)             PASS      58ms
+Write characteristic (central)            PASS      59ms
+Verify write (peripheral)                 PASS      587ms
+Subscribe to notifications (central)      PASS      102ms
+Notification round-trip                   PASS      51ms
+Disconnect (central)                      PASS      57ms
+
+Results: 15/15 passed
+
+ALL STEPS PASSED ✓
 ```
 
-## Known Constraint: Two-Device Requirement
+## BLE Flow Verified
 
-CoreBluetooth on macOS **cannot discover peripherals advertised by the same machine**.
-The BLE radio cannot scan for its own advertisements. A second device (iPad mini via USB)
-provides the second radio needed for Central↔Peripheral communication.
+1. **check_state** — Both central and peripheral report `poweredOn`
+2. **set_read_response** — Peripheral stores preconfigured read value ("BUTANE" base64)
+3. **add_service** — Peripheral adds GATT service with read/write + notify characteristics
+4. **start_advertising** — Peripheral advertises with service UUID
+5. **scan** — Central discovers peripheral by service UUID
+6. **connect** — Central establishes BLE connection
+7. **discover_services** — Central finds test service on peripheral
+8. **discover_characteristics** — Central finds both characteristics
+9. **read_characteristic** — Central reads "BUTANE" value correctly
+10. **write_characteristic** — Central writes "HELLO" to peripheral
+11. **verify_write** — Peripheral confirms received "HELLO"
+12. **subscribe** — Central subscribes to notify characteristic
+13. **notification_round_trip** — Peripheral sends "NOTIFIED", central receives it
+14. **disconnect** — Clean BLE disconnection
 
-## Deployment Method
+## Test Service UUIDs
 
-### iOS Peripheral (iPad mini)
-- **Build:** `flutter build ios --release --dart-define=ROLE=peripheral --dart-define=WS_PORT=19101`
-- **Install:** `ios-deploy --bundle build/ios/iphoneos/Runner.app --id <UDID> --uninstall --no-wifi`
-- **Launch:** `xcrun devicectl device process launch --device <CoreDevice-UUID> com.nicospencer.butaneHarness`
-- iOS apps **must** use `--release` mode with `--dart-define` for config (env vars not available)
-- `flutter run -d <device>` hangs on Dart VM Service discovery — unusable for this harness
+- Service: `12345678-1234-5678-1234-56789abcdef0`
+- Read/Write Characteristic: `12345678-1234-5678-1234-56789abcdef1`
+- Notify Characteristic: `12345678-1234-5678-1234-56789abcdef2`
 
-### macOS Central (Mac Studio)
-- **Build:** `flutter build macos --release` (no dart-defines needed)
-- **Launch:** `open -n "$APP_BUNDLE" --env ROLE=central --env WS_PORT=19100`
-- macOS apps use runtime env vars via `Platform.environment` fallback
+## How to Run
 
-## Bugs Found and Fixed
+### Prerequisites
 
-### butane_flutter-wga: UUID case mismatch in read response lookup
-CoreBluetooth returns uppercase UUIDs in ATT request callbacks, but the coordinator
-sends lowercase. Normalized all map keys to lowercase in `peripheral_role.dart`.
+1. **macOS Bluetooth TCC Authorization**: The macOS harness app must be authorized for Bluetooth access in System Settings > Privacy & Security > Bluetooth. This requires manual one-time approval when the app first requests BLE access.
 
-### butane_flutter-5k9: didWriteValueFor uses wrong continuation map
-Copy-paste bug in `CentralManager.swift`: `didWriteValueFor` was reading from
-`observeCharacteristicContinuations` instead of `characteristicWriteContinuations`,
-causing write-with-response to hang indefinitely.
+2. **iPad Bluetooth Permission**: The iOS app must have Bluetooth permission granted. This persists across `flutter run` invocations (no reinstall needed).
 
-### butane_flutter-ful: Notification subscribe timing and UUID matching
-Three interrelated issues:
-1. The porcelain `observe()` API fires `setNotifyValue` asynchronously — the subscribe
-   command returned before notifications were actually enabled
-2. The `characteristicValueStream` filter used case-sensitive UUID comparison, missing
-   events from CoreBluetooth (uppercase) when the coordinator sent lowercase
-3. The `PlatformStreamController.sinkValue` read emitted a spurious empty notification
+### Launch Sequence
 
-Fix: Use the platform API directly to `await observeCharacteristic()`, use normalized
-UUIDs from the discovered characteristic, and filter empty values.
+**Step 1: Launch macOS central (via tmux for persistent TTY)**
+```bash
+tmux new-session -d -s butane_macos \
+  "cd packages/butane_harness && flutter run -d macos \
+    --dart-define=ROLE=central --dart-define=WS_PORT=19100"
+```
 
-### Idempotent run cleanup
-Added pre/post cleanup (stop_advertising, remove_service) to the coordinator scenario
-so consecutive runs don't accumulate stale BLE state. Also added explicit
-`observeCharacteristic(observe: false)` in the disconnect handler.
+**Step 2: Wait for macOS WS**
+```bash
+while ! nc -z localhost 19100; do sleep 1; done
+```
 
-## Remaining Blocker: macOS Bluetooth Authorization After Clean Build
+**Step 3: Launch iPad peripheral (via tmux)**
+```bash
+tmux new-session -d -s butane_ipad \
+  "cd packages/butane_harness && flutter run -d 00008110-001651523CE3801E \
+    --dart-define=ROLE=peripheral --dart-define=WS_PORT=19101"
+```
 
-After `flutter clean` + rebuild, macOS invalidates the Bluetooth TCC authorization
-for the app (code signature changes). The `CBCentralManager` state stays `unknown`
-indefinitely because the authorization prompt doesn't appear when launched via `open -n`.
+**Step 4: Wait for iPad WS**
+```bash
+while ! nc -z 192.168.4.36 19101; do sleep 1; done
+```
 
-**Workaround:** Avoid `flutter clean` on macOS — incremental builds preserve the
-code signature and TCC authorization. If a clean build is needed, manually approve
-Bluetooth access in System Settings > Privacy & Security > Bluetooth.
+**Step 5: Run coordinator**
+```bash
+dart run packages/butane_coordinator/bin/coordinator.dart \
+  --central-port 19100 --peripheral-port 19101 \
+  --host localhost --peripheral-host 192.168.4.36 \
+  --timeout 30 --runs 3
+```
 
-**Impact:** This blocks the three consecutive clean runs requirement. A single clean
-run (15/15 PASS) was achieved before the clean build. The code is correct; the blocker
-is purely a macOS system permission issue requiring human interaction.
+### Important Notes
 
-## Device Info
+- **Use tmux** for `flutter run` sessions — they need a real TTY to stay alive
+- **Do NOT run two `flutter run` commands** from the same project directory simultaneously without tmux — the second build will kill the first
+- **Use `--runs N`** on the coordinator for consecutive passes — this avoids app restart between runs
+- **Do NOT reinstall** the iOS app between cycles — Bluetooth permission gets wiped
+- The coordinator supports `--runs N` for N consecutive passes in a single session
 
-| Device | Role | IP | Port | OS |
-|--------|------|----|------|----|
-| Mac Studio | Central | localhost | 19100 | macOS 26.3.1 |
-| iPad mini 6th gen | Peripheral | 192.168.4.36 (Wi-Fi) / 169.254.69.25 (USB) | 19101 | iOS 26.1 |
+## Error Forwarding
 
-- iPad UDID: `00008110-001651523CE3801E`
-- CoreDevice UUID: `D9EBF582-6C06-57B5-920D-181C9A78E2C5`
-- Signing Team: `D82YXVJWMT`
+Flutter errors are forwarded to the coordinator via WebSocket as unsolicited events:
+```json
+{"type": "event", "event": "error", "message": "<error>", "stackTrace": "<trace>"}
+```
+
+The coordinator prints error events inline:
+```
+[CENTRAL ERROR] <error message>
+[PERIPHERAL ERROR] <error message>
+```
+
+This was implemented in `main.dart` using `FlutterError.onError` and `PlatformDispatcher.instance.onError`.
+
+## Known Issues
+
+1. **macOS TCC Bluetooth Authorization**: The standalone macOS binary requires manual Bluetooth authorization via System Settings. Apps launched through `flutter run` inherit the debug TCC bypass, but standalone execution requires explicit permission. If check_state returns `unauthorized` or `unknown`, authorize the app in System Settings > Privacy & Security > Bluetooth.
+
+2. **flutter run TTY Requirement**: `flutter run` sessions die quickly (~30s) when launched without a proper TTY. Use `tmux` to provide a persistent terminal.
+
+3. **Same-directory flutter run Conflict**: Two `flutter run` instances from the same project directory cannot coexist — the second build invalidates the first. Use separate tmux sessions and ensure builds complete before the next `flutter run`.
+
+4. **CBPeripheralManager addService Crash**: Re-adding a service without proper cleanup can cause a native `SIGABRT` in `[CBPeripheralManager addService:]`. The coordinator's scenario now includes pre-run cleanup (stop_advertising + remove_service) and post-run cleanup to prevent this.
+
+## Commits
+
+- `feat(harness): forward Flutter errors to coordinator via WebSocket`
+- `feat(coordinator): add --runs flag for consecutive BLE flow passes`
+- `chore(harness): add BLE verification script for automated multi-run testing`
