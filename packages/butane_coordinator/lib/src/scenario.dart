@@ -313,6 +313,10 @@ class ScenarioRunner {
     );
 
     // 13. Trigger notification (peripheral) and verify central receives it.
+    //
+    // Allow BLE subscription to stabilize before triggering notification.
+    await Future<void>.delayed(const Duration(seconds: 1));
+
     results.add(
       await _runStep(
         'Notification round-trip',
@@ -330,7 +334,7 @@ class ScenarioRunner {
               );
 
           // Trigger notification from peripheral.
-          await peripheral.sendCommand(
+          final updateResp = await peripheral.sendCommand(
             'update_value',
             params: {
               'serviceUuid': TestUuids.service,
@@ -338,6 +342,17 @@ class ScenarioRunner {
               'value': TestUuids.notifyValue,
             },
           );
+
+          // Verify the peripheral acknowledged the update.
+          final updateData =
+              updateResp['data'] as Map<String, dynamic>? ?? {};
+          final sent = updateData['sent'] as bool? ?? false;
+          if (!sent) {
+            throw StateError(
+              'Peripheral updateValue returned sent=false — '
+              'no subscribers or transmit queue full',
+            );
+          }
 
           final event = await notificationFuture;
           final value = event['value'] as String?;

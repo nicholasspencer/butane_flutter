@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
-import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
 import 'harness_connection.dart';
 import 'harness_log.dart';
@@ -266,51 +265,23 @@ class CentralRole {
     final characteristicUuid =
         _requireParam<String>(params, 'characteristicUuid');
 
-    // Look up the characteristic object to get the normalized UUID
-    // (CoreBluetooth returns uppercase UUIDs).
     final characteristic = await _findCharacteristic(
       peripheralId,
       serviceUuid,
       characteristicUuid,
     );
 
-    final peripheral = _findPeripheral(peripheralId);
-
     final key = '$peripheralId:$serviceUuid:$characteristicUuid';
 
     // Cancel existing subscription if any.
     await _notificationSubscriptions[key]?.cancel();
 
-    // Enable notifications via the platform directly.
-    final platform = api.ButanePlatformInterface.instance;
-    // Use the characteristic's actual UUID (uppercase from CoreBluetooth)
-    // to match the format used in characteristicValueStream events.
+    // Get the normalized (uppercase) UUID from the discovered characteristic.
     final normalizedCharUuid = characteristic.uuid.toString();
-    final normalizedServiceUuid =
-        characteristic.service?.uuid.toString() ?? serviceUuid;
-    final session = api.PeripheralSession(
-      peripheralIdentifier: peripheralId,
-      clientIdentifier: peripheral.manager.clientIdentifier,
-    );
 
-    await platform.observeCharacteristic(
-      observe: true,
-      session: session,
-      serviceUuid: normalizedServiceUuid,
-      characteristicUuid: normalizedCharUuid,
-    );
-
-    // Listen to the raw value stream from the platform, using the
-    // normalized (uppercase) characteristic UUID to match events
-    // from CoreBluetooth.
-    final subscription = platform
-        .characteristicValueStream(
-          session: session,
-          serviceUuid: normalizedServiceUuid,
-          characteristicUuid: normalizedCharUuid,
-        )
-        .listen((value) {
-      // Skip empty values (e.g. from a read that returned no data).
+    // Enable notifications via observe() — this triggers setNotifyValue.
+    // Skip empty values (initial sinkValue read emits empty data).
+    final subscription = characteristic.observe().listen((value) {
       if (value.isEmpty) return;
 
       final encoded = base64Encode(value);
