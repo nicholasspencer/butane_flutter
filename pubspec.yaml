@@ -15,3 +15,4 @@ workspace:
   - packages/butane/example
   - packages/butane_core_bluetooth/example
   - packages/butane_android/example
+  - packages/butane_coordinator
