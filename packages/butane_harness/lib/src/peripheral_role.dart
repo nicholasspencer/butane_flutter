@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
+import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
 import 'harness_log.dart';
 import 'harness_server.dart';
@@ -172,11 +173,19 @@ class PeripheralRole {
     }
   }
 
-  /// Returns the BLE adapter state.
+  /// Returns the BLE peripheral manager state.
+  ///
+  /// Note: We use peripheralManagerState directly rather than the inherited
+  /// clientState, because clientState creates a CBCentralManager while we
+  /// need the CBPeripheralManager state.
   Future<Map<String, dynamic>> _handleCheckState(
     Map<String, dynamic> params,
   ) async {
-    final state = await _manager.state;
+    final platformState = await api.ButanePlatformInterface.instance
+        .peripheralManagerState(
+      const api.PeripheralManagerSession(),
+    );
+    final state = PeerManagerState.fromApi(platformState);
     _log.add('BLE state: ${state.name}');
     return {'state': state.name};
   }
