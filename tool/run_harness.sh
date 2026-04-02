@@ -1,38 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# run_harness.sh — Build both harness apps, launch them, run coordinator, clean up.
+# run_harness.sh — Build harness app, launch two instances (central + peripheral),
+# run coordinator, clean up.
 #
 # Environment variables:
-#   CENTRAL_PORT      — WebSocket port for central harness (default: 8080)
-#   PERIPHERAL_PORT   — WebSocket port for peripheral harness (default: 8081)
+#   CENTRAL_PORT      — WebSocket port for central harness (default: 9100)
+#   PERIPHERAL_PORT   — WebSocket port for peripheral harness (default: 9101)
 #   HOST              — Host address (default: localhost)
-#   TIMEOUT           — Command timeout in seconds (default: 15)
+#   TIMEOUT           — Command timeout in seconds (default: 30)
+#   SKIP_BUILD        — Set to 1 to skip the build step
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-CENTRAL_PORT="${CENTRAL_PORT:-8080}"
-PERIPHERAL_PORT="${PERIPHERAL_PORT:-8081}"
+CENTRAL_PORT="${CENTRAL_PORT:-19100}"
+PERIPHERAL_PORT="${PERIPHERAL_PORT:-19101}"
 HOST="${HOST:-localhost}"
-TIMEOUT="${TIMEOUT:-15}"
-
-CENTRAL_PID=""
-PERIPHERAL_PID=""
+TIMEOUT="${TIMEOUT:-30}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
 
 cleanup() {
   echo ""
   echo "Cleaning up..."
-  if [[ -n "$CENTRAL_PID" ]]; then
-    kill "$CENTRAL_PID" 2>/dev/null || true
-    wait "$CENTRAL_PID" 2>/dev/null || true
-    echo "  Stopped central harness (PID $CENTRAL_PID)"
-  fi
-  if [[ -n "$PERIPHERAL_PID" ]]; then
-    kill "$PERIPHERAL_PID" 2>/dev/null || true
-    wait "$PERIPHERAL_PID" 2>/dev/null || true
-    echo "  Stopped peripheral harness (PID $PERIPHERAL_PID)"
-  fi
+  killall butane_harness 2>/dev/null || true
+  sleep 1
   echo "Done."
 }
 
@@ -41,7 +33,7 @@ trap cleanup EXIT INT TERM
 wait_for_port() {
   local port="$1"
   local label="$2"
-  local max_attempts=30
+  local max_attempts=60
   local attempt=0
 
   echo "Waiting for $label on port $port..."
@@ -64,69 +56,57 @@ echo "Host:            $HOST"
 echo "Timeout:         ${TIMEOUT}s"
 echo ""
 
-# --- Build ---
-echo "Building harness apps..."
+# --- Resolve dependencies ---
+echo "Resolving dependencies..."
 cd "$PROJECT_DIR"
-
-# Build the central harness (macOS)
-if [[ -d "packages/butane/example" ]]; then
-  echo "  Building central harness..."
-  cd "$PROJECT_DIR/packages/butane/example"
-  flutter build macos 2>/dev/null || echo "  (central build skipped — not yet available)"
-  cd "$PROJECT_DIR"
-fi
-
-# Build the peripheral harness (macOS)
-if [[ -d "packages/butane_core_bluetooth/example" ]]; then
-  echo "  Building peripheral harness..."
-  cd "$PROJECT_DIR/packages/butane_core_bluetooth/example"
-  flutter build macos 2>/dev/null || echo "  (peripheral build skipped — not yet available)"
-  cd "$PROJECT_DIR"
-fi
-
+dart pub get 2>&1
 echo ""
 
+# --- Build ---
+APP_BUNDLE="$PROJECT_DIR/packages/butane_harness/build/macos/Build/Products/Release/butane_harness.app"
+
+if [[ "$SKIP_BUILD" != "1" ]]; then
+  echo "Building harness app (macOS release)..."
+  cd "$PROJECT_DIR/packages/butane_harness"
+  flutter build macos --release 2>&1
+  echo "  Build complete."
+  echo ""
+fi
+
+if [[ ! -d "$APP_BUNDLE" ]]; then
+  echo "ERROR: Could not find built harness app bundle at:"
+  echo "  $APP_BUNDLE"
+  exit 1
+fi
+
+echo "Using app: $APP_BUNDLE"
+echo ""
+
+# --- Kill any existing instances ---
+killall butane_harness 2>/dev/null || true
+sleep 1
+
 # --- Launch ---
+# Use 'open -n' to launch as proper macOS app processes.
+# This is required for CoreBluetooth to receive delegate callbacks
+# and transition past the 'unknown' state.
 echo "Launching harness instances..."
 
-# Launch central harness
-# The harness apps are expected to accept --port and --role arguments.
-# Adjust the path/args once harness beads are implemented.
-CENTRAL_APP="packages/butane/example/build/macos/Build/Products/Release/example.app/Contents/MacOS/example"
-if [[ -x "$PROJECT_DIR/$CENTRAL_APP" ]]; then
-  "$PROJECT_DIR/$CENTRAL_APP" --port "$CENTRAL_PORT" --role central &
-  CENTRAL_PID=$!
-  echo "  Central harness started (PID $CENTRAL_PID)"
-else
-  echo "  WARNING: Central harness binary not found at $CENTRAL_APP"
-  echo "  Attempting to launch via flutter run..."
-  cd "$PROJECT_DIR/packages/butane/example"
-  flutter run -d macos --dart-define=PORT="$CENTRAL_PORT" --dart-define=ROLE=central &
-  CENTRAL_PID=$!
-  cd "$PROJECT_DIR"
-  echo "  Central harness started via flutter run (PID $CENTRAL_PID)"
-fi
+open -n -a "$APP_BUNDLE" --env ROLE=peripheral --env WS_PORT="$PERIPHERAL_PORT"
+echo "  Peripheral harness launched"
 
-PERIPHERAL_APP="packages/butane_core_bluetooth/example/build/macos/Build/Products/Release/example.app/Contents/MacOS/example"
-if [[ -x "$PROJECT_DIR/$PERIPHERAL_APP" ]]; then
-  "$PROJECT_DIR/$PERIPHERAL_APP" --port "$PERIPHERAL_PORT" --role peripheral &
-  PERIPHERAL_PID=$!
-  echo "  Peripheral harness started (PID $PERIPHERAL_PID)"
-else
-  echo "  WARNING: Peripheral harness binary not found at $PERIPHERAL_APP"
-  echo "  Attempting to launch via flutter run..."
-  cd "$PROJECT_DIR/packages/butane_core_bluetooth/example"
-  flutter run -d macos --dart-define=PORT="$PERIPHERAL_PORT" --dart-define=ROLE=peripheral &
-  PERIPHERAL_PID=$!
-  cd "$PROJECT_DIR"
-  echo "  Peripheral harness started via flutter run (PID $PERIPHERAL_PID)"
-fi
+open -n -a "$APP_BUNDLE" --env ROLE=central --env WS_PORT="$CENTRAL_PORT"
+echo "  Central harness launched"
 
 echo ""
 
 # --- Wait for servers ---
-wait_for_port "$CENTRAL_PORT" "central harness"
 wait_for_port "$PERIPHERAL_PORT" "peripheral harness"
+wait_for_port "$CENTRAL_PORT" "central harness"
+
+# Extra settle time for CoreBluetooth to transition to poweredOn.
+echo "Waiting for BLE initialization..."
+sleep 3
 
 echo ""
 
