@@ -130,8 +130,8 @@ class CentralRole {
     final peripheralId = _requireParam<String>(params, 'peripheralId');
     final peripheral = _findPeripheral(peripheralId);
 
-    // Cancel all notification subscriptions for this peripheral.
-    _cancelNotificationsForPeripheral(peripheralId);
+    // Disable BLE notifications before cancelling stream subscriptions.
+    await _disableNotificationsForPeripheral(peripheralId);
 
     _log.add('Disconnecting from $peripheralId...');
 
@@ -403,17 +403,41 @@ class CentralRole {
     }
   }
 
-  /// Cancels all notification subscriptions for a given peripheral.
-  void _cancelNotificationsForPeripheral(String peripheralId) {
+  /// Disables BLE notifications and cancels stream subscriptions for a peripheral.
+  Future<void> _disableNotificationsForPeripheral(String peripheralId) async {
     final keysToRemove = _notificationSubscriptions.keys
         .where((key) => key.startsWith('$peripheralId:'))
         .toList();
+
+    final platform = api.ButanePlatformInterface.instance;
+    final session = api.PeripheralSession(
+      peripheralIdentifier: peripheralId,
+      clientIdentifier: _manager.clientIdentifier,
+    );
+
     for (final key in keysToRemove) {
-      _notificationSubscriptions[key]?.cancel();
+      // Extract serviceUuid and characteristicUuid from the key.
+      final parts = key.split(':');
+      if (parts.length >= 3) {
+        final serviceUuid = parts[1];
+        final characteristicUuid = parts[2];
+        try {
+          await platform.observeCharacteristic(
+            observe: false,
+            session: session,
+            serviceUuid: serviceUuid,
+            characteristicUuid: characteristicUuid,
+          );
+        } catch (_) {
+          // Ignore errors during cleanup — the peripheral may already
+          // be disconnected.
+        }
+      }
+      await _notificationSubscriptions[key]?.cancel();
       _notificationSubscriptions.remove(key);
     }
     if (keysToRemove.isNotEmpty) {
-      _log.add('Cancelled ${keysToRemove.length} notification subscriptions');
+      _log.add('Disabled ${keysToRemove.length} notification subscriptions');
     }
   }
 
