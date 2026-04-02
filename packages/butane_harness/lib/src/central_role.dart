@@ -273,6 +273,11 @@ class CentralRole {
     await _notificationSubscriptions[key]?.cancel();
 
     final subscription = characteristic.observe().listen((value) {
+      // Skip empty values — the PlatformStreamController emits an initial
+      // sinkValue (a read of the current characteristic) which is typically
+      // empty. Only forward real notification payloads.
+      if (value.isEmpty) return;
+
       final encoded = base64Encode(value);
       _log.add('Notification $characteristicUuid: ${value.length} bytes');
       _server.sendEvent(
