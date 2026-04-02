@@ -48,8 +48,10 @@ class PeripheralRole {
 
   /// Handles an incoming read request from a central.
   void _handleReadRequest(AttRequest request) {
+    // Normalize to lowercase — CoreBluetooth returns uppercase UUIDs
+    // but coordinator sends lowercase.
     final key =
-        '${request.serviceUuid}:${request.characteristicUuid}';
+        '${request.serviceUuid.toLowerCase()}:${request.characteristicUuid.toLowerCase()}';
     final value = _readResponses[key];
 
     if (value != null) {
@@ -94,8 +96,9 @@ class PeripheralRole {
   /// Handles incoming write requests from a central.
   void _handleWriteRequests(List<AttRequest> requests) {
     for (final request in requests) {
+      // Normalize to lowercase — CoreBluetooth returns uppercase UUIDs.
       final key =
-          '${request.serviceUuid}:${request.characteristicUuid}';
+          '${request.serviceUuid.toLowerCase()}:${request.characteristicUuid.toLowerCase()}';
 
       if (_autoAcceptWrites) {
         if (request.value != null) {
@@ -332,7 +335,7 @@ class PeripheralRole {
         _requireParam<String>(params, 'characteristicUuid');
     final valueStr = _requireParam<String>(params, 'value');
 
-    final key = '$serviceUuid:$characteristicUuid';
+    final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
     final value = Uint8List.fromList(base64Decode(valueStr));
     _readResponses[key] = value;
 
@@ -361,7 +364,7 @@ class PeripheralRole {
     final characteristicUuid =
         _requireParam<String>(params, 'characteristicUuid');
 
-    final key = '$serviceUuid:$characteristicUuid';
+    final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
     final value = _writtenValues[key];
 
     return {
