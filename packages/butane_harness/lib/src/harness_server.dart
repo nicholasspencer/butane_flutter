@@ -66,9 +66,8 @@ class HarnessServer {
 
   /// Registers a command handler that receives commands and returns results.
   ///
-  /// When a command arrives, [handler] is called with the command map.
-  /// The returned map is sent back as a result message.
-  /// If [handler] throws, an error result is sent instead.
+  /// When a command arrives, [handler] is called with a map containing
+  /// the `action` and all params. The returned map is sent back as a result.
   void onCommand(
     Future<Map<String, dynamic>> Function(Map<String, dynamic>) handler,
   ) {
@@ -91,12 +90,22 @@ class HarnessServer {
     send({'type': 'event', 'event': event, ...data});
   }
 
-  Future<void> _dispatchCommand(Map<String, dynamic> command) async {
-    final action = command['action'] as String?;
+  Future<void> _dispatchCommand(Map<String, dynamic> message) async {
+    final action = message['action'] as String?;
+    final id = message['id'] as String?;
+    final params = message['params'] as Map<String, dynamic>? ?? {};
+
+    // Build a flat command map with action + params for the handler.
+    final command = <String, dynamic>{
+      'action': action,
+      ...params,
+    };
+
     try {
       final result = await _commandHandler!(command);
       send({
         'type': 'result',
+        if (id != null) 'id': id,
         'action': action,
         'success': true,
         'data': result,
@@ -104,6 +113,7 @@ class HarnessServer {
     } catch (e) {
       send({
         'type': 'result',
+        if (id != null) 'id': id,
         'action': action,
         'success': false,
         'error': e.toString(),
