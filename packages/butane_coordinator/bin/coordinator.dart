@@ -81,6 +81,30 @@ Future<void> main(List<String> arguments) async {
     print('  Connected.');
     print('');
 
+    // Listen for error events forwarded from harness apps.
+    central.events.listen((event) {
+      if (event['event'] == 'error') {
+        print('[CENTRAL ERROR] ${event['message']}');
+        final trace = event['stackTrace'] as String?;
+        if (trace != null && trace.isNotEmpty) {
+          // Print first few lines of stack trace.
+          final lines = trace.split('\n').take(5).join('\n');
+          print(lines);
+        }
+      }
+    });
+
+    peripheral.events.listen((event) {
+      if (event['event'] == 'error') {
+        print('[PERIPHERAL ERROR] ${event['message']}');
+        final trace = event['stackTrace'] as String?;
+        if (trace != null && trace.isNotEmpty) {
+          final lines = trace.split('\n').take(5).join('\n');
+          print(lines);
+        }
+      }
+    });
+
     // Run scenario.
     final runner = ScenarioRunner(
       central: central,

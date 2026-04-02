@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'src/central_role.dart';
 import 'src/config.dart';
 import 'src/harness_app.dart';
@@ -21,6 +23,31 @@ void main() async {
   } else {
     connection = HarnessServer(port: config.wsPort);
   }
+
+  // Forward Flutter framework errors to the coordinator via WebSocket.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details); // still log to console
+    connection.sendEvent(
+      event: 'error',
+      data: {
+        'message': details.exceptionAsString(),
+        'stackTrace': details.stack?.toString() ?? '',
+      },
+    );
+  };
+
+  // Forward unhandled async errors (zone / platform errors).
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    debugPrint('Unhandled error: $error\n$stack');
+    connection.sendEvent(
+      event: 'error',
+      data: {
+        'message': error.toString(),
+        'stackTrace': stack.toString(),
+      },
+    );
+    return true; // handled
+  };
 
   CentralRole? centralRole;
   PeripheralRole? peripheralRole;
