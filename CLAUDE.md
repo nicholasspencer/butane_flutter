@@ -40,7 +40,7 @@ After modifying `pigeons/api.dart`, always regenerate.
 App → butane (Porcelain) → butane_platform_interface → Method Channels (Pigeon) → Native (Swift/Kotlin)
 ```
 
-**Dart porcelain layer** (`packages/butane/lib/src/procelain/`): `CentralManager` is the main entry point. It manages scanning, peripheral discovery, and exposes `Peripheral` objects with `Service`/`Characteristic` trees. Uses `PlatformStreamController` for bidirectional stream communication with the platform.
+**Dart porcelain layer** (`packages/butane/lib/src/porcelain/`): `CentralManager` is the main entry point. It manages scanning, peripheral discovery, and exposes `Peripheral` objects with `Service`/`Characteristic` trees. Uses `PlatformStreamController` for bidirectional stream communication with the platform.
 
 **Native layer** (Swift): `ButaneCoreBluetoothPlugin` implements `ButaneHostApi`. `CentralManager` wraps `CBCentralManager`. `PeripheralActor` is a Swift actor managing per-peripheral state with continuations for async callbacks.
 
