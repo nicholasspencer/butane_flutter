@@ -1,4 +1,4 @@
-package com.nicospencer.example
+package com.nicospencer.butaneExample
 
 import io.flutter.embedding.android.FlutterActivity
 
