@@ -681,8 +681,8 @@ git commit -m "feat(core_bluetooth): implement CBPeripheralManager wrapper"
 ### Task 4: Implement PeripheralManager porcelain
 
 **Files:**
-- Modify: `packages/butane/lib/src/procelain/services/peripheral_manager.dart`
-- Modify: `packages/butane/lib/src/procelain/porcelain.dart` (may need new model parts)
+- Modify: `packages/butane/lib/src/porcelain/services/peripheral_manager.dart`
+- Modify: `packages/butane/lib/src/porcelain/porcelain.dart` (may need new model parts)
 
 **Step 1: Fill in PeripheralManager class**
 
