@@ -62,7 +62,11 @@
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Butane Harness uses Bluetooth to test BLE central and peripheral roles.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Butane Harness uses the local network for WebSocket coordinator connections.</string>
+	<string>Butane Harness uses the local network for WebSocket coordinator connections and mDNS service advertisement.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_butane-harness._tcp</string>
+	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

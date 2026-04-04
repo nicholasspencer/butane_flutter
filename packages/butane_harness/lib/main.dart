@@ -9,7 +9,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final config = HarnessConfig.fromEnvironment();
-  final server = HarnessServer(port: config.wsPort);
+  final server = HarnessServer(port: config.wsPort, role: config.role);
   final log = HarnessLog();
 
   CentralRole? centralRole;

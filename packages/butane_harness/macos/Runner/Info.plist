@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Butane Harness uses the local network to advertise and discover harness services via mDNS.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_butane-harness._tcp</string>
+	</array>
 </dict>
 </plist>
