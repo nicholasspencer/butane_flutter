@@ -12,4 +12,5 @@ resolution: workspace
 
 dependencies:
   args: ^2.6.0
+  multicast_dns: ^0.3.2+7
   web_socket_channel: ^3.0.2
