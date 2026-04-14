@@ -145,9 +145,13 @@ base class ButaneBluez extends ButanePlatformInterface {
     late StreamController<ScanResult> controller;
     final subs = <StreamSubscription<Object?>>[];
 
-    void emit(BlueZDevice device) {
-      // Gate on _scanning so cancelScan() halts output even though BlueZ
-      // keeps emitting PropertiesChanged for paired/connected devices.
+    // Live emissions (deviceAdded / PropertiesChanged) are gated on
+    // _scanning so cancelScan() halts output, matching CoreBluetooth's
+    // stopScan semantics. The initial seed is NOT gated — it's the
+    // snapshot of BlueZ's current cache at subscribe time, and racing it
+    // against scan() would randomly drop entries depending on when the
+    // async onListen body runs vs. when scan() flips the flag.
+    void live(BlueZDevice device) {
       if (!_scanning) return;
       if (!controller.isClosed) controller.add(_toScanResult(device));
     }
@@ -155,7 +159,7 @@ base class ButaneBluez extends ButanePlatformInterface {
     void watchDevice(BlueZDevice device) {
       subs.add(
         device.propertiesChangedStream.listen((changed) {
-          if (changed.any(_advertRelevantProps.contains)) emit(device);
+          if (changed.any(_advertRelevantProps.contains)) live(device);
         }),
       );
     }
@@ -170,13 +174,13 @@ base class ButaneBluez extends ButanePlatformInterface {
         // Seed with devices BlueZ already knows about (paired or previously-
         // discovered). Consumers dedupe on `peripheralIdentifier` if needed.
         for (final device in _client.devices) {
-          emit(device);
+          if (!controller.isClosed) controller.add(_toScanResult(device));
           watchDevice(device);
         }
         // New discoveries.
         subs.add(
           _client.deviceAddedStream.listen((device) {
-            emit(device);
+            live(device);
             watchDevice(device);
           }),
         );

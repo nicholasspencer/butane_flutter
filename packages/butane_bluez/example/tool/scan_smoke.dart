@@ -38,8 +38,18 @@ Future<void> main() async {
   await Future<void>.delayed(const Duration(seconds: 10));
 
   await bluez.cancelScan();
+  final postCancelStart = count;
+  stderr('cancelled — holding stream open 3s to check for leaks...');
+  await Future<void>.delayed(const Duration(seconds: 3));
+  final leaked = count - postCancelStart;
+  stderr(
+    leaked == 0
+        ? 'gate works: 0 events in the 3s after cancelScan'
+        : 'GATE LEAK: $leaked events emitted after cancelScan',
+  );
+
   await sub.cancel();
-  stderr('done — $count events');
+  stderr('done — $count total events');
 }
 
 // Avoid pulling in dart:io just for stderr.writeln.
