@@ -12,6 +12,16 @@ dependencies:
     sdk: flutter
   butane:
     path: ../butane
+  # Direct deps on the platform-implementation plugins so Flutter's Dart
+  # plugin registrant generator sees their dartPluginClass. Going through
+  # butane (which uses default_package) isn't enough — the registrant
+  # walks direct deps only. Originally landed on butane_flutter-41i as
+  # commit 19cb94e but was lost when that branch was never merged and
+  # PR #16 (mDNS) landed from a different base.
+  butane_core_bluetooth:
+    path: ../butane_core_bluetooth
+  butane_platform_interface:
+    path: ../butane_platform_interface
   cupertino_icons: ^1.0.8
   nsd: ^4.1.0
 
