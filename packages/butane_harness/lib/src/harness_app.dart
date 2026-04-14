@@ -1,23 +1,22 @@
 import 'dart:async';
 
-import 'package:butane/butane.dart';
 import 'package:flutter/material.dart';
 
 import 'config.dart';
+import 'harness_connection.dart';
 import 'harness_log.dart';
-import 'harness_server.dart';
 
 class HarnessApp extends StatelessWidget {
   const HarnessApp({
     super.key,
     required this.config,
-    required this.server,
+    required this.connection,
     required this.log,
     this.onDispose,
   });
 
   final HarnessConfig config;
-  final HarnessServer server;
+  final HarnessConnection connection;
   final HarnessLog log;
   final VoidCallback? onDispose;
 
@@ -34,7 +33,7 @@ class HarnessApp extends StatelessWidget {
       ),
       home: _HarnessHome(
         config: config,
-        server: server,
+        connection: connection,
         log: log,
         onDispose: onDispose,
       ),
@@ -45,13 +44,13 @@ class HarnessApp extends StatelessWidget {
 class _HarnessHome extends StatefulWidget {
   const _HarnessHome({
     required this.config,
-    required this.server,
+    required this.connection,
     required this.log,
     this.onDispose,
   });
 
   final HarnessConfig config;
-  final HarnessServer server;
+  final HarnessConnection connection;
   final HarnessLog log;
   final VoidCallback? onDispose;
 
@@ -60,27 +59,18 @@ class _HarnessHome extends StatefulWidget {
 }
 
 class _HarnessHomeState extends State<_HarnessHome> {
-  late final CentralManager _centralManager;
-  PeerManagerState _bleState = PeerManagerState.unknown;
   String _wsStatus = 'Starting...';
   final List<String> _logEntries = [];
   final _scrollController = ScrollController();
 
-  late final StreamSubscription<PeerManagerState> _bleSub;
   late final StreamSubscription<String> _wsStatusSub;
   late final StreamSubscription<String> _logSub;
 
   @override
   void initState() {
     super.initState();
-    _centralManager = CentralManager();
 
-    _bleSub = _centralManager.stateStream.listen((state) {
-      setState(() => _bleState = state);
-      widget.log.add('BLE: ${state.name}');
-    });
-
-    _wsStatusSub = widget.server.statusStream.listen((status) {
+    _wsStatusSub = widget.connection.statusStream.listen((status) {
       setState(() => _wsStatus = status);
       widget.log.add('WS: $status');
     });
@@ -100,25 +90,23 @@ class _HarnessHomeState extends State<_HarnessHome> {
       });
     });
 
-    _startServer();
+    _startConnection();
   }
 
-  Future<void> _startServer() async {
+  Future<void> _startConnection() async {
     try {
-      await widget.server.start();
+      await widget.connection.start();
     } catch (e) {
-      widget.log.add('Server start failed: $e');
+      widget.log.add('Connection start failed: $e');
       setState(() => _wsStatus = 'Failed: $e');
     }
   }
 
   @override
   void dispose() {
-    _bleSub.cancel();
     _wsStatusSub.cancel();
     _logSub.cancel();
-    _centralManager.dispose();
-    widget.server.stop();
+    widget.connection.stop();
     widget.onDispose?.call();
     _scrollController.dispose();
     super.dispose();
@@ -126,26 +114,12 @@ class _HarnessHomeState extends State<_HarnessHome> {
 
   @override
   Widget build(BuildContext context) {
+    final modeLabel = widget.config.useRelay ? 'relay' : ':${widget.config.wsPort}';
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          '${widget.config.role.displayName} · :${widget.config.wsPort}',
+          '${widget.config.role.displayName} · $modeLabel',
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Center(
-              child: Text(
-                'BLE: ${_bleState.name}',
-                style: TextStyle(
-                  color: _bleState == PeerManagerState.poweredOn
-                      ? Colors.greenAccent
-                      : Colors.orangeAccent,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -156,11 +130,9 @@ class _HarnessHomeState extends State<_HarnessHome> {
             child: Row(
               children: [
                 Icon(
-                  widget.server.isConnected
-                      ? Icons.link
-                      : Icons.link_off,
+                  widget.connection.isConnected ? Icons.link : Icons.link_off,
                   size: 16,
-                  color: widget.server.isConnected
+                  color: widget.connection.isConnected
                       ? Colors.greenAccent
                       : Colors.grey,
                 ),

@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
+import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
+import 'harness_connection.dart';
 import 'harness_log.dart';
-import 'harness_server.dart';
 
 /// Implements the BLE Central role for the harness app.
 ///
@@ -14,7 +15,7 @@ import 'harness_server.dart';
 /// to notifications, and disconnect from peripherals.
 class CentralRole {
   CentralRole({
-    required HarnessServer server,
+    required HarnessConnection server,
     required HarnessLog log,
   })  : _server = server,
         _log = log {
@@ -22,7 +23,7 @@ class CentralRole {
     server.onCommand(_handleCommand);
   }
 
-  final HarnessServer _server;
+  final HarnessConnection _server;
   final HarnessLog _log;
   late final CentralManager _manager;
 
@@ -129,8 +130,8 @@ class CentralRole {
     final peripheralId = _requireParam<String>(params, 'peripheralId');
     final peripheral = _findPeripheral(peripheralId);
 
-    // Cancel all notification subscriptions for this peripheral.
-    _cancelNotificationsForPeripheral(peripheralId);
+    // Disable BLE notifications before cancelling stream subscriptions.
+    await _disableNotificationsForPeripheral(peripheralId);
 
     _log.add('Disconnecting from $peripheralId...');
 
@@ -253,6 +254,10 @@ class CentralRole {
 
   /// Subscribes to characteristic notifications, streaming events to the
   /// coordinator via unsolicited WebSocket events.
+  ///
+  /// Uses the platform interface directly to enable notifications and listen
+  /// to value updates, bypassing the porcelain `observe()` which emits an
+  /// initial sinkValue read that can interfere with the test flow.
   Future<Map<String, dynamic>> _handleSubscribe(
     Map<String, dynamic> params,
   ) async {
@@ -272,7 +277,41 @@ class CentralRole {
     // Cancel existing subscription if any.
     await _notificationSubscriptions[key]?.cancel();
 
-    final subscription = characteristic.observe().listen((value) {
+    // Use the normalized (uppercase) UUID from discovered characteristic
+    // to match CoreBluetooth's format in stream events.
+    final normalizedCharUuid = characteristic.uuid.toString();
+    final normalizedServiceUuid =
+        characteristic.service?.uuid.toString() ?? serviceUuid;
+
+    // Build a PeripheralSession matching the one used by the platform.
+    final session = api.PeripheralSession(
+      peripheralIdentifier: peripheralId,
+      clientIdentifier: _manager.clientIdentifier,
+    );
+
+    // Explicitly enable notifications and await completion.
+    // The porcelain observe() does this internally but doesn't
+    // expose the await to the caller.
+    final platform = api.ButanePlatformInterface.instance;
+    await platform.observeCharacteristic(
+      observe: true,
+      session: session,
+      serviceUuid: normalizedServiceUuid,
+      characteristicUuid: normalizedCharUuid,
+    );
+
+    _log.add('Notifications enabled for $normalizedCharUuid');
+
+    // Listen to the raw characteristic value stream from the platform.
+    final subscription = platform
+        .characteristicValueStream(
+          session: session,
+          serviceUuid: normalizedServiceUuid,
+          characteristicUuid: normalizedCharUuid,
+        )
+        .listen((value) {
+      if (value.isEmpty) return;
+
       final encoded = base64Encode(value);
       _log.add('Notification $characteristicUuid: ${value.length} bytes');
       _server.sendEvent(
@@ -364,17 +403,41 @@ class CentralRole {
     }
   }
 
-  /// Cancels all notification subscriptions for a given peripheral.
-  void _cancelNotificationsForPeripheral(String peripheralId) {
+  /// Disables BLE notifications and cancels stream subscriptions for a peripheral.
+  Future<void> _disableNotificationsForPeripheral(String peripheralId) async {
     final keysToRemove = _notificationSubscriptions.keys
         .where((key) => key.startsWith('$peripheralId:'))
         .toList();
+
+    final platform = api.ButanePlatformInterface.instance;
+    final session = api.PeripheralSession(
+      peripheralIdentifier: peripheralId,
+      clientIdentifier: _manager.clientIdentifier,
+    );
+
     for (final key in keysToRemove) {
-      _notificationSubscriptions[key]?.cancel();
+      // Extract serviceUuid and characteristicUuid from the key.
+      final parts = key.split(':');
+      if (parts.length >= 3) {
+        final serviceUuid = parts[1];
+        final characteristicUuid = parts[2];
+        try {
+          await platform.observeCharacteristic(
+            observe: false,
+            session: session,
+            serviceUuid: serviceUuid,
+            characteristicUuid: characteristicUuid,
+          );
+        } catch (_) {
+          // Ignore errors during cleanup — the peripheral may already
+          // be disconnected.
+        }
+      }
+      await _notificationSubscriptions[key]?.cancel();
       _notificationSubscriptions.remove(key);
     }
     if (keysToRemove.isNotEmpty) {
-      _log.add('Cancelled ${keysToRemove.length} notification subscriptions');
+      _log.add('Disabled ${keysToRemove.length} notification subscriptions');
     }
   }
 

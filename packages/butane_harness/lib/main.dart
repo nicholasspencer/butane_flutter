@@ -1,28 +1,71 @@
+import 'dart:ui';
+
 import 'src/central_role.dart';
 import 'src/config.dart';
 import 'src/harness_app.dart';
+import 'src/harness_client_bridge.dart';
+import 'src/harness_connection.dart';
 import 'src/harness_log.dart';
 import 'src/harness_server.dart';
+import 'src/peripheral_role.dart';
 import 'package:flutter/material.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final config = HarnessConfig.fromEnvironment();
-  final server = HarnessServer(port: config.wsPort, role: config.role);
   final log = HarnessLog();
 
+  // Choose server (listens for connections) or client bridge (connects out).
+  final HarnessConnection connection;
+  if (config.useRelay) {
+    connection = HarnessClientBridge(relayUrl: config.relayUrl!);
+  } else {
+    connection = HarnessServer(port: config.wsPort, role: config.role);
+  }
+
+  // Forward Flutter framework errors to the coordinator via WebSocket.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details); // still log to console
+    connection.sendEvent(
+      event: 'error',
+      data: {
+        'message': details.exceptionAsString(),
+        'stackTrace': details.stack?.toString() ?? '',
+      },
+    );
+  };
+
+  // Forward unhandled async errors (zone / platform errors).
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    debugPrint('Unhandled error: $error\n$stack');
+    connection.sendEvent(
+      event: 'error',
+      data: {
+        'message': error.toString(),
+        'stackTrace': stack.toString(),
+      },
+    );
+    return true; // handled
+  };
+
   CentralRole? centralRole;
-  if (config.role == HarnessRole.central) {
-    centralRole = CentralRole(server: server, log: log);
+  PeripheralRole? peripheralRole;
+
+  switch (config.role) {
+    case HarnessRole.central:
+      centralRole = CentralRole(server: connection, log: log);
+    case HarnessRole.peripheral:
+      peripheralRole = PeripheralRole(server: connection, log: log);
   }
 
   runApp(HarnessApp(
     config: config,
-    server: server,
+    connection: connection,
     log: log,
     onDispose: () {
       centralRole?.dispose();
+      peripheralRole?.dispose();
     },
   ));
 }
