@@ -12,7 +12,8 @@ dependencies:
     sdk: flutter
   butane_platform_interface:
     path: ../butane_platform_interface
-  bluez: ^0.1.0
+  bluez: ^0.1.4
+  dbus: ^0.2.5
 
 dev_dependencies:
   flutter_test:
