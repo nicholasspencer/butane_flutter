@@ -12,6 +12,7 @@ workspace:
   - packages/butane_platform_interface
   - packages/butane_core_bluetooth
   - packages/butane_bluez
+  - packages/butane_bluez/example
   - packages/butane_android
   - packages/butane_harness
   - packages/butane/example

@@ -1,0 +1,13 @@
+name: butane_bluez_example
+description: Runtime smoke tests for butane_bluez.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  butane_bluez:
+    path: ../
+  butane_platform_interface:
+    path: ../../butane_platform_interface

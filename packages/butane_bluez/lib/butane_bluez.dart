@@ -113,14 +113,17 @@ base class ButaneBluez extends ButanePlatformInterface {
       throw StateError('No BlueZ adapter available');
     }
 
+    // BlueZ's SetDiscoveryFilter expects a{sv} — each value is a variant.
     final filter = <String, DBusValue>{
       // Match CoreBluetooth semantics: LE only, no Classic BR/EDR.
-      'Transport': const DBusString('le'),
+      'Transport': DBusVariant(const DBusString('le')),
     };
     if (forServices != null && forServices.isNotEmpty) {
-      filter['UUIDs'] = DBusArray(
-        DBusSignature('s'),
-        forServices.map<DBusValue>(DBusString.new).toList(),
+      filter['UUIDs'] = DBusVariant(
+        DBusArray(
+          DBusSignature('s'),
+          forServices.map<DBusValue>(DBusString.new).toList(),
+        ),
       );
     }
 
