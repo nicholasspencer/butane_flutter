@@ -128,15 +128,8 @@ base class ButaneBluez extends ButanePlatformInterface {
     }
 
     await adapter.setDiscoveryFilter(filter);
-    // ignore: avoid_print
-    print(
-      '[bluez] scan: filter set, discovering=${adapter.discovering}, '
-      'adapter=${adapter.address}, powered=${adapter.powered}',
-    );
     if (!adapter.discovering) {
       await adapter.startDiscovery();
-      // ignore: avoid_print
-      print('[bluez] scan: startDiscovery returned');
     }
   }
 
@@ -149,8 +142,6 @@ base class ButaneBluez extends ButanePlatformInterface {
       // Emit a fresh snapshot whenever an advert-relevant property changes.
       subs.add(
         device.propertiesChangedStream.listen((changed) {
-          // ignore: avoid_print
-          print('[bluez] propsChanged ${device.address}: $changed');
           if (changed.any(_advertRelevantProps.contains)) {
             if (!controller.isClosed) controller.add(_toScanResult(device));
           }
@@ -160,15 +151,7 @@ base class ButaneBluez extends ButanePlatformInterface {
 
     controller = StreamController<ScanResult>(
       onListen: () async {
-        // ignore: avoid_print
-        print('[bluez] scanStream.onListen begin');
         await _ensureConnected();
-        // ignore: avoid_print
-        print(
-          '[bluez] scanStream: connected, '
-          'adapter=${_defaultAdapter?.address}, '
-          'cached devices=${_client.devices.length}',
-        );
         if (_defaultAdapter == null) {
           await controller.close();
           return;
@@ -183,14 +166,10 @@ base class ButaneBluez extends ButanePlatformInterface {
         // New discoveries.
         subs.add(
           _client.deviceAddedStream.listen((device) {
-            // ignore: avoid_print
-            print('[bluez] deviceAdded ${device.address} "${device.name}"');
             if (!controller.isClosed) controller.add(_toScanResult(device));
             watchDevice(device);
           }),
         );
-        // ignore: avoid_print
-        print('[bluez] scanStream.onListen subscribed');
         // NOTE: deviceRemovedStream intentionally ignored — BlueZ removes
         // stale devices on its own schedule and the platform interface has
         // no "device disappeared" signal for scans. Subscriptions leak until
