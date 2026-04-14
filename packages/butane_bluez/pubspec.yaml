@@ -2,9 +2,10 @@ name: butane_bluez
 description: Linux implementation of the butane BLE plugin using BlueZ.
 version: 0.0.1
 publish_to: 'none'
+resolution: workspace
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ^3.6.0
 
 dependencies:
   flutter:
