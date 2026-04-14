@@ -23,7 +23,7 @@ Future<void> main() async {
   var count = 0;
   final sub = bluez.scanStream().listen((r) {
     count++;
-    final id = r.peripheral.session.peripheralIdentifier ?? '?';
+    final id = r.peripheral.session.peripheralIdentifier;
     final name = r.peripheral.name ?? r.advertisementData.localName ?? '';
     final rssi = r.peripheral.rssi ?? 0;
     final services = r.advertisementData.serviceUuids ?? const [];
