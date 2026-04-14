@@ -17,14 +17,18 @@ base class ButaneBluez extends ButanePlatformInterface {
 
   final BlueZClient _client;
   BlueZAdapter? _defaultAdapter;
+  Future<void>? _connecting;
   bool _connected = false;
 
-  /// Per-device subscriptions held by an active [scanStream].
-  ///
-  /// Keyed by `BlueZDevice` object identity — every time we see a new device
-  /// via [BlueZClient.deviceAddedStream] (or the initial snapshot) we attach a
-  /// listener to its `propertiesChangedStream` so RSSI / advert-data updates
-  /// re-emit. The map is drained in the controller's `onCancel`.
+  /// True between [scan] and [cancelScan]. Gates [scanStream] emissions so
+  /// they match CoreBluetooth's `stopScan` semantics — after cancel, no more
+  /// ScanResults flow even though BlueZ keeps emitting PropertiesChanged for
+  /// paired/connected devices.
+  bool _scanning = false;
+
+  /// Device properties that warrant re-emitting a [ScanResult] when they
+  /// change. Limited to advert-relevant fields so we don't spam on churn from
+  /// GATT state (e.g. `ServicesResolved`).
   static const _advertRelevantProps = <String>{
     'RSSI',
     'ManufacturerData',
@@ -40,14 +44,16 @@ base class ButaneBluez extends ButanePlatformInterface {
     ButanePlatformInterface.instance = instance;
   }
 
-  Future<void> _ensureConnected() async {
-    if (_connected) return;
-    await _client.connect();
-    _connected = true;
-    final adapters = _client.adapters;
-    if (adapters.isNotEmpty) {
-      _defaultAdapter = adapters.first;
-    }
+  Future<void> _ensureConnected() {
+    if (_connected) return Future.value();
+    return _connecting ??= () async {
+      await _client.connect();
+      _connected = true;
+      final adapters = _client.adapters;
+      if (adapters.isNotEmpty) {
+        _defaultAdapter = adapters.first;
+      }
+    }();
   }
 
   // --- Central: adapter state -----------------------------------------------
@@ -131,6 +137,7 @@ base class ButaneBluez extends ButanePlatformInterface {
     if (!adapter.discovering) {
       await adapter.startDiscovery();
     }
+    _scanning = true;
   }
 
   @override
@@ -138,42 +145,44 @@ base class ButaneBluez extends ButanePlatformInterface {
     late StreamController<ScanResult> controller;
     final subs = <StreamSubscription<Object?>>[];
 
+    void emit(BlueZDevice device) {
+      // Gate on _scanning so cancelScan() halts output even though BlueZ
+      // keeps emitting PropertiesChanged for paired/connected devices.
+      if (!_scanning) return;
+      if (!controller.isClosed) controller.add(_toScanResult(device));
+    }
+
     void watchDevice(BlueZDevice device) {
-      // Emit a fresh snapshot whenever an advert-relevant property changes.
       subs.add(
         device.propertiesChangedStream.listen((changed) {
-          if (changed.any(_advertRelevantProps.contains)) {
-            if (!controller.isClosed) controller.add(_toScanResult(device));
-          }
+          if (changed.any(_advertRelevantProps.contains)) emit(device);
         }),
       );
     }
 
-    controller = StreamController<ScanResult>(
+    controller = StreamController<ScanResult>.broadcast(
       onListen: () async {
         await _ensureConnected();
         if (_defaultAdapter == null) {
           await controller.close();
           return;
         }
-        // Seed with devices BlueZ already knows about (e.g. paired or
-        // previously-discovered). The app is expected to dedupe on
-        // `peripheralIdentifier` if it doesn't want them.
+        // Seed with devices BlueZ already knows about (paired or previously-
+        // discovered). Consumers dedupe on `peripheralIdentifier` if needed.
         for (final device in _client.devices) {
-          controller.add(_toScanResult(device));
+          emit(device);
           watchDevice(device);
         }
         // New discoveries.
         subs.add(
           _client.deviceAddedStream.listen((device) {
-            if (!controller.isClosed) controller.add(_toScanResult(device));
+            emit(device);
             watchDevice(device);
           }),
         );
         // NOTE: deviceRemovedStream intentionally ignored — BlueZ removes
         // stale devices on its own schedule and the platform interface has
-        // no "device disappeared" signal for scans. Subscriptions leak until
-        // scan cancel; acceptable given typical scan durations.
+        // no "device disappeared" signal for scans.
       },
       onCancel: () async {
         for (final s in subs) {
@@ -188,6 +197,7 @@ base class ButaneBluez extends ButanePlatformInterface {
 
   @override
   Future<void> cancelScan({Session? session}) async {
+    _scanning = false;
     final adapter = _defaultAdapter;
     if (adapter != null && adapter.discovering) {
       await adapter.stopDiscovery();
@@ -198,17 +208,22 @@ base class ButaneBluez extends ButanePlatformInterface {
 
   ScanResult _toScanResult(BlueZDevice device) {
     final session = PeripheralSession(peripheralIdentifier: device.address);
+    // BlueZ vs CoreBluetooth naming mapping:
+    //   device.alias  — user-editable friendly name → CBPeripheral.name
+    //   device.name   — raw advertised local name   → CBAdvertisementDataLocalNameKey
+    // BlueZ defaults alias to name when the user hasn't renamed the device,
+    // so the two are usually equal anyway.
     return ScanResult(
       peripheral: Peripheral(
         session: session,
         state: device.connected
             ? ConnectionState.connected
             : ConnectionState.disconnected,
-        name: device.name.isNotEmpty ? device.name : null,
+        name: device.alias.isNotEmpty ? device.alias : null,
         rssi: device.rssi,
       ),
       advertisementData: AdvertisementData(
-        localName: device.alias.isNotEmpty ? device.alias : null,
+        localName: device.name.isNotEmpty ? device.name : null,
         manufacturerData: _flattenManufacturerData(device.manufacturerData),
         serviceUuids: device.uuids.map((u) => u.id).toList(),
         serviceData: _mapServiceData(device.serviceData),
