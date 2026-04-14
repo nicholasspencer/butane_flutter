@@ -28,6 +28,8 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Butane Harness uses Bluetooth to test BLE central and peripheral roles.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Butane Harness uses the local network to advertise and discover harness services via mDNS.</string>
 	<key>NSBonjourServices</key>
