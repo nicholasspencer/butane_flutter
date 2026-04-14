@@ -590,7 +590,7 @@ actor PeripheralActor: Equatable {
   }
   
   func didWriteValueFor(characteristic: CBCharacteristic, error: Error?) {
-    guard let continuations = observeCharacteristicContinuations[characteristic] else {
+    guard let continuations = characteristicWriteContinuations[characteristic] else {
       return
     }
     
@@ -602,7 +602,7 @@ actor PeripheralActor: Equatable {
       }
     }
     
-    observeCharacteristicContinuations[characteristic]?.removeAll()
+    characteristicWriteContinuations[characteristic]?.removeAll()
   }
   
   func didUpdateNotificationStateFor(characteristic: CBCharacteristic, error: Error?) {

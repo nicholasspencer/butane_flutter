@@ -1,3 +1,5 @@
+import 'dart:io';
+
 enum HarnessRole {
   central,
   peripheral;
@@ -22,27 +24,64 @@ enum HarnessRole {
 }
 
 class HarnessConfig {
-  const HarnessConfig({required this.role, required this.wsPort});
+  const HarnessConfig({
+    required this.role,
+    required this.wsPort,
+    this.relayUrl,
+  });
 
+  /// Creates config from compile-time dart-define values.
+  ///
+  /// Launch with:
+  ///   --dart-define=ROLE=central --dart-define=WS_PORT=9100
+  ///
+  /// For relay/bridge mode (iOS peripheral connecting out to Mac relay):
+  ///   --dart-define=ROLE=peripheral --dart-define=WS_PORT=19101
+  ///   --dart-define=WS_RELAY_URL=ws://192.168.4.1:19101/harness
   factory HarnessConfig.fromEnvironment() {
+    // Try compile-time dart-defines first.
     const roleString = String.fromEnvironment('ROLE', defaultValue: '');
-    if (roleString.isEmpty) {
+    const wsPort = int.fromEnvironment('WS_PORT', defaultValue: 0);
+    const relayUrlDefine =
+        String.fromEnvironment('WS_RELAY_URL', defaultValue: '');
+
+    // Fall back to runtime environment variables (for direct binary launch).
+    final effectiveRole =
+        roleString.isNotEmpty ? roleString : Platform.environment['ROLE'] ?? '';
+    final effectivePort = wsPort != 0
+        ? wsPort
+        : int.tryParse(Platform.environment['WS_PORT'] ?? '') ?? 0;
+    final effectiveRelayUrl = relayUrlDefine.isNotEmpty
+        ? relayUrlDefine
+        : Platform.environment['WS_RELAY_URL'];
+
+    if (effectiveRole.isEmpty) {
       throw StateError(
-        'ROLE not set. Launch with --dart-define=ROLE=central or --dart-define=ROLE=peripheral',
+        'ROLE not set. Launch with --dart-define=ROLE=central '
+        'or set ROLE environment variable.',
       );
     }
-    const wsPort = int.fromEnvironment('WS_PORT', defaultValue: 0);
-    if (wsPort == 0) {
+    if (effectivePort == 0 && effectiveRelayUrl == null) {
       throw StateError(
-        'WS_PORT not set. Launch with --dart-define=WS_PORT=<port>',
+        'WS_PORT not set. Launch with --dart-define=WS_PORT=<port> '
+        'or set WS_PORT environment variable.',
       );
     }
     return HarnessConfig(
-      role: HarnessRole.parse(roleString),
-      wsPort: wsPort,
+      role: HarnessRole.parse(effectiveRole),
+      wsPort: effectivePort,
+      relayUrl: effectiveRelayUrl,
     );
   }
 
   final HarnessRole role;
   final int wsPort;
+
+  /// If set, the app connects out to this URL as a WS client instead of
+  /// running its own WS server. Used for iOS where incoming connections
+  /// are blocked by sandboxing.
+  final String? relayUrl;
+
+  /// Whether this instance uses relay/bridge mode.
+  bool get useRelay => relayUrl != null && relayUrl!.isNotEmpty;
 }
