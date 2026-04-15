@@ -5,6 +5,7 @@
 - Remote has a working copy at `~/butane_flutter` tracking a bare repo at `~/butane_flutter.git`.
 - The host in the selector matches the `linux` git remote URL host (deploy checks this).
 - User on the target is in the `bluetooth` group and has verified scanning works. No runtime TCC equivalent on Linux.
+- `avahi-utils` installed on the target (for `avahi-publish-service`, used by the harness to advertise its mDNS service). Ubuntu desktop ships it by default; on a minimal install: `sudo apt install avahi-utils`.
 
 ## Build + launch
 - Push local HEAD to a skill-owned branch:
@@ -26,8 +27,7 @@
 
 ## Known blockers
 The deployment pipeline (probe → preflight → push → build → launch → teardown) works end-to-end.
-The coordinator `--discover` stage currently cannot find a Linux harness because:
-- **butane_flutter-zod**: `nsd` Flutter package has no Linux backend, so `HarnessServer.register()` silently no-ops on Linux.
-- **butane_flutter-8h5.6 / 8h5.7**: BlueZ peripheral role (advertising + GATT services) is not yet implemented, so even if mDNS worked, the peripheral wouldn't respond to the coordinator's BLE flow.
+Linux-as-central burns now reach the BLE flow stage. The remaining blocker is the Linux peripheral role:
+- **butane_flutter-8h5.6 / 8h5.7**: BlueZ peripheral role (advertising + GATT services) is not yet implemented, so a Linux peripheral still can't respond to the coordinator's BLE flow. Linux-as-central is unblocked.
 
-Both are harness-side gaps orthogonal to the burn skill. When either lands, the corresponding burn direction (Linux as central vs. Linux as peripheral) goes green with no burn-skill changes.
+This is a harness-side gap orthogonal to the burn skill. When it lands, the Linux-as-peripheral burn direction goes green with no burn-skill changes.
