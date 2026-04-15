@@ -85,7 +85,28 @@ TEARDOWN_HOSTS=()
 teardown() {
   local h
   for h in "${TEARDOWN_HOSTS[@]:-}"; do
-    ssh -o BatchMode=yes "$h" 'pkill -f butane_harness || true' >/dev/null 2>&1 || true
+    # Kill the harness and any avahi-publish-service children it spawned.
+    # The advertiser subprocess is detached (ProcessStartMode.detachedWithStdio
+    # in mdns_advertiser.dart), so it doesn't die when the harness is SIGTERM'd
+    # — orphaned advertisements would pollute mDNS for future burns and cause
+    # the coordinator to pick up stale endpoints.
+    #
+    # Kill-pattern gotchas:
+    #   * `pkill -f avahi-publish-service` self-matches: the bash -c wrapper
+    #     running this very command has that literal string in its cmdline,
+    #     so pkill kills the ssh session before the true cleanup happens.
+    #     Anchoring with `^avahi-publish-service ` avoids the self-match
+    #     because the wrapper's cmdline starts with `bash`, not with the
+    #     avahi binary.
+    #   * `pkill avahi-publish-service` (no -f) refuses because /proc comm
+    #     is truncated to 15 chars on Linux and pkill rejects longer names
+    #     outright (verified: 'pattern that searches for process name
+    #     longer than 15 characters will result in zero matches').
+    ssh -o BatchMode=yes "$h" '
+      pkill -x butane_harness 2>/dev/null
+      pkill -f "^avahi-publish-service " 2>/dev/null
+      true
+    ' >/dev/null 2>&1 || true
   done
 }
 trap teardown EXIT

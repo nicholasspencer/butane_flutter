@@ -26,6 +26,14 @@ base class ButaneBluez extends ButanePlatformInterface {
   /// paired/connected devices.
   bool _scanning = false;
 
+  /// Service UUID filter set by [scan]. Empty means "match any". BlueZ's
+  /// `SetDiscoveryFilter` with `UUIDs` is unreliable for late-arriving UUID
+  /// data (scan responses, cached devices seeded from `_client.devices` before
+  /// BlueZ has parsed their ads), so we mirror CoreBluetooth's
+  /// `scanForPeripherals(withServices:)` semantics in Dart by filtering every
+  /// emission in [scanStream] against this set.
+  Set<String> _scanUuidFilter = const {};
+
   /// Device properties that warrant re-emitting a [ScanResult] when they
   /// change. Limited to advert-relevant fields so we don't spam on churn from
   /// GATT state (e.g. `ServicesResolved`).
@@ -120,24 +128,40 @@ base class ButaneBluez extends ButanePlatformInterface {
     }
 
     // BlueZ's SetDiscoveryFilter expects a{sv} — each value is a variant.
+    //
+    // We only set `Transport: le` (no `UUIDs`). BlueZ's `UUIDs` filter silently
+    // excludes devices whose service UUIDs haven't yet arrived via scan
+    // response or PropertiesChanged — which is exactly the case for freshly
+    // advertising peripherals, and also for devices already in the BlueZ
+    // cache. Client-side filtering in [scanStream] (via [_scanUuidFilter])
+    // handles this correctly.
     final filter = <String, DBusValue>{
-      // Match CoreBluetooth semantics: LE only, no Classic BR/EDR.
       'Transport': DBusVariant(const DBusString('le')),
     };
-    if (forServices != null && forServices.isNotEmpty) {
-      filter['UUIDs'] = DBusVariant(
-        DBusArray(
-          DBusSignature('s'),
-          forServices.map<DBusValue>(DBusString.new).toList(),
-        ),
-      );
-    }
+
+    _scanUuidFilter = forServices == null
+        ? const {}
+        : {for (final u in forServices) u.toLowerCase()};
 
     await adapter.setDiscoveryFilter(filter);
     if (!adapter.discovering) {
       await adapter.startDiscovery();
     }
     _scanning = true;
+  }
+
+  /// True when [device] should be emitted under the current scan filter.
+  ///
+  /// Mirrors `CBCentralManager.scanForPeripherals(withServices:)`: an empty
+  /// filter matches any device, otherwise the device's advertised UUIDs must
+  /// intersect the requested set. BlueZ reports UUIDs lowercase; we compare
+  /// case-insensitively against the stored filter.
+  bool _matchesScanFilter(BlueZDevice device) {
+    if (_scanUuidFilter.isEmpty) return true;
+    for (final uuid in device.uuids) {
+      if (_scanUuidFilter.contains(uuid.toString().toLowerCase())) return true;
+    }
+    return false;
   }
 
   @override
@@ -153,12 +177,15 @@ base class ButaneBluez extends ButanePlatformInterface {
     // async onListen body runs vs. when scan() flips the flag.
     void live(BlueZDevice device) {
       if (!_scanning) return;
+      if (!_matchesScanFilter(device)) return;
       if (!controller.isClosed) controller.add(_toScanResult(device));
     }
 
     void watchDevice(BlueZDevice device) {
       subs.add(
         device.propertiesChangedStream.listen((changed) {
+          // A late `UUIDs` update may flip a previously-unmatched device into
+          // the filter — live() re-checks, so no extra handling needed here.
           if (changed.any(_advertRelevantProps.contains)) live(device);
         }),
       );
@@ -172,9 +199,14 @@ base class ButaneBluez extends ButanePlatformInterface {
           return;
         }
         // Seed with devices BlueZ already knows about (paired or previously-
-        // discovered). Consumers dedupe on `peripheralIdentifier` if needed.
+        // discovered) *and that match the current filter*. Consumers dedupe on
+        // `peripheralIdentifier` if needed. Non-matching cached devices are
+        // still watched so they can flip into the filter later when a UUIDs
+        // PropertiesChanged arrives.
         for (final device in _client.devices) {
-          if (!controller.isClosed) controller.add(_toScanResult(device));
+          if (_matchesScanFilter(device) && !controller.isClosed) {
+            controller.add(_toScanResult(device));
+          }
           watchDevice(device);
         }
         // New discoveries.
@@ -202,6 +234,7 @@ base class ButaneBluez extends ButanePlatformInterface {
   @override
   Future<void> cancelScan({Session? session}) async {
     _scanning = false;
+    _scanUuidFilter = const {};
     final adapter = _defaultAdapter;
     if (adapter != null && adapter.discovering) {
       await adapter.stopDiscovery();
