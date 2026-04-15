@@ -110,6 +110,36 @@ fi
       com.nicospencer.butaneHarness
   fi
 
+  if [[ "$mode" == "ssh" ]]; then
+    # --- Push HEAD to linux remote and build on target ---
+    echo "Pushing HEAD to linux remote (refs/heads/burn)..."
+    git -C "$repo" push --force linux HEAD:refs/heads/burn
+
+    echo "Building harness on $ssh_host..."
+    ssh -o BatchMode=yes "$ssh_host" '
+      set -e
+      cd ~/butane_flutter
+      git fetch
+      git checkout burn
+      export PATH=$HOME/flutter/bin:$PATH
+      flutter pub get
+      cd packages/butane_harness
+      flutter build linux --release
+    '
+
+    # --- Register teardown BEFORE launch so any later failure still cleans up ---
+    trap "ssh -o BatchMode=yes '$ssh_host' 'pkill -f butane_harness || true' >/dev/null 2>&1 || true" EXIT
+
+    echo "Launching peripheral on $ssh_host..."
+    ssh -o BatchMode=yes "$ssh_host" "
+      cd ~/butane_flutter/packages/butane_harness
+      nohup env ROLE=peripheral WS_PORT=$PERIPHERAL_PORT \
+        ./build/linux/x64/release/bundle/butane_harness \
+        > ~/.burn-harness.log 2>&1 &
+      disown || true
+    "
+  fi
+
   # --- Launch central on macOS ---
   echo "Launching central on macOS..."
   open -n "$mac_bundle" --env ROLE=central --env WS_PORT="$CENTRAL_PORT"
