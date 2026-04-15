@@ -85,7 +85,11 @@ TEARDOWN_HOSTS=()
 teardown() {
   local h
   for h in "${TEARDOWN_HOSTS[@]:-}"; do
-    ssh -o BatchMode=yes "$h" 'pkill -f butane_harness || true' >/dev/null 2>&1 || true
+    # Kill the harness and any avahi-publish-service children it spawned.
+    # The advertiser subprocess is detached, so it doesn't die when the harness
+    # is SIGTERM'd — orphaned advertisements would pollute mDNS for future
+    # burns and cause the coordinator to pick up stale endpoints.
+    ssh -o BatchMode=yes "$h" 'pkill -f butane_harness; pkill -f avahi-publish-service; true' >/dev/null 2>&1 || true
   done
 }
 trap teardown EXIT
