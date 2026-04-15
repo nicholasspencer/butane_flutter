@@ -107,8 +107,8 @@ launch_ssh() {
   ssh -o BatchMode=yes "$host" '
     set -e
     cd ~/butane_flutter
-    git fetch
-    git checkout burn
+    git fetch origin
+    git checkout -B burn origin/burn
     export PATH=$HOME/flutter/bin:$PATH
     flutter pub get
     cd packages/butane_harness
