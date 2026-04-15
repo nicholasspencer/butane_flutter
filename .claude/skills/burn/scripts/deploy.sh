@@ -53,18 +53,23 @@ preflight_ssh() {
   fi
 }
 
-# Only the mac+ipad pair is supported in this slice.
-if ! [[ "$central" == "local" && "$peripheral" == udid:* ]]; then
-  echo "deploy: pair central=$central peripheral=$peripheral not supported in vertical slice" >&2
-  exit 64
-fi
-udid="${peripheral#udid:}"
+# Dispatch on peripheral selector kind. central must be local.
+case "$peripheral" in
+  udid:*) mode=ipad; udid="${peripheral#udid:}" ;;
+  ssh:*)  mode=ssh;  ssh_host="${peripheral#ssh:}" ;;
+  *) echo "deploy: peripheral $peripheral not supported" >&2; exit 64 ;;
+esac
+[[ "$central" == "local" ]] || { echo "deploy: central must be 'local' in this slice" >&2; exit 64; }
 
 CENTRAL_PORT="${CENTRAL_PORT:-19100}"
 PERIPHERAL_PORT="${PERIPHERAL_PORT:-19101}"
 
+if [[ "$mode" == "ssh" ]]; then
+  preflight_ssh "$ssh_host"
+fi
+
 {
-  echo "=== burn deploy: central=local peripheral=udid:$udid scenario=$scenario ==="
+  echo "=== burn deploy: central=local peripheral=$peripheral scenario=$scenario ==="
 
   # --- Kill any prior mac harness instances ---
   killall butane_harness 2>/dev/null || true
@@ -76,32 +81,34 @@ PERIPHERAL_PORT="${PERIPHERAL_PORT:-19101}"
   mac_bundle="$harness/build/macos/Build/Products/Release/butane_harness.app"
   [[ -d "$mac_bundle" ]] || { echo "deploy: missing macOS app bundle $mac_bundle" >&2; exit 2; }
 
-  # --- Build iOS (peripheral) with dart-defines baked in ---
-  echo "Building iOS harness (release, ROLE=peripheral, WS_PORT=$PERIPHERAL_PORT)..."
-  ( cd "$harness" && flutter build ios --release \
-      --dart-define=ROLE=peripheral \
-      --dart-define=WS_PORT="$PERIPHERAL_PORT" )
-  ios_bundle="$harness/build/ios/iphoneos/Runner.app"
-  [[ -d "$ios_bundle" ]] || { echo "deploy: missing iOS app bundle $ios_bundle" >&2; exit 2; }
+  if [[ "$mode" == "ipad" ]]; then
+    # --- Build iOS (peripheral) with dart-defines baked in ---
+    echo "Building iOS harness (release, ROLE=peripheral, WS_PORT=$PERIPHERAL_PORT)..."
+    ( cd "$harness" && flutter build ios --release \
+        --dart-define=ROLE=peripheral \
+        --dart-define=WS_PORT="$PERIPHERAL_PORT" )
+    ios_bundle="$harness/build/ios/iphoneos/Runner.app"
+    [[ -d "$ios_bundle" ]] || { echo "deploy: missing iOS app bundle $ios_bundle" >&2; exit 2; }
 
-  # --- Install on iPad via ios-deploy ---
-  echo "Installing on iPad $udid..."
-  ios-deploy --bundle "$ios_bundle" --id "$udid" --uninstall --no-wifi | tail -3
+    # --- Install on iPad via ios-deploy ---
+    echo "Installing on iPad $udid..."
+    ios-deploy --bundle "$ios_bundle" --id "$udid" --uninstall --no-wifi | tail -3
 
-  # --- Resolve CoreDevice UUID (devicectl identifier) from iOS UDID via JSON ---
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
-  xcrun devicectl list devices --json-output "$tmp/devices.json" >/dev/null 2>&1 || true
-  core_uuid="$(jq -r --arg udid "$udid" '.result.devices[] | select(.hardwareProperties.udid == $udid) | .identifier' "$tmp/devices.json" 2>/dev/null || true)"
-  [[ -n "$core_uuid" ]] || { echo "deploy: could not map UDID $udid → CoreDevice UUID via devicectl" >&2; exit 2; }
-  echo "CoreDevice UUID: $core_uuid"
+    # --- Resolve CoreDevice UUID (devicectl identifier) from iOS UDID via JSON ---
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' RETURN
+    xcrun devicectl list devices --json-output "$tmp/devices.json" >/dev/null 2>&1 || true
+    core_uuid="$(jq -r --arg udid "$udid" '.result.devices[] | select(.hardwareProperties.udid == $udid) | .identifier' "$tmp/devices.json" 2>/dev/null || true)"
+    [[ -n "$core_uuid" ]] || { echo "deploy: could not map UDID $udid → CoreDevice UUID via devicectl" >&2; exit 2; }
+    echo "CoreDevice UUID: $core_uuid"
 
-  # --- Launch peripheral on iPad ---
-  echo "Launching peripheral on iPad..."
-  xcrun devicectl device process launch \
-    --device "$core_uuid" \
-    --terminate-existing \
-    com.nicospencer.butaneHarness
+    # --- Launch peripheral on iPad ---
+    echo "Launching peripheral on iPad..."
+    xcrun devicectl device process launch \
+      --device "$core_uuid" \
+      --terminate-existing \
+      com.nicospencer.butaneHarness
+  fi
 
   # --- Launch central on macOS ---
   echo "Launching central on macOS..."
