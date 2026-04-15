@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-
-import 'package:nsd/nsd.dart';
 
 import 'config.dart';
 import 'harness_connection.dart';
+import 'mdns_advertiser.dart';
 
 class HarnessServer implements HarnessConnection {
   HarnessServer({required this.port, required this.role});
@@ -16,7 +14,7 @@ class HarnessServer implements HarnessConnection {
 
   HttpServer? _httpServer;
   WebSocket? _client;
-  Registration? _registration;
+  final MdnsAdvertiser _advertiser = MdnsAdvertiser();
 
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
   final _statusController = StreamController<String>.broadcast();
@@ -34,15 +32,11 @@ class HarnessServer implements HarnessConnection {
     _httpServer = await HttpServer.bind(InternetAddress.anyIPv4, port);
     _statusController.add('Listening on 0.0.0.0:$port');
 
-    _registration = await register(
-      Service(
-        name: 'butane-${role.name}',
-        type: '_butane-harness._tcp',
-        port: port,
-        txt: {
-          'role': Uint8List.fromList(utf8.encode(role.name)),
-        },
-      ),
+    await _advertiser.register(
+      name: 'butane-${role.name}',
+      type: '_butane-harness._tcp',
+      port: port,
+      txt: {'role': role.name},
     );
     _statusController
         .add('mDNS: advertising butane-${role.name} on port $port');
@@ -146,10 +140,7 @@ class HarnessServer implements HarnessConnection {
 
   @override
   Future<void> stop() async {
-    if (_registration != null) {
-      await unregister(_registration!);
-      _registration = null;
-    }
+    await _advertiser.unregister();
     await _client?.close();
     await _httpServer?.close();
     _client = null;
