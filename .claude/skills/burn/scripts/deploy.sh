@@ -22,6 +22,37 @@ mkdir -p "$repo/.burns"
 log="$repo/.burns/${ts}-${scenario}.log"
 harness="$repo/packages/butane_harness"
 
+preflight_ssh() {
+  local host="$1"
+  # Local working tree must be clean.
+  if ! git -C "$repo" diff --quiet || ! git -C "$repo" diff --cached --quiet; then
+    echo "deploy: working tree dirty — commit or stash before burning" >&2
+    exit 2
+  fi
+  # 'linux' remote must exist.
+  local remote_url
+  remote_url="$(git -C "$repo" remote get-url linux 2>/dev/null || true)"
+  [[ -n "$remote_url" ]] || {
+    echo "deploy: no git remote 'linux' found — see docs/linux-dev-environment.md" >&2
+    exit 2
+  }
+  # Remote URL host must match selector host (strip user@, trailing :path).
+  local remote_host="${remote_url#*@}"
+  remote_host="${remote_host%%:*}"
+  local sel_host="${host#*@}"
+  if [[ "$remote_host" != "$sel_host" ]]; then
+    echo "deploy: linux remote host $remote_host does not match selector host $sel_host" >&2
+    exit 2
+  fi
+  # Remote working tree must be clean.
+  local dirty
+  dirty="$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" 'cd ~/butane_flutter && git status --porcelain' 2>/dev/null || true)"
+  if [[ -n "$dirty" ]]; then
+    echo "deploy: remote working tree at $host:~/butane_flutter is dirty" >&2
+    exit 2
+  fi
+}
+
 # Only the mac+ipad pair is supported in this slice.
 if ! [[ "$central" == "local" && "$peripheral" == udid:* ]]; then
   echo "deploy: pair central=$central peripheral=$peripheral not supported in vertical slice" >&2
