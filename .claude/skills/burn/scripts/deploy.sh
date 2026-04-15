@@ -2,7 +2,9 @@
 # deploy.sh — build, install, launch harness on two selector-addressed devices
 # and run `coordinator --discover` (mDNS). No IP addresses required.
 #
-# Vertical slice: central=local (macOS) + peripheral=udid:<iOS-UDID>.
+# Supported role selectors (either side):
+#   central:    local | ssh:<user@host>
+#   peripheral: local | ssh:<user@host> | udid:<iOS-UDID>
 set -euo pipefail
 
 central="" peripheral="" scenario="ble_flow"
@@ -21,6 +23,9 @@ ts="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$repo/.burns"
 log="$repo/.burns/${ts}-${scenario}.log"
 harness="$repo/packages/butane_harness"
+
+CENTRAL_PORT="${CENTRAL_PORT:-19100}"
+PERIPHERAL_PORT="${PERIPHERAL_PORT:-19101}"
 
 preflight_ssh() {
   local host="$1"
@@ -53,98 +58,129 @@ preflight_ssh() {
   fi
 }
 
-# Dispatch on peripheral selector kind. central must be local.
-case "$peripheral" in
-  udid:*) mode=ipad; udid="${peripheral#udid:}" ;;
-  ssh:*)  mode=ssh;  ssh_host="${peripheral#ssh:}" ;;
-  *) echo "deploy: peripheral $peripheral not supported" >&2; exit 64 ;;
-esac
-[[ "$central" == "local" ]] || { echo "deploy: central must be 'local' in this slice" >&2; exit 64; }
+# --- Resolve each role to {kind, detail} ---
+resolve_role() {
+  local sel="$1"
+  case "$sel" in
+    local)  echo "local:" ;;
+    ssh:*)  echo "ssh:${sel#ssh:}" ;;
+    udid:*) echo "ipad:${sel#udid:}" ;;
+    *) echo "deploy: selector '$sel' not supported" >&2; exit 64 ;;
+  esac
+}
+central_resolved="$(resolve_role "$central")"
+peripheral_resolved="$(resolve_role "$peripheral")"
+central_kind="${central_resolved%%:*}"; central_detail="${central_resolved#*:}"
+peripheral_kind="${peripheral_resolved%%:*}"; peripheral_detail="${peripheral_resolved#*:}"
 
-CENTRAL_PORT="${CENTRAL_PORT:-19100}"
-PERIPHERAL_PORT="${PERIPHERAL_PORT:-19101}"
+# iPad is peripheral-only in this slice.
+[[ "$central_kind" == "ipad" ]] && { echo "deploy: udid: not supported for central role" >&2; exit 64; }
 
-if [[ "$mode" == "ssh" ]]; then
-  preflight_ssh "$ssh_host"
-fi
+# Preflight each ssh role up-front (fail fast before any build).
+[[ "$central_kind"    == "ssh" ]] && preflight_ssh "$central_detail"
+[[ "$peripheral_kind" == "ssh" ]] && preflight_ssh "$peripheral_detail"
+
+# --- Teardown: remember every ssh host we touch and kill harness on exit ---
+TEARDOWN_HOSTS=()
+teardown() {
+  local h
+  for h in "${TEARDOWN_HOSTS[@]:-}"; do
+    ssh -o BatchMode=yes "$h" 'pkill -f butane_harness || true' >/dev/null 2>&1 || true
+  done
+}
+trap teardown EXIT
+
+# --- Role launchers ---
+launch_local() {
+  local role="$1" port="$2"
+  open -n "$mac_bundle" --env "ROLE=$role" --env "WS_PORT=$port"
+}
+
+launch_ssh() {
+  local host="$1" role="$2" port="$3"
+  TEARDOWN_HOSTS+=("$host")
+
+  echo "Pushing HEAD to linux remote (refs/heads/burn)..."
+  git -C "$repo" push --force linux HEAD:refs/heads/burn
+
+  echo "Building harness on $host..."
+  ssh -o BatchMode=yes "$host" '
+    set -e
+    cd ~/butane_flutter
+    git fetch
+    git checkout burn
+    export PATH=$HOME/flutter/bin:$PATH
+    flutter pub get
+    cd packages/butane_harness
+    flutter build linux --release
+  '
+
+  echo "Launching $role on $host..."
+  ssh -o BatchMode=yes "$host" "
+    cd ~/butane_flutter/packages/butane_harness
+    nohup env ROLE=$role WS_PORT=$port \
+      ./build/linux/x64/release/bundle/butane_harness \
+      > ~/.burn-harness.log 2>&1 &
+    disown || true
+  "
+}
+
+launch_ipad() {
+  local udid="$1" port="$2"
+  echo "Building iOS harness (release, ROLE=peripheral, WS_PORT=$port)..."
+  ( cd "$harness" && flutter build ios --release \
+      --dart-define=ROLE=peripheral \
+      --dart-define=WS_PORT="$port" )
+  local ios_bundle="$harness/build/ios/iphoneos/Runner.app"
+  [[ -d "$ios_bundle" ]] || { echo "deploy: missing iOS app bundle $ios_bundle" >&2; exit 2; }
+
+  echo "Installing on iPad $udid..."
+  ios-deploy --bundle "$ios_bundle" --id "$udid" --uninstall --no-wifi | tail -3
+
+  local tmp core_uuid
+  tmp="$(mktemp -d)"
+  xcrun devicectl list devices --json-output "$tmp/devices.json" >/dev/null 2>&1 || true
+  core_uuid="$(jq -r --arg udid "$udid" '.result.devices[] | select(.hardwareProperties.udid == $udid) | .identifier' "$tmp/devices.json" 2>/dev/null || true)"
+  rm -rf "$tmp"
+  [[ -n "$core_uuid" ]] || { echo "deploy: could not map UDID $udid → CoreDevice UUID via devicectl" >&2; exit 2; }
+  echo "CoreDevice UUID: $core_uuid"
+
+  echo "Launching peripheral on iPad..."
+  xcrun devicectl device process launch \
+    --device "$core_uuid" \
+    --terminate-existing \
+    com.nicospencer.butaneHarness
+}
 
 {
-  echo "=== burn deploy: central=local peripheral=$peripheral scenario=$scenario ==="
+  echo "=== burn deploy: central=$central peripheral=$peripheral scenario=$scenario ==="
 
-  # --- Kill any prior mac harness instances ---
+  # --- Kill any prior local harness instances ---
   killall butane_harness 2>/dev/null || true
   sleep 1
 
-  # --- Build macOS (central) ---
-  echo "Building macOS harness (release)..."
-  ( cd "$harness" && flutter build macos --release )
-  mac_bundle="$harness/build/macos/Build/Products/Release/butane_harness.app"
-  [[ -d "$mac_bundle" ]] || { echo "deploy: missing macOS app bundle $mac_bundle" >&2; exit 2; }
-
-  if [[ "$mode" == "ipad" ]]; then
-    # --- Build iOS (peripheral) with dart-defines baked in ---
-    echo "Building iOS harness (release, ROLE=peripheral, WS_PORT=$PERIPHERAL_PORT)..."
-    ( cd "$harness" && flutter build ios --release \
-        --dart-define=ROLE=peripheral \
-        --dart-define=WS_PORT="$PERIPHERAL_PORT" )
-    ios_bundle="$harness/build/ios/iphoneos/Runner.app"
-    [[ -d "$ios_bundle" ]] || { echo "deploy: missing iOS app bundle $ios_bundle" >&2; exit 2; }
-
-    # --- Install on iPad via ios-deploy ---
-    echo "Installing on iPad $udid..."
-    ios-deploy --bundle "$ios_bundle" --id "$udid" --uninstall --no-wifi | tail -3
-
-    # --- Resolve CoreDevice UUID (devicectl identifier) from iOS UDID via JSON ---
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' RETURN
-    xcrun devicectl list devices --json-output "$tmp/devices.json" >/dev/null 2>&1 || true
-    core_uuid="$(jq -r --arg udid "$udid" '.result.devices[] | select(.hardwareProperties.udid == $udid) | .identifier' "$tmp/devices.json" 2>/dev/null || true)"
-    [[ -n "$core_uuid" ]] || { echo "deploy: could not map UDID $udid → CoreDevice UUID via devicectl" >&2; exit 2; }
-    echo "CoreDevice UUID: $core_uuid"
-
-    # --- Launch peripheral on iPad ---
-    echo "Launching peripheral on iPad..."
-    xcrun devicectl device process launch \
-      --device "$core_uuid" \
-      --terminate-existing \
-      com.nicospencer.butaneHarness
+  # --- Build macOS app once if either role is local ---
+  if [[ "$central_kind" == "local" || "$peripheral_kind" == "local" ]]; then
+    echo "Building macOS harness (release)..."
+    ( cd "$harness" && flutter build macos --release )
+    mac_bundle="$harness/build/macos/Build/Products/Release/butane_harness.app"
+    [[ -d "$mac_bundle" ]] || { echo "deploy: missing macOS app bundle $mac_bundle" >&2; exit 2; }
   fi
 
-  if [[ "$mode" == "ssh" ]]; then
-    # --- Push HEAD to linux remote and build on target ---
-    echo "Pushing HEAD to linux remote (refs/heads/burn)..."
-    git -C "$repo" push --force linux HEAD:refs/heads/burn
+  # --- Launch peripheral first (advertiser must be up before central scans) ---
+  case "$peripheral_kind" in
+    local) launch_local peripheral "$PERIPHERAL_PORT" ;;
+    ssh)   launch_ssh   "$peripheral_detail" peripheral "$PERIPHERAL_PORT" ;;
+    ipad)  launch_ipad  "$peripheral_detail" "$PERIPHERAL_PORT" ;;
+  esac
 
-    echo "Building harness on $ssh_host..."
-    ssh -o BatchMode=yes "$ssh_host" '
-      set -e
-      cd ~/butane_flutter
-      git fetch
-      git checkout burn
-      export PATH=$HOME/flutter/bin:$PATH
-      flutter pub get
-      cd packages/butane_harness
-      flutter build linux --release
-    '
+  # --- Launch central ---
+  case "$central_kind" in
+    local) launch_local central "$CENTRAL_PORT" ;;
+    ssh)   launch_ssh   "$central_detail" central "$CENTRAL_PORT" ;;
+  esac
 
-    # --- Register teardown BEFORE launch so any later failure still cleans up ---
-    trap "ssh -o BatchMode=yes '$ssh_host' 'pkill -f butane_harness || true' >/dev/null 2>&1 || true" EXIT
-
-    echo "Launching peripheral on $ssh_host..."
-    ssh -o BatchMode=yes "$ssh_host" "
-      cd ~/butane_flutter/packages/butane_harness
-      nohup env ROLE=peripheral WS_PORT=$PERIPHERAL_PORT \
-        ./build/linux/x64/release/bundle/butane_harness \
-        > ~/.burn-harness.log 2>&1 &
-      disown || true
-    "
-  fi
-
-  # --- Launch central on macOS ---
-  echo "Launching central on macOS..."
-  open -n "$mac_bundle" --env ROLE=central --env WS_PORT="$CENTRAL_PORT"
-
-  # --- Let CoreBluetooth settle and mDNS advertise ---
+  # --- Let CoreBluetooth / BlueZ settle and mDNS advertise ---
   sleep 4
 
   # --- Run coordinator in mDNS discovery mode (no host args) ---
