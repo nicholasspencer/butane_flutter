@@ -23,3 +23,11 @@
 - SSH fails: see probe error — usually missing key or mDNS/avahi dropout.
 - BLE fails: `groups` on target must include `bluetooth`. `bluetoothctl show` should report `Powered: yes`. Full setup in `docs/linux-dev-environment.md`.
 - Remote harness log: `ssh <host> 'cat ~/.burn-harness.log'`.
+
+## Known blockers
+The deployment pipeline (probe → preflight → push → build → launch → teardown) works end-to-end.
+The coordinator `--discover` stage currently cannot find a Linux harness because:
+- **butane_flutter-zod**: `nsd` Flutter package has no Linux backend, so `HarnessServer.register()` silently no-ops on Linux.
+- **butane_flutter-8h5.6 / 8h5.7**: BlueZ peripheral role (advertising + GATT services) is not yet implemented, so even if mDNS worked, the peripheral wouldn't respond to the coordinator's BLE flow.
+
+Both are harness-side gaps orthogonal to the burn skill. When either lands, the corresponding burn direction (Linux as central vs. Linux as peripheral) goes green with no burn-skill changes.
