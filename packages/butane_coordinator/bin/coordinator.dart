@@ -35,6 +35,17 @@ Future<void> main(List<String> arguments) async {
       help: 'Number of consecutive BLE flow runs',
     )
     ..addFlag(
+      'discover',
+      negatable: false,
+      help: 'Resolve both harness endpoints via mDNS '
+          '(overrides --host / --peripheral-host / ports)',
+    )
+    ..addOption(
+      'discover-timeout',
+      defaultsTo: '15',
+      help: 'mDNS discovery timeout in seconds (with --discover)',
+    )
+    ..addFlag(
       'help',
       abbr: 'h',
       negatable: false,
@@ -49,15 +60,45 @@ Future<void> main(List<String> arguments) async {
     exit(0);
   }
 
-  final host = results.option('host')!;
-  final peripheralHost = results.option('peripheral-host') ?? host;
-  final centralPort = int.parse(results.option('central-port')!);
-  final peripheralPort = int.parse(results.option('peripheral-port')!);
+  final discover = results.flag('discover');
   final timeout = Duration(seconds: int.parse(results.option('timeout')!));
   final runs = int.parse(results.option('runs')!);
 
+  String host;
+  String peripheralHost;
+  int centralPort;
+  int peripheralPort;
+
   print('=== Butane BLE Coordinator ===');
   print('');
+
+  if (discover) {
+    final discoveryTimeout = Duration(
+      seconds: int.parse(results.option('discover-timeout')!),
+    );
+    print('Discovering harness endpoints via mDNS '
+        '(timeout ${discoveryTimeout.inSeconds}s)...');
+    try {
+      final found =
+          await HarnessDiscovery().discover(timeout: discoveryTimeout);
+      host = found.central.host;
+      centralPort = found.central.port;
+      peripheralHost = found.peripheral.host;
+      peripheralPort = found.peripheral.port;
+      print('  central:    ${found.central.host}:${found.central.port}');
+      print('  peripheral: '
+          '${found.peripheral.host}:${found.peripheral.port}');
+    } on DiscoveryTimeoutException catch (e) {
+      print('FATAL: $e');
+      exit(2);
+    }
+  } else {
+    host = results.option('host')!;
+    peripheralHost = results.option('peripheral-host') ?? host;
+    centralPort = int.parse(results.option('central-port')!);
+    peripheralPort = int.parse(results.option('peripheral-port')!);
+  }
+
   print('Central:    ws://$host:$centralPort');
   print('Peripheral: ws://$peripheralHost:$peripheralPort');
   print('Timeout:    ${timeout.inSeconds}s');
