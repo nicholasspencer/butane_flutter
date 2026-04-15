@@ -16,7 +16,7 @@ description: >
 | Selector              | Platform | Probe channel                      |
 |-----------------------|----------|------------------------------------|
 | `local`               | macos    | this host                          |
-| `udid:<UDID>`         | ios      | `xcrun devicectl list devices`     |
+| `udid:<UDID>`         | ios      | `ios-deploy -c --timeout 5`        |
 | `adb:<serial>`        | android  | `adb devices`                      |
 | `ssh:<user@host>`     | linux    | `ssh -o ConnectTimeout=3 … true`   |
 | `mdns:<service-name>` | any      | `dns-sd -B _butane-harness._tcp`   |
