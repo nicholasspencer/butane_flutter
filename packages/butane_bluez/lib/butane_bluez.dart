@@ -589,13 +589,33 @@ base class ButaneBluez extends ButanePlatformInterface {
       // Fire-and-forget: ConnectProfile still has varying reply timing for
       // some BlueZ versions. Poll `device.connected` instead of awaiting.
       unawaited(
-        device.connectProfile(profileUuid).catchError((_) {}),
+        device.connectProfile(profileUuid).then<void>(
+          (_) {
+            // ignore: avoid_print
+            print('[butane_bluez] connectProfile replied OK');
+          },
+          onError: (Object err) {
+            // ignore: avoid_print
+            print('[butane_bluez] connectProfile errored: $err');
+          },
+        ),
       );
     } else {
       // No UUID to target — fall back to the generic Connect(). This path
       // is LE-safe because scan was set to `Transport: le`, but Connect()
       // may still try all profiles.
-      unawaited(device.connect().catchError((_) {}));
+      unawaited(
+        device.connect().then<void>(
+          (_) {
+            // ignore: avoid_print
+            print('[butane_bluez] connect replied OK');
+          },
+          onError: (Object err) {
+            // ignore: avoid_print
+            print('[butane_bluez] connect errored: $err');
+          },
+        ),
+      );
     }
 
     const pollInterval = Duration(milliseconds: 250);
