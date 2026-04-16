@@ -128,8 +128,10 @@ base class ButaneBluez extends ButanePlatformInterface {
   };
 
   static void registerWith() {
+    _diag('registerWith() called');
     instance = ButaneBluez();
     ButanePlatformInterface.instance = instance;
+    _diag('registerWith() complete');
   }
 
   Future<void> _ensureConnected() {
@@ -149,10 +151,7 @@ base class ButaneBluez extends ButanePlatformInterface {
   @override
   Future<ClientState> clientState([Session? session]) async {
     _diag('clientState() called');
-    await _ensureConnected();
-    final adapter = _defaultAdapter;
-    if (adapter == null) return ClientState.unsupported;
-    return adapter.powered ? ClientState.poweredOn : ClientState.poweredOff;
+    throw StateError('DIAG_MARKER_BUTANEBLUEZ_CLIENTSTATE_CALLED');
   }
 
   @override
