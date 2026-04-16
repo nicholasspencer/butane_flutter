@@ -708,21 +708,38 @@ base class ButaneBluez extends ButanePlatformInterface {
     );
     if (device.servicesResolved && device.gattServices.isNotEmpty) return;
     const pollInterval = Duration(milliseconds: 250);
-    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    final start = DateTime.now();
+    final deadline = start.add(const Duration(seconds: 45));
+    DateTime lastLog = start;
     while (!device.servicesResolved || device.gattServices.isEmpty) {
       if (DateTime.now().isAfter(deadline)) {
         // ignore: avoid_print
         print(
           '[butane_bluez] discoverServices TIMEOUT: '
           'servicesResolved=${device.servicesResolved} '
-          'gattServices=${device.gattServices.length}',
+          'gattServices=${device.gattServices.length} '
+          'connected=${device.connected} '
+          'uuids=[${device.uuids.map((u) => u.id).join(",")}]',
         );
         throw TimeoutException(
           'BlueZ did not resolve services on '
-          '${session.peripheralIdentifier} within 25 s',
+          '${session.peripheralIdentifier} within 45 s',
         );
       }
       await Future<void>.delayed(pollInterval);
+      if (DateTime.now().difference(lastLog) >
+          const Duration(seconds: 2)) {
+        lastLog = DateTime.now();
+        // ignore: avoid_print
+        print(
+          '[butane_bluez] discoverServices polling '
+          't=${lastLog.difference(start).inSeconds}s '
+          'servicesResolved=${device.servicesResolved} '
+          'gattServices=${device.gattServices.length} '
+          'connected=${device.connected} '
+          'uuids=[${device.uuids.map((u) => u.id).join(",")}]',
+        );
+      }
     }
     // ignore: avoid_print
     print(
