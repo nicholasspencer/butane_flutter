@@ -5,11 +5,14 @@ import 'package:bluez/bluez.dart';
 import 'package:butane_platform_interface/butane_platform_interface.dart';
 import 'package:dbus/dbus.dart';
 
+import 'src/advertising.dart';
+import 'src/gatt_server.dart';
+
 /// Linux implementation of `butane` backed by BlueZ over D-Bus.
 ///
-/// Central-role scaffolding. Peripheral-role methods remain
-/// `UnimplementedError` stubs and are filled in by [butane_flutter-8h5.6] and
-/// [butane_flutter-8h5.7].
+/// Central role is backed by the `bluez` package. Peripheral role
+/// (advertising + local GATT) is driven via raw D-Bus because the `bluez`
+/// package does not wrap `LEAdvertisement1` / `GattManager1`.
 base class ButaneBluez extends ButanePlatformInterface {
   ButaneBluez({BlueZClient? client}) : _client = client ?? BlueZClient();
 
@@ -25,6 +28,64 @@ base class ButaneBluez extends ButanePlatformInterface {
   /// ScanResults flow even though BlueZ keeps emitting PropertiesChanged for
   /// paired/connected devices.
   bool _scanning = false;
+
+  /// Cache of BlueZDevice lookups keyed by MAC address. BlueZ's
+  /// [BlueZClient.devices] is a flat list with no address index, so we
+  /// memoize to avoid a linear scan on every connect/read/write call. The
+  /// underlying BlueZDevice is a stable wrapper around a D-Bus object path —
+  /// safe to cache for the lifetime of the client.
+  final Map<String, BlueZDevice> _deviceCache = {};
+
+  /// Separate system-bus client used for the peripheral role (advertising
+  /// and local GATT objects). We keep this distinct from the `bluez`
+  /// package's internal bus because we need to register our own objects
+  /// on the bus, and the package does not expose its underlying
+  /// [DBusClient]. Lazily created on first peripheral-role call.
+  DBusClient? _peripheralBus;
+
+  /// Adapter object path (e.g. `/org/bluez/hci0`). Looked up on demand by
+  /// scanning BlueZ's managed objects for the first `Adapter1` interface.
+  String? _adapterPath;
+
+  /// Currently registered advertisement, or null when not advertising.
+  /// BlueZ supports one advertisement per caller at a time under this API.
+  LEAdvertisement? _advertisement;
+
+  /// Monotonic counter used to mint unique advertisement object paths.
+  /// `dbus` 0.2.5 has no `unregisterObject`, so re-advertising must use a
+  /// fresh path to avoid "path already registered" errors. Old objects
+  /// remain on the bus as no-ops — BlueZ stops talking to them after
+  /// UnregisterAdvertisement.
+  int _advertisementCounter = 0;
+
+  /// Monotonic counter for GATT application paths. Same rationale as
+  /// [_advertisementCounter] — fresh paths on re-registration avoid
+  /// collisions with the now-orphaned prior tree.
+  int _applicationCounter = 0;
+
+  /// Monotonic request id issued for every incoming ATT read/write so
+  /// the app can pair [AttRequest]s with `respondToRequest` calls.
+  int _requestCounter = 0;
+
+  /// Currently registered GATT application and its service tree, or null
+  /// when no service has been added. BlueZ allows exactly one
+  /// application per caller per adapter, so we rebuild the tree on each
+  /// [addService].
+  _GattApplicationRegistration? _application;
+
+  /// Pending read/write requests awaiting a call to [respondToRequest].
+  /// Keyed by the request id minted in the characteristic handler.
+  final Map<int, Completer<({AttResult result, Uint8List? value})>>
+      _pendingReads = {};
+  final Map<int, Completer<AttResult>> _pendingWrites = {};
+
+  /// Broadcast controllers for peripheral-manager event streams. Created
+  /// lazily so tests / tooling that never touch the peripheral role
+  /// don't allocate them.
+  StreamController<({String serviceUuid, String? error})>?
+      _serviceAddedController;
+  StreamController<AttRequest>? _readRequestController;
+  StreamController<List<AttRequest>>? _writeRequestsController;
 
   /// Service UUID filter set by [scan]. Empty means "match any". BlueZ's
   /// `SetDiscoveryFilter` with `UUIDs` is unreliable for late-arriving UUID
@@ -298,70 +359,267 @@ base class ButaneBluez extends ButanePlatformInterface {
     };
   }
 
-  // --- Unimplemented: Central: connect, GATT, RSSI ---------------------------
+  // --- Central: connect + GATT ----------------------------------------------
+
+  /// Resolve [address] (MAC) to a [BlueZDevice]. Returns null if BlueZ doesn't
+  /// know the device — scanning must have seen it, or it must be paired.
+  BlueZDevice? _findDevice(String address) {
+    final cached = _deviceCache[address];
+    if (cached != null) return cached;
+    for (final device in _client.devices) {
+      if (device.address == address) {
+        _deviceCache[address] = device;
+        return device;
+      }
+    }
+    return null;
+  }
+
+  BlueZDevice _requireDevice(PeripheralSession session) {
+    final device = _findDevice(session.peripheralIdentifier);
+    if (device == null) {
+      throw StateError(
+        'Unknown peripheral ${session.peripheralIdentifier} — '
+        'scan or pair the device first',
+      );
+    }
+    return device;
+  }
+
+  BlueZGattService _requireService(BlueZDevice device, String serviceUuid) {
+    final want = serviceUuid.toLowerCase();
+    for (final svc in device.gattServices) {
+      // BlueZUUID.toString() wraps the raw id in `BlueZUUID('...')` — use
+      // `.id` for the bare UUID string. Same idiom as `_toScanResult`.
+      if (svc.uuid.id.toLowerCase() == want) return svc;
+    }
+    throw StateError(
+      'Service $serviceUuid not found on ${device.address} — '
+      'call discoverServices() first',
+    );
+  }
 
   @override
   Future<Iterable<Peripheral>> peripherals({
     Iterable<String> peripheralIdentifiers = const [],
     Session? session,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final wanted = peripheralIdentifiers.toSet();
+    final out = <Peripheral>[];
+    for (final device in _client.devices) {
+      if (wanted.isNotEmpty && !wanted.contains(device.address)) continue;
+      out.add(_toPeripheral(device));
+    }
+    return out;
+  }
 
   @override
   Future<Iterable<Peripheral>> connectedPeripherals({
     Iterable<String> serviceUuids = const [],
     Session? session,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final wanted = {for (final u in serviceUuids) u.toLowerCase()};
+    final out = <Peripheral>[];
+    for (final device in _client.devices) {
+      if (!device.connected) continue;
+      if (wanted.isNotEmpty) {
+        final offered = device.uuids.map((u) => u.id.toLowerCase());
+        if (!offered.any(wanted.contains)) continue;
+      }
+      out.add(_toPeripheral(device));
+    }
+    return out;
+  }
 
   @override
-  Future<void> connect({required PeripheralSession session}) async =>
-      throw UnimplementedError();
+  Future<void> connect({required PeripheralSession session}) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    if (device.connected) return;
+    await device.connect();
+  }
 
   @override
-  Future<void> cancelConnection({required PeripheralSession session}) async =>
-      throw UnimplementedError();
+  Future<void> cancelConnection({required PeripheralSession session}) async {
+    await _ensureConnected();
+    // Soft-fail if BlueZ no longer knows the device — CoreBluetooth's
+    // cancelPeripheralConnection is a no-op on unknown peripherals.
+    final device = _findDevice(session.peripheralIdentifier);
+    if (device == null || !device.connected) return;
+    await device.disconnect();
+  }
 
   @override
   Future<ConnectionState> connectionState({
     required PeripheralSession session,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final device = _findDevice(session.peripheralIdentifier);
+    if (device == null) return ConnectionState.disconnected;
+    return device.connected
+        ? ConnectionState.connected
+        : ConnectionState.disconnected;
+  }
 
   @override
   Stream<ConnectionState> connectionStateStream({
     required PeripheralSession session,
-  }) async* {
-    throw UnimplementedError();
+  }) {
+    late StreamController<ConnectionState> controller;
+    StreamSubscription<List<String>>? sub;
+
+    controller = StreamController<ConnectionState>(
+      onListen: () async {
+        await _ensureConnected();
+        final device = _findDevice(session.peripheralIdentifier);
+        if (device == null) {
+          controller.add(ConnectionState.disconnected);
+          return;
+        }
+        controller.add(
+          device.connected
+              ? ConnectionState.connected
+              : ConnectionState.disconnected,
+        );
+        // BlueZ exposes only a boolean `Connected` property — we can't
+        // distinguish connecting/disconnecting transitional states the way
+        // CoreBluetooth can. Emit connected/disconnected edges only.
+        sub = device.propertiesChangedStream.listen((changed) {
+          if (changed.contains('Connected')) {
+            controller.add(
+              device.connected
+                  ? ConnectionState.connected
+                  : ConnectionState.disconnected,
+            );
+          }
+        });
+      },
+      onCancel: () async {
+        await sub?.cancel();
+        sub = null;
+      },
+    );
+
+    return controller.stream;
   }
 
   @override
   Future<void> discoverServices({
     required PeripheralSession session,
     Iterable<String>? serviceUuids,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    if (!device.connected) {
+      throw StateError(
+        'Cannot discover services on disconnected peripheral '
+        '${session.peripheralIdentifier}',
+      );
+    }
+    if (device.servicesResolved) return;
+    // BlueZ auto-resolves services on connect — wait for the
+    // `ServicesResolved` property flip rather than triggering anything
+    // explicitly. The `serviceUuids` filter is advisory only; BlueZ
+    // resolves all services regardless and we return them from
+    // [services()] where callers can filter if they wish.
+    final completer = Completer<void>();
+    late StreamSubscription<List<String>> sub;
+    sub = device.propertiesChangedStream.listen((changed) {
+      if (changed.contains('ServicesResolved') && device.servicesResolved) {
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+    try {
+      await completer.future;
+    } finally {
+      await sub.cancel();
+    }
+  }
 
   @override
   Future<Iterable<Service>> services({
     required PeripheralSession session,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    return [
+      for (final svc in device.gattServices)
+        Service(uuid: svc.uuid.id, isPrimary: svc.primary),
+    ];
+  }
 
   @override
   Future<void> discoverCharacteristics({
     required PeripheralSession session,
     required String serviceUuid,
     Iterable<String>? characteristicUuids,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    // BlueZ materializes characteristics as part of ServicesResolved — there
+    // is no separate discover step. Validate the service exists so callers
+    // fail fast rather than getting an empty list from [characteristics()].
+    _requireService(device, serviceUuid);
+  }
 
   @override
   Future<Iterable<Characteristic>> characteristics({
     required PeripheralSession session,
     required String serviceUuid,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    final service = _requireService(device, serviceUuid);
+    return [
+      for (final char in service.gattCharacteristics)
+        Characteristic(
+          uuid: char.uuid.id,
+          properties: _flagsToProperties(char.flags),
+          descriptors: [
+            for (final desc in char.gattDescriptors)
+              Descriptor(uuid: desc.uuid.id),
+          ],
+        ),
+    ];
+  }
+
+  Peripheral _toPeripheral(BlueZDevice device) {
+    return Peripheral(
+      session: PeripheralSession(peripheralIdentifier: device.address),
+      state: device.connected
+          ? ConnectionState.connected
+          : ConnectionState.disconnected,
+      name: device.alias.isNotEmpty ? device.alias : null,
+      rssi: device.rssi,
+    );
+  }
+
+  CharacteristicProperty _flagsToProperties(
+    Set<BlueZGattCharacteristicFlag> flags,
+  ) {
+    return CharacteristicProperty(
+      broadcast: flags.contains(BlueZGattCharacteristicFlag.broadcast),
+      read: flags.contains(BlueZGattCharacteristicFlag.read),
+      writeWithoutResponse:
+          flags.contains(BlueZGattCharacteristicFlag.writeWithoutResponse),
+      write: flags.contains(BlueZGattCharacteristicFlag.write),
+      notify: flags.contains(BlueZGattCharacteristicFlag.notify),
+      indicate: flags.contains(BlueZGattCharacteristicFlag.indicate),
+      authenticatedSignedWrites: flags
+          .contains(BlueZGattCharacteristicFlag.authenticatedSignedWrites),
+      extendedProperties:
+          flags.contains(BlueZGattCharacteristicFlag.extendedProperties),
+      // BlueZ exposes `encrypt-authenticated-read/write` flags but no
+      // matching enum distinguishing notify/indicate encryption — mirror
+      // false to match the CoreBluetooth semantic.
+      notifyEncryptionRequired: false,
+      indicateEncryptionRequired: false,
+    );
+  }
+
+  // --- Unimplemented: Central: read/write/notify, RSSI ----------------------
 
   @override
   Future<Uint8List> readCharacteristic({
@@ -403,19 +661,66 @@ base class ButaneBluez extends ButanePlatformInterface {
   Future<int> readRssi({required PeripheralSession session}) async =>
       throw UnimplementedError();
 
-  // --- Unimplemented: Peripheral role (8h5.6 / 8h5.7) ------------------------
+  // --- Peripheral: advertising ----------------------------------------------
+
+  Future<DBusClient> _ensurePeripheralBus() async {
+    var bus = _peripheralBus;
+    if (bus != null) return bus;
+    bus = DBusClient.system();
+    _peripheralBus = bus;
+    return bus;
+  }
+
+  /// Walk BlueZ's ObjectManager tree to find the first object that
+  /// implements `org.bluez.Adapter1`. BlueZAdapter doesn't expose its
+  /// D-Bus path publicly in 0.1.4 and we can't reuse the bluez package's
+  /// internal client, so we do the lookup ourselves.
+  Future<String> _ensureAdapterPath() async {
+    final cached = _adapterPath;
+    if (cached != null) return cached;
+    final bus = await _ensurePeripheralBus();
+    final result = await bus.callMethod(
+      destination: 'org.bluez',
+      path: DBusObjectPath('/'),
+      interface: 'org.freedesktop.DBus.ObjectManager',
+      member: 'GetManagedObjects',
+    );
+    if (result is! DBusMethodSuccessResponse ||
+        result.returnValues.isEmpty ||
+        result.returnValues.first is! DBusDict) {
+      throw StateError('BlueZ GetManagedObjects returned no data');
+    }
+    final dict = result.returnValues.first as DBusDict;
+    for (final entry in dict.children.entries) {
+      final interfaces = entry.value as DBusDict;
+      for (final ifaceKey in interfaces.children.keys) {
+        if ((ifaceKey as DBusString).value == 'org.bluez.Adapter1') {
+          final pathValue = (entry.key as DBusObjectPath).value;
+          _adapterPath = pathValue;
+          return pathValue;
+        }
+      }
+    }
+    throw StateError('No BlueZ adapter found on the system bus');
+  }
 
   @override
   Future<ClientState> peripheralManagerState([
     PeripheralManagerSession? session,
-  ]) async =>
-      throw UnimplementedError();
+  ]) async {
+    // Peripheral and central roles share the same adapter; the adapter's
+    // powered state is what gates either role's ability to operate.
+    return clientState();
+  }
 
   @override
   Stream<ClientState> peripheralManagerStateStream([
     PeripheralManagerSession? session,
-  ]) async* {
-    throw UnimplementedError();
+  ]) {
+    // Same reasoning as [peripheralManagerState]: adapter state is the
+    // ground truth. The stream is forwarded verbatim from the central
+    // side so subscribers get identical semantics (seed + edges).
+    return clientStateStream();
   }
 
   @override
@@ -423,37 +728,264 @@ base class ButaneBluez extends ButanePlatformInterface {
     PeripheralManagerSession? session,
     String? localName,
     Iterable<String>? serviceUuids,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final bus = await _ensurePeripheralBus();
+    final adapterPath = await _ensureAdapterPath();
+
+    // CoreBluetooth replaces the advertisement on repeated starts; match
+    // that here by tearing down any existing advertisement first. The
+    // caller doesn't need to pair start/stop.
+    if (_advertisement != null) {
+      await stopAdvertising(session: session);
+    }
+
+    final path = DBusObjectPath(
+      '/com/nicospencer/butane/advertisement${++_advertisementCounter}',
+    );
+    final advert = LEAdvertisement(
+      objectPath: path,
+      localName: localName,
+      serviceUuids: [for (final u in serviceUuids ?? const <String>[]) u],
+    );
+    bus.registerObject(advert);
+
+    try {
+      final result = await bus.callMethod(
+        destination: 'org.bluez',
+        path: DBusObjectPath(adapterPath),
+        interface: 'org.bluez.LEAdvertisingManager1',
+        member: 'RegisterAdvertisement',
+        values: [
+          path,
+          DBusDict(
+            DBusSignature('s'),
+            DBusSignature('v'),
+            const <DBusValue, DBusValue>{},
+          ),
+        ],
+      );
+      if (result is DBusMethodErrorResponse) {
+        throw StateError(
+          'BlueZ RegisterAdvertisement failed: '
+          '${result.errorName} ${result.values}',
+        );
+      }
+    } catch (_) {
+      // Leave the DBusObject registered (no unregisterObject in dbus
+      // 0.2.5) but drop our reference so callers can retry with a fresh
+      // path. BlueZ never saw the object in this case, so it's inert.
+      _advertisement = null;
+      rethrow;
+    }
+    _advertisement = advert;
+  }
 
   @override
-  Future<void> stopAdvertising({PeripheralManagerSession? session}) async =>
-      throw UnimplementedError();
+  Future<void> stopAdvertising({PeripheralManagerSession? session}) async {
+    final advert = _advertisement;
+    if (advert == null) return;
+    _advertisement = null;
+
+    final bus = _peripheralBus;
+    final adapterPath = _adapterPath;
+    if (bus == null || adapterPath == null) return;
+
+    // UnregisterAdvertisement can fail if BlueZ already dropped the
+    // advertisement (e.g. adapter powered off). We've already cleared our
+    // side, so treat any error response as best-effort cleanup rather
+    // than propagating.
+    await bus.callMethod(
+      destination: 'org.bluez',
+      path: DBusObjectPath(adapterPath),
+      interface: 'org.bluez.LEAdvertisingManager1',
+      member: 'UnregisterAdvertisement',
+      values: [advert.path],
+    );
+  }
+
+  // --- Peripheral: local GATT services --------------------------------------
+
+  StreamController<({String serviceUuid, String? error})>
+      _ensureServiceAddedController() => _serviceAddedController ??=
+          StreamController<({String serviceUuid, String? error})>.broadcast();
+
+  StreamController<AttRequest> _ensureReadRequestController() =>
+      _readRequestController ??= StreamController<AttRequest>.broadcast();
+
+  StreamController<List<AttRequest>> _ensureWriteRequestsController() =>
+      _writeRequestsController ??=
+          StreamController<List<AttRequest>>.broadcast();
 
   @override
   Future<void> addService({
     PeripheralManagerSession? session,
     required MutableService service,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final bus = await _ensurePeripheralBus();
+    final adapterPath = await _ensureAdapterPath();
+
+    // BlueZ locks the GATT tree after RegisterApplication — we can't
+    // just append a service. Tear down and rebuild: serialize the
+    // existing services + the new one into a fresh application tree.
+    final priorServices = _application?.services ?? const <MutableService>[];
+    final merged = <MutableService>[
+      ...priorServices.where((s) => s.uuid.toLowerCase() != service.uuid.toLowerCase()),
+      service,
+    ];
+    await _rebuildApplication(bus, adapterPath, merged);
+
+    // Emit on serviceAddedStream to match CoreBluetooth's callback model.
+    _ensureServiceAddedController()
+        .add((serviceUuid: service.uuid, error: null));
+  }
 
   @override
   Stream<({String serviceUuid, String? error})> serviceAddedStream([
     PeripheralManagerSession? session,
-  ]) async* {
-    throw UnimplementedError();
-  }
+  ]) =>
+      _ensureServiceAddedController().stream;
 
   @override
   Future<void> removeService({
     PeripheralManagerSession? session,
     required String serviceUuid,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    final current = _application?.services ?? const <MutableService>[];
+    final remaining = current
+        .where((s) => s.uuid.toLowerCase() != serviceUuid.toLowerCase())
+        .toList();
+    if (remaining.length == current.length) return;
+    if (remaining.isEmpty) {
+      await _unregisterApplication();
+      return;
+    }
+    final bus = await _ensurePeripheralBus();
+    final adapterPath = await _ensureAdapterPath();
+    await _rebuildApplication(bus, adapterPath, remaining);
+  }
 
   @override
-  Future<void> removeAllServices({PeripheralManagerSession? session}) async =>
-      throw UnimplementedError();
+  Future<void> removeAllServices({PeripheralManagerSession? session}) async {
+    await _unregisterApplication();
+  }
+
+  Future<void> _unregisterApplication() async {
+    final app = _application;
+    if (app == null) return;
+    _application = null;
+    final bus = _peripheralBus;
+    final adapterPath = _adapterPath;
+    if (bus == null || adapterPath == null) return;
+    await bus.callMethod(
+      destination: 'org.bluez',
+      path: DBusObjectPath(adapterPath),
+      interface: 'org.bluez.GattManager1',
+      member: 'UnregisterApplication',
+      values: [app.rootPath],
+    );
+    // DBusObject children stay registered on our bus (no
+    // unregisterObject in dbus 0.2.5), but the app counter guarantees
+    // any future registration uses a fresh path.
+  }
+
+  Future<void> _rebuildApplication(
+    DBusClient bus,
+    String adapterPath,
+    List<MutableService> services,
+  ) async {
+    // Unregister the prior application on BlueZ's side first. Paths for
+    // the new tree are fresh, so no collision — but leaving the old
+    // application registered would leave BlueZ advertising stale GATT
+    // metadata.
+    await _unregisterApplication();
+
+    final appRoot =
+        DBusObjectPath('/com/nicospencer/butane/app${++_applicationCounter}');
+    final app = GattApplication(appRoot);
+    bus.registerObject(app);
+
+    final registered = <MutableService>[];
+    final delegate = _GattDelegate(this);
+    var serviceIndex = 0;
+    for (final svc in services) {
+      final servicePath =
+          DBusObjectPath('${appRoot.value}/service$serviceIndex');
+      final serviceObj = GattService(
+        objectPath: servicePath,
+        uuid: svc.uuid,
+        isPrimary: svc.isPrimary,
+      );
+      app.addChild(serviceObj);
+      bus.registerObject(serviceObj);
+
+      var charIndex = 0;
+      for (final char in svc.characteristics) {
+        final charPath =
+            DBusObjectPath('${servicePath.value}/char$charIndex');
+        final charObj = GattCharacteristic(
+          objectPath: charPath,
+          servicePath: servicePath,
+          uuid: char.uuid,
+          serviceUuid: svc.uuid,
+          flags: flagsFromCharacteristicProperty(char.properties),
+          delegate: delegate,
+          initialValue: char.value,
+        );
+        app.addChild(charObj);
+        bus.registerObject(charObj);
+        delegate.registerCharacteristic(svc.uuid, char.uuid, charObj);
+
+        var descIndex = 0;
+        for (final desc in char.descriptors ?? const <MutableDescriptor>[]) {
+          final descPath =
+              DBusObjectPath('${charPath.value}/desc$descIndex');
+          final descObj = GattDescriptor(
+            objectPath: descPath,
+            characteristicPath: charPath,
+            uuid: desc.uuid,
+            value: desc.value,
+          );
+          app.addChild(descObj);
+          bus.registerObject(descObj);
+          descIndex++;
+        }
+        charIndex++;
+      }
+      registered.add(svc);
+      serviceIndex++;
+    }
+
+    _application = _GattApplicationRegistration(
+      root: app,
+      rootPath: appRoot,
+      services: registered,
+      delegate: delegate,
+    );
+
+    final result = await bus.callMethod(
+      destination: 'org.bluez',
+      path: DBusObjectPath(adapterPath),
+      interface: 'org.bluez.GattManager1',
+      member: 'RegisterApplication',
+      values: [
+        appRoot,
+        DBusDict(
+          DBusSignature('s'),
+          DBusSignature('v'),
+          const <DBusValue, DBusValue>{},
+        ),
+      ],
+    );
+    if (result is DBusMethodErrorResponse) {
+      _application = null;
+      throw StateError(
+        'BlueZ RegisterApplication failed: '
+        '${result.errorName} ${result.values}',
+      );
+    }
+  }
 
   @override
   Future<void> respondToRequest({
@@ -461,8 +993,21 @@ base class ButaneBluez extends ButanePlatformInterface {
     required int requestId,
     required AttResult result,
     Uint8List? value,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    final read = _pendingReads.remove(requestId);
+    if (read != null) {
+      read.complete((result: result, value: value));
+      return;
+    }
+    final write = _pendingWrites.remove(requestId);
+    if (write != null) {
+      write.complete(result);
+      return;
+    }
+    // Unknown request id — silently ignore rather than throwing, since
+    // CoreBluetooth tolerates stale respondToRequest calls (e.g.
+    // central disconnects mid-read).
+  }
 
   @override
   Future<bool> updateValue({
@@ -470,20 +1015,106 @@ base class ButaneBluez extends ButanePlatformInterface {
     required String serviceUuid,
     required String characteristicUuid,
     required Uint8List value,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    final app = _application;
+    if (app == null) return false;
+    final char = app.delegate.findCharacteristic(serviceUuid, characteristicUuid);
+    if (char == null) return false;
+    // Mirror CoreBluetooth's return: true iff anyone is subscribed. We
+    // always update the cached Value; BlueZ only pushes a notification
+    // when `notifying` is true (see GattCharacteristic.setValue).
+    final delivered = char.notifying;
+    char.setValue(value);
+    return delivered;
+  }
 
   @override
   Stream<AttRequest> readRequestStream([
     PeripheralManagerSession? session,
-  ]) async* {
-    throw UnimplementedError();
-  }
+  ]) =>
+      _ensureReadRequestController().stream;
 
   @override
   Stream<List<AttRequest>> writeRequestsStream([
     PeripheralManagerSession? session,
-  ]) async* {
-    throw UnimplementedError();
+  ]) =>
+      _ensureWriteRequestsController().stream;
+}
+
+/// Snapshot of the currently registered GATT application so we can
+/// rebuild / tear it down on subsequent add/remove calls.
+class _GattApplicationRegistration {
+  _GattApplicationRegistration({
+    required this.root,
+    required this.rootPath,
+    required this.services,
+    required this.delegate,
+  });
+
+  final GattApplication root;
+  final DBusObjectPath rootPath;
+  final List<MutableService> services;
+  final _GattDelegate delegate;
+}
+
+/// Bridges [GattCharacteristic] D-Bus callbacks back to the
+/// [ButaneBluez] streams + pending-request maps.
+class _GattDelegate implements GattServerDelegate {
+  _GattDelegate(this._plugin);
+
+  final ButaneBluez _plugin;
+
+  /// Characteristic lookup: `<serviceUuid>/<characteristicUuid>` →
+  /// object. UUIDs lowercased so lookups are case-insensitive.
+  final Map<String, GattCharacteristic> _characteristics = {};
+
+  void registerCharacteristic(
+    String serviceUuid,
+    String characteristicUuid,
+    GattCharacteristic char,
+  ) {
+    _characteristics[_key(serviceUuid, characteristicUuid)] = char;
+  }
+
+  GattCharacteristic? findCharacteristic(
+    String serviceUuid,
+    String characteristicUuid,
+  ) =>
+      _characteristics[_key(serviceUuid, characteristicUuid)];
+
+  String _key(String s, String c) => '${s.toLowerCase()}/${c.toLowerCase()}';
+
+  @override
+  int allocateRequestId() => ++_plugin._requestCounter;
+
+  @override
+  Future<({AttResult result, Uint8List? value})> onReadRequest(
+    AttRequest request,
+  ) {
+    final completer =
+        Completer<({AttResult result, Uint8List? value})>();
+    _plugin._pendingReads[request.requestId] = completer;
+    _plugin._ensureReadRequestController().add(request);
+    return completer.future;
+  }
+
+  @override
+  Future<AttResult> onWriteRequest(AttRequest request) {
+    final completer = Completer<AttResult>();
+    _plugin._pendingWrites[request.requestId] = completer;
+    // CoreBluetooth delivers writes as a batch (a single central can
+    // queue multiple within one ATT MTU). BlueZ hands us one at a time
+    // over D-Bus — emit single-element batches so listeners don't have
+    // to special-case either shape.
+    _plugin._ensureWriteRequestsController().add([request]);
+    return completer.future;
+  }
+
+  @override
+  void onNotifyingChanged(String characteristicUuid, bool notifying) {
+    // No-op for now. The plugin tracks notifying state via
+    // GattCharacteristic.notifying directly; this hook exists so future
+    // work (e.g. per-characteristic subscribe/unsubscribe streams) has
+    // somewhere to land without another round of interface churn.
   }
 }
