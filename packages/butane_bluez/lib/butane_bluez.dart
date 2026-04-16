@@ -569,69 +569,33 @@ base class ButaneBluez extends ButanePlatformInterface {
     final device = _requireDevice(session);
     if (device.connected) return;
 
-    // Use `ConnectProfile(uuid)` instead of `Connect()` when the peripheral
-    // advertises at least one service UUID. Per BlueZ docs
-    // (org.bluez.Device1.rst):
+    // We use the generic `Connect()` rather than `ConnectProfile(uuid)`:
     //
-    //   Connect()         → "Connects all profiles the remote device supports
-    //                        that can be connected to and have been flagged
-    //                        as auto-connectable." For dual-mode devices this
-    //                        tries BR/EDR profiles too; those attempts can
-    //                        hang until D-Bus default reply timeout (~25s).
-    //   ConnectProfile(u) → "Connects a specific profile of this device. The
-    //                        UUID provided is the remote service UUID for
-    //                        the profile."
+    //   * `Connect()` establishes the link AND kicks off full service
+    //     discovery — `ServicesResolved` transitions to true, and
+    //     `gattServices` populates. This is what callers expect from
+    //     "connect" in a GATT client.
+    //   * `ConnectProfile(uuid)` establishes the LE link only — it does
+    //     NOT trigger GATT service discovery, so `ServicesResolved` stays
+    //     false forever. Verified empirically in the ble_flow burn on
+    //     2026-04-15 (connect passed, discoverServices timed out at 25s
+    //     waiting for ServicesResolved).
     //
-    // With `ConnectProfile(<gatt-service-uuid>)`, BlueZ establishes the LE
-    // link and connects only that GATT profile — no BR/EDR attempts, no
-    // hangs. Once the LE link is up, ServicesResolved transitions to true
-    // and all services/characteristics become queryable as usual.
-    // Pick a GATT service UUID to connect. Preference order:
-    //   1. UUIDs the device is advertising (authoritative for *this* peer).
-    //   2. UUIDs the caller requested in [scan] (cached in _scanUuidFilter).
-    //      BlueZ caches devices across sessions and an entry for this MAC
-    //      may have no UUIDs even though the peer is advertising them —
-    //      e.g. when the cache predates the advertisement or when BlueZ
-    //      merged the LE advert into a BR/EDR entry. The scan filter UUID
-    //      is still the profile the caller wants.
-    final advertisedUuids = device.uuids.toList(growable: false);
-    final profileUuid = advertisedUuids.isNotEmpty
-        ? advertisedUuids.first
-        : (_scanUuidFilter.isNotEmpty
-            ? BlueZUUID(_scanUuidFilter.first)
-            : null);
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] connect: peripheral=${session.peripheralIdentifier} '
-      'addressType=${device.addressType.name} '
-      'advertisedUuids=${advertisedUuids.map((u) => u.id).toList()} '
-      'scanFilter=$_scanUuidFilter '
-      'profileUuid=${profileUuid?.id}',
-    );
-
-    // Fire-and-forget: both Connect/ConnectProfile can have varying reply
-    // timing. We poll `device.connected` below. This IIFE just logs the
-    // eventual reply so we can see BlueZ errors during debugging.
+    // Earlier iterations avoided `Connect()` because it hung for ~25s on
+    // dual-mode peers (BR/EDR profile attempts on addresses that were only
+    // reachable via LE). The fix wasn't to switch methods — it was to stop
+    // scan() from seeding stale cached devices and to keep discovery running
+    // across cancelScan so the discovered random-address device survives
+    // to the connect step. With those fixes in place, `Connect()` on a
+    // freshly-advertised LE peer returns in ~1s without BR/EDR fallback.
+    // Fire-and-forget: poll `device.connected` below. The IIFE logs the
+    // eventual reply for diagnostics.
     unawaited(() async {
       try {
-        if (profileUuid != null) {
-          await device.connectProfile(profileUuid);
-          // ignore: avoid_print
-          print('[butane_bluez] connectProfile replied OK');
-        } else {
-          // No UUID to target — fall back to the generic Connect(). This
-          // path is LE-safe because scan was set to `Transport: le`, but
-          // Connect() may still try all profiles.
-          await device.connect();
-          // ignore: avoid_print
-          print('[butane_bluez] connect replied OK');
-        }
+        await device.connect();
       } catch (err) {
         // ignore: avoid_print
-        print(
-          '[butane_bluez] ${profileUuid != null ? "connectProfile" : "connect"} '
-          'errored: $err',
-        );
+        print('[butane_bluez] connect errored: $err');
       }
     }());
 
@@ -646,11 +610,6 @@ base class ButaneBluez extends ButanePlatformInterface {
       }
       await Future<void>.delayed(pollInterval);
     }
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] connect: connected=${device.connected} '
-      'servicesResolved=${device.servicesResolved}',
-    );
   }
 
   @override
