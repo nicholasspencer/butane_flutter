@@ -116,3 +116,37 @@ libdbus-1-dev libbluetooth-dev
 # Utilities
 git curl unzip xz-utils zip screen
 ```
+
+## BlueZ Controller Configuration (required for dual-mode peers)
+
+`butane_bluez` targets LE-GATT only. When the Linux central connects to a
+dual-mode public-addressed peer (e.g. a Mac/iPhone whose BLE advertising
+uses the same address as its BR/EDR radio), BlueZ 5.72's
+`select_conn_bearer` (`src/device.c`) breaks bearer-selection ties toward
+BR/EDR — it tries HFP/AVDTP profiles instead of opening an ATT channel,
+and `ServicesResolved` never flips. `Device1.ConnectProfile(uuid)` doesn't
+help: it's a BR/EDR-only code path in 5.72 (`PreferredBearer` landed in
+5.80+ and even there only biases reconnects).
+
+The only deterministic fix is to put the controller in LE-only mode via
+`/etc/bluetooth/main.conf`:
+
+```ini
+[General]
+ControllerMode = le
+```
+
+`bluetoothd` holds the management socket and issues `MGMT_OP_SET_BREDR, 0`
+on adapter init; our Dart code doesn't need any privileged API at runtime.
+
+Apply:
+
+```bash
+sudo sed -i 's/^#ControllerMode = dual/ControllerMode = le/' /etc/bluetooth/main.conf
+sudo systemctl restart bluetooth
+grep '^ControllerMode' /etc/bluetooth/main.conf  # → ControllerMode = le
+```
+
+If the Linux host also needs classic BT for other workloads, run the plugin
+on a dedicated adapter or host — there is no per-connection LE override on
+BlueZ 5.72 that reaches through D-Bus.

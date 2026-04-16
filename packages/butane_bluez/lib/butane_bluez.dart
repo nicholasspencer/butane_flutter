@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bluez/bluez.dart';
@@ -8,24 +7,6 @@ import 'package:dbus/dbus.dart';
 
 import 'src/advertising.dart';
 import 'src/gatt_server.dart';
-
-/// DEBUG: print() is unreliable on Flutter Linux release (routed through engine
-/// logging, not stdout). Append diagnostic lines to /tmp/butane-diag.log so we
-/// can trace the scan/connect flow during burns.
-void _diag(String msg) {
-  final ts = DateTime.now().toIso8601String();
-  // Try multiple sinks because Flutter Linux release apps can have
-  // unpredictable stdio / file-permission behavior under nohup.
-  try {
-    File('/home/nico/butane-diag.log')
-        .writeAsStringSync('$ts $msg\n', mode: FileMode.append);
-  } catch (err) {
-    File('/tmp/butane-diag-err.log').writeAsStringSync(
-      '$ts HOME_WRITE_FAILED: $err\n',
-      mode: FileMode.append,
-    );
-  }
-}
 
 /// Linux implementation of `butane` backed by BlueZ over D-Bus.
 ///
@@ -128,25 +109,8 @@ base class ButaneBluez extends ButanePlatformInterface {
   };
 
   static void registerWith() {
-    // Write marker to filesystem BEFORE any other code so we can prove
-    // registerWith was entered. Use low-level File to avoid any dependency
-    // on _diag or log sinks that might fail.
-    try {
-      File('/home/nico/butane-register.log').writeAsStringSync(
-        '${DateTime.now().toIso8601String()} registerWith entered\n',
-        mode: FileMode.append,
-      );
-    } catch (_) {}
     instance = ButaneBluez();
     ButanePlatformInterface.instance = instance;
-    try {
-      File('/home/nico/butane-register.log').writeAsStringSync(
-        '${DateTime.now().toIso8601String()} registerWith complete '
-            'instance=${identityHashCode(instance)} '
-            'platformInstance=${identityHashCode(ButanePlatformInterface.instance)}\n',
-        mode: FileMode.append,
-      );
-    } catch (_) {}
   }
 
   Future<void> _ensureConnected() {
@@ -165,7 +129,6 @@ base class ButaneBluez extends ButanePlatformInterface {
 
   @override
   Future<ClientState> clientState([Session? session]) async {
-    _diag('clientState() called');
     await _ensureConnected();
     final adapter = _defaultAdapter;
     if (adapter == null) return ClientState.unsupported;
@@ -229,15 +192,12 @@ base class ButaneBluez extends ButanePlatformInterface {
     _scanUuidFilter = forServices == null
         ? const {}
         : {for (final u in forServices) u.toLowerCase()};
-    _diag('scan() ENTRY filter=$_scanUuidFilter forServices=$forServices');
 
     await _ensureConnected();
     final adapter = _defaultAdapter;
     if (adapter == null) {
       throw StateError('No BlueZ adapter available');
     }
-    _diag('scan() adapter=${adapter.address} discovering=${adapter.discovering} '
-        'cacheSize=${_client.devices.length}');
 
     // Purge stale cached devices that match our filter. BlueZ's
     // `device.uuids` is cumulative — any service UUID ever seen for a MAC
@@ -258,18 +218,15 @@ base class ButaneBluez extends ButanePlatformInterface {
     // Targeted: only purge non-connected devices that match the filter,
     // so unrelated cached peers stay intact.
     if (_scanUuidFilter.isNotEmpty) {
-      var purged = 0;
       for (final device in List<BlueZDevice>.from(_client.devices)) {
         if (device.connected) continue;
         if (!_matchesScanFilter(device)) continue;
+        // Best-effort: if removeDevice fails (e.g. device already gone)
+        // the next scan will still pick up a fresh advert.
         try {
           await adapter.removeDevice(device);
-          purged++;
-        } catch (err) {
-          _diag('scan() purge ${device.address} FAILED: $err');
-        }
+        } catch (_) {}
       }
-      _diag('scan() purged=$purged');
     }
 
     // BlueZ's SetDiscoveryFilter expects a{sv} — each value is a variant.
@@ -289,13 +246,11 @@ base class ButaneBluez extends ButanePlatformInterface {
     // can apply the new filter cleanly. BlueZ requires filter updates to
     // happen while discovery is stopped.
     if (adapter.discovering) {
-      _diag('scan() stopping existing discovery');
       await adapter.stopDiscovery();
     }
     await adapter.setDiscoveryFilter(filter);
     await adapter.startDiscovery();
     _scanning = true;
-    _diag('scan() started discovery OK scanning=true');
   }
 
   /// True when [device] should be emitted under the current scan filter.
@@ -324,23 +279,14 @@ base class ButaneBluez extends ButanePlatformInterface {
     // against scan() would randomly drop entries depending on when the
     // async onListen body runs vs. when scan() flips the flag.
     void live(BlueZDevice device) {
-      if (!_scanning) {
-        _diag('live() ${device.address} SKIP scanning=false');
-        return;
-      }
-      final matches = _matchesScanFilter(device);
-      _diag('live() ${device.address} name="${device.name}" '
-          'uuids=${device.uuids.map((u) => u.toString()).toList()} '
-          'matches=$matches filter=$_scanUuidFilter');
-      if (!matches) return;
+      if (!_scanning) return;
+      if (!_matchesScanFilter(device)) return;
       if (!controller.isClosed) controller.add(_toScanResult(device));
     }
 
     void watchDevice(BlueZDevice device) {
       subs.add(
         device.propertiesChangedStream.listen((changed) {
-          _diag('propsChanged ${device.address} changed=$changed '
-              'uuids=${device.uuids.map((u) => u.toString()).toList()}');
           // A late `UUIDs` update may flip a previously-unmatched device into
           // the filter — live() re-checks, so no extra handling needed here.
           if (changed.any(_advertRelevantProps.contains)) live(device);
@@ -350,15 +296,11 @@ base class ButaneBluez extends ButanePlatformInterface {
 
     controller = StreamController<ScanResult>.broadcast(
       onListen: () async {
-        _diag('scanStream.onListen ENTRY');
         await _ensureConnected();
         if (_defaultAdapter == null) {
-          _diag('scanStream.onListen NO ADAPTER');
           await controller.close();
           return;
         }
-        _diag('scanStream.onListen cacheSize=${_client.devices.length} '
-            'scanning=$_scanning');
         // Do NOT seed from cache. CoreBluetooth's `scanForPeripherals`
         // only reports peripherals that emit a fresh advert in the current
         // scan session; already-cached peers come from
@@ -379,8 +321,6 @@ base class ButaneBluez extends ButanePlatformInterface {
         // New discoveries.
         subs.add(
           _client.deviceAddedStream.listen((device) {
-            _diag('deviceAddedStream ${device.address} name="${device.name}" '
-                'uuids=${device.uuids.map((u) => u.toString()).toList()}');
             live(device);
             watchDevice(device);
           }),
@@ -662,60 +602,30 @@ base class ButaneBluez extends ButanePlatformInterface {
     final device = _requireDevice(session);
     if (device.connected) return;
 
-    // Connection strategy depends on whether the caller supplied a service
-    // UUID via [scan]'s `forServices`:
+    // Use `Device1.Connect()` for all peers. For dual-mode public-address
+    // peripherals (e.g. a Mac advertising over LE with the same address it
+    // uses for BR/EDR) this relies on the controller being in LE-only mode
+    // — `ControllerMode = le` in `/etc/bluetooth/main.conf`. Without that,
+    // BlueZ 5.72's `select_conn_bearer` (src/device.c) breaks ties toward
+    // BR/EDR when both bearers have similar timestamps, tries HFP/AVDTP
+    // profiles, and never runs GATT primary service discovery. There is
+    // no D-Bus-only workaround on 5.72 — `PreferredBearer` landed in 5.80+.
+    // See packages/butane_bluez/README.md for the setup requirement.
     //
-    //   * `ConnectProfile(uuid)` — used when a filter UUID is available.
-    //     Forces LE transport for dual-mode public-address peers (e.g. a
-    //     Mac advertising over LE with its BR/EDR MAC): BlueZ resolves the
-    //     UUID as a GATT profile, picks the LE bearer, and routes the
-    //     connection through bluetoothd's GATT client, which then issues
-    //     ATT primary service discovery. `ServicesResolved` flips to true
-    //     when discovery completes. Verified in the ble_flow burn on
-    //     2026-04-16: with `Connect()` the Mac's public-address peer was
-    //     connected via BR/EDR (HFP/AVDTP profile attempts in journalctl),
-    //     ServicesResolved stayed false. Switching to ConnectProfile with
-    //     the test-service UUID routes the connection over LE and GATT
-    //     discovery runs.
-    //   * `Connect()` — fallback when no filter UUID is known. For dual-mode
-    //     peers this may pick BR/EDR (which doesn't trigger LE GATT
-    //     discovery), but for single-mode LE peers it's correct.
-    //
-    // Per BlueZ docs (org.bluez.Device.rst): for unbonded dual-mode peers
-    // with equal bearer timestamps, `Connect()` breaks ties toward BR/EDR.
-    // `ConnectProfile(uuid)` sidesteps the tie-breaker by naming the
-    // profile explicitly.
-    //
-    // Fire-and-forget + error capture. If the DBus call itself fails
-    // (e.g. "org.bluez.Error.Failed: Not connectable"), surface that
-    // error in the poll loop rather than hiding it — an early error
-    // diagnoses faster than a 60s timeout.
-    final profileUuid = _scanUuidFilter.isNotEmpty
-        ? BlueZUUID(_scanUuidFilter.first)
-        : null;
-    _diag('connect() ${session.peripheralIdentifier} '
-        'method=${profileUuid != null ? "ConnectProfile($profileUuid)" : "Connect()"}');
+    // Fire-and-forget + error capture. We poll `device.connected` below
+    // because the D-Bus reply can be delayed past the default timeout on
+    // some peers, while the `Connected` property still flips promptly.
     Object? connectError;
-    bool connectReturned = false;
     unawaited(() async {
       try {
-        if (profileUuid != null) {
-          await device.connectProfile(profileUuid);
-        } else {
-          await device.connect();
-        }
-        connectReturned = true;
-        _diag('connect() method returned successfully '
-            'servicesResolved=${device.servicesResolved} '
-            'gattServices=${device.gattServices.length}');
+        await device.connect();
       } catch (err) {
         connectError = err;
-        _diag('connect() method THREW: $err');
       }
     }());
 
     const pollInterval = Duration(milliseconds: 250);
-    final deadline = DateTime.now().add(const Duration(seconds: 60));
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
     while (!device.connected) {
       if (connectError != null) {
         throw StateError(
@@ -726,16 +636,11 @@ base class ButaneBluez extends ButanePlatformInterface {
       if (DateTime.now().isAfter(deadline)) {
         throw StateError(
           'BlueZ connect timed out for ${session.peripheralIdentifier}: '
-          'device never became connected within 60s '
-          '(connectError=$connectError)',
+          'device never became connected within 30s',
         );
       }
       await Future<void>.delayed(pollInterval);
     }
-    _diag('connect() connected=true '
-        'connectReturned=$connectReturned '
-        'servicesResolved=${device.servicesResolved} '
-        'gattServices=${device.gattServices.length}');
   }
 
   @override
@@ -820,56 +725,22 @@ base class ButaneBluez extends ButanePlatformInterface {
     // filter is advisory only; BlueZ resolves all services regardless
     // and we return them from [services()] where callers can filter.
     //
-    // Poll instead of relying on PropertiesChanged signals because
-    // the BlueZClient's signal delivery can be disrupted when the
-    // preceding Connect() D-Bus call times out with NoReply (which
-    // is normal for dual-mode devices where BR/EDR profile attempts
-    // extend beyond the D-Bus reply timeout).
-    _diag(
-      'discoverServices entry: '
-      'connected=${device.connected} '
-      'servicesResolved=${device.servicesResolved} '
-      'gattServices=${device.gattServices.length}',
-    );
+    // Poll instead of listening to PropertiesChanged: the `ServicesResolved`
+    // edge can land before we subscribe, and the gattServices list also
+    // needs the InterfacesAdded signals that the poll sees without special
+    // handling.
     if (device.servicesResolved && device.gattServices.isNotEmpty) return;
     const pollInterval = Duration(milliseconds: 250);
-    final start = DateTime.now();
-    final deadline = start.add(const Duration(seconds: 45));
-    DateTime lastLog = start;
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
     while (!device.servicesResolved || device.gattServices.isEmpty) {
       if (DateTime.now().isAfter(deadline)) {
-        _diag(
-          'discoverServices TIMEOUT: '
-          'servicesResolved=${device.servicesResolved} '
-          'gattServices=${device.gattServices.length} '
-          'connected=${device.connected} '
-          'uuids=[${device.uuids.map((u) => u.id).join(",")}]',
-        );
         throw TimeoutException(
           'BlueZ did not resolve services on '
-          '${session.peripheralIdentifier} within 45 s',
+          '${session.peripheralIdentifier} within 15 s',
         );
       }
       await Future<void>.delayed(pollInterval);
-      if (DateTime.now().difference(lastLog) >
-          const Duration(seconds: 2)) {
-        lastLog = DateTime.now();
-        _diag(
-          'discoverServices polling '
-          't=${lastLog.difference(start).inSeconds}s '
-          'servicesResolved=${device.servicesResolved} '
-          'gattServices=${device.gattServices.length} '
-          'connected=${device.connected} '
-          'uuids=[${device.uuids.map((u) => u.id).join(",")}]',
-        );
-      }
     }
-    _diag(
-      'discoverServices done: '
-      'servicesResolved=${device.servicesResolved} '
-      'gattServices=${device.gattServices.length} '
-      'uuids=[${device.gattServices.map((s) => s.uuid.id).join(",")}]',
-    );
   }
 
   @override
@@ -878,10 +749,6 @@ base class ButaneBluez extends ButanePlatformInterface {
   }) async {
     await _ensureConnected();
     final device = _requireDevice(session);
-    _diag(
-      'services(): gattServices=${device.gattServices.length} '
-      'uuids=[${device.gattServices.map((s) => s.uuid.id).join(",")}]',
-    );
     return [
       for (final svc in device.gattServices)
         Service(uuid: svc.uuid.id, isPrimary: svc.primary),
@@ -901,20 +768,7 @@ base class ButaneBluez extends ButanePlatformInterface {
     // However, the InterfacesAdded D-Bus signals for characteristic objects
     // may arrive slightly after ServicesResolved becomes true. Poll until
     // at least one characteristic appears (or timeout).
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] discoverCharacteristics entry: service=$serviceUuid '
-      'gattServices=${device.gattServices.length} '
-      'charCount=${service.gattCharacteristics.length}',
-    );
-    if (service.gattCharacteristics.isNotEmpty) {
-      // ignore: avoid_print
-      print(
-        '[butane_bluez] discoverCharacteristics early-return '
-        '(chars=${service.gattCharacteristics.length})',
-      );
-      return;
-    }
+    if (service.gattCharacteristics.isNotEmpty) return;
     const pollInterval = Duration(milliseconds: 250);
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (service.gattCharacteristics.isEmpty) {
@@ -926,11 +780,6 @@ base class ButaneBluez extends ButanePlatformInterface {
       }
       await Future<void>.delayed(pollInterval);
     }
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] discoverCharacteristics poll-done '
-      '(chars=${service.gattCharacteristics.length})',
-    );
   }
 
   @override
@@ -941,12 +790,6 @@ base class ButaneBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final device = _requireDevice(session);
     final service = _requireService(device, serviceUuid);
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] characteristics() service=$serviceUuid '
-      'chars=${service.gattCharacteristics.length} '
-      'uuids=[${service.gattCharacteristics.map((c) => c.uuid.id).join(",")}]',
-    );
     return [
       for (final char in service.gattCharacteristics)
         Characteristic(
