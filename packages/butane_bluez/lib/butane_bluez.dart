@@ -698,11 +698,24 @@ base class ButaneBluez extends ButanePlatformInterface {
     // preceding Connect() D-Bus call times out with NoReply (which
     // is normal for dual-mode devices where BR/EDR profile attempts
     // extend beyond the D-Bus reply timeout).
-    if (device.servicesResolved) return;
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] discoverServices entry: '
+      'connected=${device.connected} '
+      'servicesResolved=${device.servicesResolved} '
+      'gattServices=${device.gattServices.length}',
+    );
+    if (device.servicesResolved && device.gattServices.isNotEmpty) return;
     const pollInterval = Duration(milliseconds: 250);
     final deadline = DateTime.now().add(const Duration(seconds: 25));
-    while (!device.servicesResolved) {
+    while (!device.servicesResolved || device.gattServices.isEmpty) {
       if (DateTime.now().isAfter(deadline)) {
+        // ignore: avoid_print
+        print(
+          '[butane_bluez] discoverServices TIMEOUT: '
+          'servicesResolved=${device.servicesResolved} '
+          'gattServices=${device.gattServices.length}',
+        );
         throw TimeoutException(
           'BlueZ did not resolve services on '
           '${session.peripheralIdentifier} within 25 s',
@@ -710,6 +723,13 @@ base class ButaneBluez extends ButanePlatformInterface {
       }
       await Future<void>.delayed(pollInterval);
     }
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] discoverServices done: '
+      'servicesResolved=${device.servicesResolved} '
+      'gattServices=${device.gattServices.length} '
+      'uuids=[${device.gattServices.map((s) => s.uuid.id).join(",")}]',
+    );
   }
 
   @override
@@ -718,6 +738,11 @@ base class ButaneBluez extends ButanePlatformInterface {
   }) async {
     await _ensureConnected();
     final device = _requireDevice(session);
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] services(): gattServices=${device.gattServices.length} '
+      'uuids=[${device.gattServices.map((s) => s.uuid.id).join(",")}]',
+    );
     return [
       for (final svc in device.gattServices)
         Service(uuid: svc.uuid.id, isPrimary: svc.primary),
