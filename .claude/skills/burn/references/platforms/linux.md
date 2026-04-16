@@ -26,8 +26,8 @@
 - Remote harness log: `ssh <host> 'cat ~/.burn-harness.log'`.
 
 ## Known blockers
-The deployment pipeline (probe → preflight → push → build → launch → teardown) works end-to-end.
-Linux-as-central burns now reach the BLE flow stage. The remaining blocker is the Linux peripheral role:
-- **butane_flutter-8h5.6 / 8h5.7**: BlueZ peripheral role (advertising + GATT services) is not yet implemented, so a Linux peripheral still can't respond to the coordinator's BLE flow. Linux-as-central is unblocked.
+No known blockers for the mac-central ↔ linux-peripheral burn direction. Full `ble_flow` (15 steps) passes green as of 2026-04-16 (8h5.6 advertising + 8h5.7 GATT server implemented).
 
-This is a harness-side gap orthogonal to the burn skill. When it lands, the Linux-as-peripheral burn direction goes green with no burn-skill changes.
+Linux-as-central direction is blocked by **butane_flutter-8h5.5** (Central — Read/Write/Notify) — the central can scan, connect, and discover services, but read/write/notify characteristic operations are not yet implemented.
+
+Teardown note: orphan harness processes from crashed or interrupted burns can pollute mDNS and misdirect the coordinator. `pkill -x butane_harness; pkill -f "^avahi-publish-service "` on the Linux host clears them.
