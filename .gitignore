@@ -301,3 +301,4 @@ n
 
 # Burn skill run artifacts
 .burns/
+.claude/scheduled_tasks.lock
