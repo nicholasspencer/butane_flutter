@@ -539,25 +539,61 @@ base class ButaneBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final device = _requireDevice(session);
     if (device.connected) return;
-    // Fire Device1.Connect() and poll for the Connected property.
+
+    // Use `ConnectProfile(uuid)` instead of `Connect()` when the peripheral
+    // advertises at least one service UUID. Per BlueZ docs
+    // (org.bluez.Device1.rst):
     //
-    // BlueZ's Connect() doesn't reply until *all* profile connection
-    // attempts finish (including BR/EDR profiles). For dual-mode devices
-    // the BR/EDR profile attempts can take 25-30s to timeout even though
-    // the LE connection succeeds within 1-2s. Fire-and-forget + poll.
-    unawaited(device.connect().catchError((_) {}));
+    //   Connect()         → "Connects all profiles the remote device supports
+    //                        that can be connected to and have been flagged
+    //                        as auto-connectable." For dual-mode devices this
+    //                        tries BR/EDR profiles too; those attempts can
+    //                        hang until D-Bus default reply timeout (~25s).
+    //   ConnectProfile(u) → "Connects a specific profile of this device. The
+    //                        UUID provided is the remote service UUID for
+    //                        the profile."
+    //
+    // With `ConnectProfile(<gatt-service-uuid>)`, BlueZ establishes the LE
+    // link and connects only that GATT profile — no BR/EDR attempts, no
+    // hangs. Once the LE link is up, ServicesResolved transitions to true
+    // and all services/characteristics become queryable as usual.
+    final advertisedUuids = device.uuids.toList(growable: false);
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] connect: peripheral=${session.peripheralIdentifier} '
+      'addressType=${device.addressType.name} '
+      'advertisedUuids=${advertisedUuids.map((u) => u.id).toList()}',
+    );
+
+    if (advertisedUuids.isNotEmpty) {
+      // Fire-and-forget: ConnectProfile still has varying reply timing for
+      // some BlueZ versions. Poll `device.connected` instead of awaiting.
+      unawaited(
+        device.connectProfile(advertisedUuids.first).catchError((_) {}),
+      );
+    } else {
+      // No advertised UUIDs — fall back to the generic Connect(). This path
+      // is LE-safe because scan was set to `Transport: le`, but Connect()
+      // may still try all profiles.
+      unawaited(device.connect().catchError((_) {}));
+    }
 
     const pollInterval = Duration(milliseconds: 250);
     final deadline = DateTime.now().add(const Duration(seconds: 25));
     while (!device.connected) {
       if (DateTime.now().isAfter(deadline)) {
         throw StateError(
-          'BlueZ Connect timed out for ${session.peripheralIdentifier}: '
+          'BlueZ connect timed out for ${session.peripheralIdentifier}: '
           'device never became connected within 25s',
         );
       }
       await Future<void>.delayed(pollInterval);
     }
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] connect: connected=${device.connected} '
+      'servicesResolved=${device.servicesResolved}',
+    );
   }
 
   @override
