@@ -204,10 +204,15 @@ base class ButaneBluez extends ButanePlatformInterface {
         ? const {}
         : {for (final u in forServices) u.toLowerCase()};
 
-    await adapter.setDiscoveryFilter(filter);
-    if (!adapter.discovering) {
-      await adapter.startDiscovery();
+    // If discovery is already running (because a prior cancelScan left it
+    // going — see [cancelScan] for why), stop it first so SetDiscoveryFilter
+    // can apply the new filter cleanly. BlueZ requires filter updates to
+    // happen while discovery is stopped.
+    if (adapter.discovering) {
+      await adapter.stopDiscovery();
     }
+    await adapter.setDiscoveryFilter(filter);
+    await adapter.startDiscovery();
     _scanning = true;
   }
 
@@ -259,13 +264,23 @@ base class ButaneBluez extends ButanePlatformInterface {
           await controller.close();
           return;
         }
-        // Seed with devices BlueZ already knows about (paired or previously-
-        // discovered) *and that match the current filter*. Consumers dedupe on
-        // `peripheralIdentifier` if needed. Non-matching cached devices are
-        // still watched so they can flip into the filter later when a UUIDs
-        // PropertiesChanged arrives.
+        // Seed-from-cache policy mirrors CoreBluetooth:
+        //   - `scanForPeripherals(withServices: nil)` (no filter) → app gets
+        //     a broad stream of anything nearby; we seed cached devices so
+        //     callers get immediate hits for paired/previously-seen peers.
+        //   - `scanForPeripherals(withServices: [uuid])` (filtered) → only
+        //     report peripherals *currently advertising* that service. We
+        //     suppress seed emissions in this branch because BlueZ's cache
+        //     retains stale `UUIDs` from prior sessions even after the real
+        //     peripheral has moved on (or rotated its random address), and
+        //     emitting those stale entries leads the caller to try connecting
+        //     to a device that is no longer reachable. Live adverts flow via
+        //     `PropertiesChanged(RSSI)` through `watchDevice`.
+        final seedFromCache = _scanUuidFilter.isEmpty;
         for (final device in _client.devices) {
-          if (_matchesScanFilter(device) && !controller.isClosed) {
+          if (seedFromCache &&
+              _matchesScanFilter(device) &&
+              !controller.isClosed) {
             controller.add(_toScanResult(device));
           }
           watchDevice(device);
@@ -301,10 +316,19 @@ base class ButaneBluez extends ButanePlatformInterface {
     // ad, or was merged from a stale BR/EDR entry). Resetting breaks that
     // fallback when the caller stops discovery before calling connect.
     // The next scan() overwrites it with a fresh filter.
-    final adapter = _defaultAdapter;
-    if (adapter != null && adapter.discovering) {
-      await adapter.stopDiscovery();
-    }
+    //
+    // Intentionally do NOT call adapter.stopDiscovery() here. BlueZ removes
+    // devices with random addresses from its object tree shortly after
+    // discovery stops (see bluez#214). macOS / iOS peripherals advertise with
+    // rotating RPAs, so a scan→connect sequence that stops discovery between
+    // the two steps races the cleanup — Connect/ConnectProfile then targets
+    // a path that no longer exists and the call hangs until D-Bus reply
+    // timeout.
+    //
+    // Leaving discovery running keeps the discovered RPA alive through the
+    // connect handshake. The next scan() stops+restarts discovery so filter
+    // changes still apply cleanly. Cost: continuous LE scanning until the
+    // plugin shuts down — acceptable for this desktop-Linux plugin.
   }
 
   // --- Mapping helpers ------------------------------------------------------
