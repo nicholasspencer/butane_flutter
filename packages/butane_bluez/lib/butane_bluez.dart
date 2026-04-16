@@ -693,7 +693,10 @@ base class ButaneBluez extends ButanePlatformInterface {
     final profileUuid = _scanUuidFilter.isNotEmpty
         ? BlueZUUID(_scanUuidFilter.first)
         : null;
+    _diag('connect() ${session.peripheralIdentifier} '
+        'method=${profileUuid != null ? "ConnectProfile($profileUuid)" : "Connect()"}');
     Object? connectError;
+    bool connectReturned = false;
     unawaited(() async {
       try {
         if (profileUuid != null) {
@@ -701,8 +704,13 @@ base class ButaneBluez extends ButanePlatformInterface {
         } else {
           await device.connect();
         }
+        connectReturned = true;
+        _diag('connect() method returned successfully '
+            'servicesResolved=${device.servicesResolved} '
+            'gattServices=${device.gattServices.length}');
       } catch (err) {
         connectError = err;
+        _diag('connect() method THREW: $err');
       }
     }());
 
@@ -724,6 +732,10 @@ base class ButaneBluez extends ButanePlatformInterface {
       }
       await Future<void>.delayed(pollInterval);
     }
+    _diag('connect() connected=true '
+        'connectReturned=$connectReturned '
+        'servicesResolved=${device.servicesResolved} '
+        'gattServices=${device.gattServices.length}');
   }
 
   @override
@@ -813,9 +825,8 @@ base class ButaneBluez extends ButanePlatformInterface {
     // preceding Connect() D-Bus call times out with NoReply (which
     // is normal for dual-mode devices where BR/EDR profile attempts
     // extend beyond the D-Bus reply timeout).
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] discoverServices entry: '
+    _diag(
+      'discoverServices entry: '
       'connected=${device.connected} '
       'servicesResolved=${device.servicesResolved} '
       'gattServices=${device.gattServices.length}',
@@ -827,9 +838,8 @@ base class ButaneBluez extends ButanePlatformInterface {
     DateTime lastLog = start;
     while (!device.servicesResolved || device.gattServices.isEmpty) {
       if (DateTime.now().isAfter(deadline)) {
-        // ignore: avoid_print
-        print(
-          '[butane_bluez] discoverServices TIMEOUT: '
+        _diag(
+          'discoverServices TIMEOUT: '
           'servicesResolved=${device.servicesResolved} '
           'gattServices=${device.gattServices.length} '
           'connected=${device.connected} '
@@ -844,9 +854,8 @@ base class ButaneBluez extends ButanePlatformInterface {
       if (DateTime.now().difference(lastLog) >
           const Duration(seconds: 2)) {
         lastLog = DateTime.now();
-        // ignore: avoid_print
-        print(
-          '[butane_bluez] discoverServices polling '
+        _diag(
+          'discoverServices polling '
           't=${lastLog.difference(start).inSeconds}s '
           'servicesResolved=${device.servicesResolved} '
           'gattServices=${device.gattServices.length} '
@@ -855,9 +864,8 @@ base class ButaneBluez extends ButanePlatformInterface {
         );
       }
     }
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] discoverServices done: '
+    _diag(
+      'discoverServices done: '
       'servicesResolved=${device.servicesResolved} '
       'gattServices=${device.gattServices.length} '
       'uuids=[${device.gattServices.map((s) => s.uuid.id).join(",")}]',
@@ -870,9 +878,8 @@ base class ButaneBluez extends ButanePlatformInterface {
   }) async {
     await _ensureConnected();
     final device = _requireDevice(session);
-    // ignore: avoid_print
-    print(
-      '[butane_bluez] services(): gattServices=${device.gattServices.length} '
+    _diag(
+      'services(): gattServices=${device.gattServices.length} '
       'uuids=[${device.gattServices.map((s) => s.uuid.id).join(",")}]',
     );
     return [
