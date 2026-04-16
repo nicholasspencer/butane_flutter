@@ -539,7 +539,34 @@ base class ButaneBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final device = _requireDevice(session);
     if (device.connected) return;
-    await device.connect();
+    // Use raw D-Bus for the connect call because:
+    // 1. BlueZDevice.connect() swallows the error response — if BlueZ
+    //    returns org.bluez.Error.Failed we'd hang forever waiting for the
+    //    Connected property change that will never arrive.
+    // 2. We can enforce a Dart-side timeout that's shorter than the
+    //    coordinator's command timeout, giving a clearer error message.
+    final bus = await _ensurePeripheralBus();
+    final macFragment = 'dev_${session.peripheralIdentifier.replaceAll(':', '_')}';
+    final adapterPath = await _ensureAdapterPath();
+    final devicePath = DBusObjectPath('$adapterPath/$macFragment');
+    final result = await bus.callMethod(
+      destination: 'org.bluez',
+      path: devicePath,
+      interface: 'org.bluez.Device1',
+      member: 'Connect',
+    ).timeout(
+      const Duration(seconds: 25),
+      onTimeout: () => DBusMethodErrorResponse(
+        'org.bluez.Error.Timeout',
+        [const DBusString('Connect timed out after 25s')],
+      ),
+    );
+    if (result is DBusMethodErrorResponse) {
+      throw StateError(
+        'BlueZ Connect failed for ${session.peripheralIdentifier}: '
+        '${result.errorName}',
+      );
+    }
   }
 
   @override
