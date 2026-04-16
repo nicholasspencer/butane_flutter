@@ -619,12 +619,16 @@ base class ButaneBluez extends ButanePlatformInterface {
         '${session.peripheralIdentifier}',
       );
     }
-    if (device.servicesResolved) return;
     // BlueZ auto-resolves services on connect — wait for the
     // `ServicesResolved` property flip rather than triggering anything
     // explicitly. The `serviceUuids` filter is advisory only; BlueZ
     // resolves all services regardless and we return them from
     // [services()] where callers can filter if they wish.
+    //
+    // Subscribe BEFORE checking the property to close the race window
+    // on the broadcast stream: if ServicesResolved fires between a
+    // check and a subscribe, the event is dropped. With
+    // subscribe-first, the worst case is an immediate complete.
     final completer = Completer<void>();
     late StreamSubscription<List<String>> sub;
     sub = device.propertiesChangedStream.listen((changed) {
@@ -632,8 +636,26 @@ base class ButaneBluez extends ButanePlatformInterface {
         if (!completer.isCompleted) completer.complete();
       }
     });
+    // Now check — if already resolved (signal arrived before subscribe,
+    // or cached from a prior connection), complete immediately.
+    if (device.servicesResolved) {
+      if (!completer.isCompleted) completer.complete();
+    }
     try {
-      await completer.future;
+      await completer.future.timeout(
+        const Duration(seconds: 25),
+        onTimeout: () {
+          // Last-resort fallback: BlueZ may have resolved services but
+          // the PropertiesChanged signal was consumed before our
+          // subscription started (broadcast stream semantics). Poll
+          // the cached property one final time before giving up.
+          if (device.servicesResolved) return;
+          throw TimeoutException(
+            'BlueZ did not resolve services on '
+            '${session.peripheralIdentifier} within 25 s',
+          );
+        },
+      );
     } finally {
       await sub.cancel();
     }
