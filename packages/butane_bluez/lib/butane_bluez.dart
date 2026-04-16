@@ -13,13 +13,14 @@ import 'src/gatt_server.dart';
 /// logging, not stdout). Append diagnostic lines to /tmp/butane-diag.log so we
 /// can trace the scan/connect flow during burns.
 void _diag(String msg) {
-  try {
-    final ts = DateTime.now().toIso8601String();
-    File('/tmp/butane-diag.log')
-        .writeAsStringSync('$ts $msg\n', mode: FileMode.append);
-  } catch (_) {
-    // Best-effort; swallow any logging errors.
-  }
+  final ts = DateTime.now().toIso8601String();
+  final home = Platform.environment['HOME'] ?? '/tmp';
+  // Use stderr (Flutter Linux release routes print through engine logging
+  // but stderr goes to the nohup redirect in deploy.sh). Also write to a
+  // file in $HOME as a belt-and-braces backup since /tmp may be sandboxed.
+  stderr.writeln('[BUTANE-DIAG] $ts $msg');
+  File('$home/butane-diag.log')
+      .writeAsStringSync('$ts $msg\n', mode: FileMode.append);
 }
 
 /// Linux implementation of `butane` backed by BlueZ over D-Bus.
