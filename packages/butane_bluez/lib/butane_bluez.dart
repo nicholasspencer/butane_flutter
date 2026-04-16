@@ -537,18 +537,46 @@ base class ButaneBluez extends ButanePlatformInterface {
   @override
   Future<void> connect({required PeripheralSession session}) async {
     await _ensureConnected();
-    final device = _requireDevice(session);
+    var device = _requireDevice(session);
     if (device.connected) return;
+    // BlueZ struggles to connect to random-address LE devices. When the
+    // peripheral (e.g. macOS CoreBluetooth) also advertises its public
+    // Bluetooth address, BlueZ merges the LE advertisement with the
+    // existing BR/EDR device record at the public address. Connections to
+    // the public-address device succeed reliably (the LE link is established
+    // as part of the dual-mode connect). Random-address-only devices hang.
+    //
+    // If the scan found a random-address device, check whether there's a
+    // public-address device with the same service UUIDs — that's the same
+    // physical peripheral under a connectable identity.
+    if (device.addressType == BlueZAddressType.random) {
+      final deviceUuids = {
+        for (final u in device.uuids) u.id.toLowerCase(),
+      };
+      if (deviceUuids.isNotEmpty) {
+        for (final candidate in _client.devices) {
+          if (candidate.addressType != BlueZAddressType.public) continue;
+          if (identical(candidate, device)) continue;
+          final candidateUuids = {
+            for (final u in candidate.uuids) u.id.toLowerCase(),
+          };
+          if (deviceUuids.intersection(candidateUuids).isNotEmpty) {
+            // Found a public-address equivalent — switch to it.
+            device = candidate;
+            _deviceCache[session.peripheralIdentifier] = candidate;
+            break;
+          }
+        }
+      }
+    }
+    if (device.connected) return;
+
     // Fire Device1.Connect() and poll for the Connected property.
     //
-    // BlueZ's Connect() doesn't reply until *all* profile connection attempts
-    // finish (including BR/EDR profiles). For dual-mode devices (e.g. a Mac
-    // whose public address appears in both BR/EDR and LE advertisements),
-    // the BR/EDR profile attempts can take 25-30s to timeout even though the
-    // LE connection succeeds within 1-2s. The D-Bus reply timeout fires
-    // before Connect() replies, making it look like the connect failed.
-    //
-    // Instead we fire Connect() without awaiting and poll device.connected.
+    // BlueZ's Connect() doesn't reply until *all* profile connection
+    // attempts finish (including BR/EDR profiles). For dual-mode devices
+    // the BR/EDR profile attempts can take 25-30s to timeout even though
+    // the LE connection succeeds within 1-2s. Fire-and-forget + poll.
     unawaited(device.connect().catchError((_) {}));
 
     const pollInterval = Duration(milliseconds: 250);
