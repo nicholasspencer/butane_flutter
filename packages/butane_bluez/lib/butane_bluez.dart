@@ -220,7 +220,7 @@ base class ButaneBluez extends ButanePlatformInterface {
   bool _matchesScanFilter(BlueZDevice device) {
     if (_scanUuidFilter.isEmpty) return true;
     for (final uuid in device.uuids) {
-      if (_scanUuidFilter.contains(uuid.toString().toLowerCase())) return true;
+      if (_scanUuidFilter.contains(uuid.id.toLowerCase())) return true;
     }
     return false;
   }
