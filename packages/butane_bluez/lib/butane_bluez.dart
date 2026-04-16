@@ -861,14 +861,36 @@ base class ButaneBluez extends ButanePlatformInterface {
     bool withoutResponse = false,
   }) async {
     await _ensureConnected();
-    final device = _requireDevice(session);
-    final char = _requireCharacteristic(device, serviceUuid, characteristicUuid);
-    await char.writeValue(
-      value,
-      type: withoutResponse
-          ? BlueZGattCharacteristicWriteType.command
-          : BlueZGattCharacteristicWriteType.request,
+    // Call WriteValue via raw D-Bus because the bluez 0.1.4 package's
+    // writeValue builds the options dict with unwrapped values
+    // (DBusString instead of DBusVariant(DBusString)), causing
+    // "Provided value don't match signature" from the dbus package.
+    final charPath = await _resolveCharacteristicPath(
+      session.peripheralIdentifier,
+      serviceUuid,
+      characteristicUuid,
     );
+    final bus = await _ensurePeripheralBus();
+    final result = await bus.callMethod(
+      destination: 'org.bluez',
+      path: charPath,
+      interface: 'org.bluez.GattCharacteristic1',
+      member: 'WriteValue',
+      values: [
+        DBusArray(DBusSignature('y'), value.map(DBusByte.new)),
+        DBusDict(DBusSignature('s'), DBusSignature('v'), {
+          const DBusString('type'): DBusVariant(
+            DBusString(withoutResponse ? 'command' : 'request'),
+          ),
+        }),
+      ],
+    );
+    if (result is DBusMethodErrorResponse) {
+      throw StateError(
+        'BlueZ WriteValue failed on $charPath: '
+        '${result.errorName} ${result.values}',
+      );
+    }
   }
 
   @override
