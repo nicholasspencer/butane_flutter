@@ -557,22 +557,37 @@ base class ButaneBluez extends ButanePlatformInterface {
     // link and connects only that GATT profile — no BR/EDR attempts, no
     // hangs. Once the LE link is up, ServicesResolved transitions to true
     // and all services/characteristics become queryable as usual.
+    // Pick a GATT service UUID to connect. Preference order:
+    //   1. UUIDs the device is advertising (authoritative for *this* peer).
+    //   2. UUIDs the caller requested in [scan] (cached in _scanUuidFilter).
+    //      BlueZ caches devices across sessions and an entry for this MAC
+    //      may have no UUIDs even though the peer is advertising them —
+    //      e.g. when the cache predates the advertisement or when BlueZ
+    //      merged the LE advert into a BR/EDR entry. The scan filter UUID
+    //      is still the profile the caller wants.
     final advertisedUuids = device.uuids.toList(growable: false);
+    final profileUuid = advertisedUuids.isNotEmpty
+        ? advertisedUuids.first
+        : (_scanUuidFilter.isNotEmpty
+            ? BlueZUUID(_scanUuidFilter.first)
+            : null);
     // ignore: avoid_print
     print(
       '[butane_bluez] connect: peripheral=${session.peripheralIdentifier} '
       'addressType=${device.addressType.name} '
-      'advertisedUuids=${advertisedUuids.map((u) => u.id).toList()}',
+      'advertisedUuids=${advertisedUuids.map((u) => u.id).toList()} '
+      'scanFilter=$_scanUuidFilter '
+      'profileUuid=${profileUuid?.id}',
     );
 
-    if (advertisedUuids.isNotEmpty) {
+    if (profileUuid != null) {
       // Fire-and-forget: ConnectProfile still has varying reply timing for
       // some BlueZ versions. Poll `device.connected` instead of awaiting.
       unawaited(
-        device.connectProfile(advertisedUuids.first).catchError((_) {}),
+        device.connectProfile(profileUuid).catchError((_) {}),
       );
     } else {
-      // No advertised UUIDs — fall back to the generic Connect(). This path
+      // No UUID to target — fall back to the generic Connect(). This path
       // is LE-safe because scan was set to `Transport: le`, but Connect()
       // may still try all profiles.
       unawaited(device.connect().catchError((_) {}));
