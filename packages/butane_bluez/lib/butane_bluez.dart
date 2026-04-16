@@ -295,7 +295,12 @@ base class ButaneBluez extends ButanePlatformInterface {
   @override
   Future<void> cancelScan({Session? session}) async {
     _scanning = false;
-    _scanUuidFilter = const {};
+    // Intentionally do NOT reset _scanUuidFilter here. [connect] uses it as
+    // a fallback to select a GATT profile UUID when BlueZ's cached device
+    // entry has no advertised UUIDs (e.g. because the cache predates the
+    // ad, or was merged from a stale BR/EDR entry). Resetting breaks that
+    // fallback when the caller stops discovery before calling connect.
+    // The next scan() overwrites it with a fresh filter.
     final adapter = _defaultAdapter;
     if (adapter != null && adapter.discovering) {
       await adapter.stopDiscovery();
