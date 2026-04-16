@@ -166,7 +166,10 @@ base class ButaneBluez extends ButanePlatformInterface {
   @override
   Future<ClientState> clientState([Session? session]) async {
     _diag('clientState() called');
-    throw StateError('DIAG_MARKER_BUTANEBLUEZ_CLIENTSTATE_CALLED');
+    await _ensureConnected();
+    final adapter = _defaultAdapter;
+    if (adapter == null) return ClientState.unsupported;
+    return adapter.powered ? ClientState.poweredOn : ClientState.poweredOff;
   }
 
   @override

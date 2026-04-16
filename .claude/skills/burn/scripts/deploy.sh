@@ -121,6 +121,18 @@ launch_ssh() {
   local host="$1" role="$2" port="$3"
   TEARDOWN_HOSTS+=("$host")
 
+  # Pre-launch cleanup: kill any stale harness processes from prior burns.
+  # The EXIT trap's teardown sometimes doesn't complete (aborted burns,
+  # network blips, SSH multiplexing quirks), leaving old processes holding
+  # the WS port so the new harness silently binds nothing. Killing here
+  # belt-and-braces guarantees we launch into a clean slot.
+  echo "Pre-launch: killing any stale harness on $host..."
+  ssh -o BatchMode=yes "$host" '
+    pkill -x butane_harness 2>/dev/null
+    pkill -f "^avahi-publish-service " 2>/dev/null
+    true
+  ' >/dev/null 2>&1 || true
+
   echo "Pushing HEAD to linux remote (refs/heads/burn)..."
   git -C "$repo" push --force linux HEAD:refs/heads/burn
 
