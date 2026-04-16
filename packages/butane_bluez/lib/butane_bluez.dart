@@ -539,34 +539,60 @@ base class ButaneBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final device = _requireDevice(session);
     if (device.connected) return;
-    // Use raw D-Bus for the connect call because:
-    // 1. BlueZDevice.connect() swallows the error response — if BlueZ
-    //    returns org.bluez.Error.Failed we'd hang forever waiting for the
-    //    Connected property change that will never arrive.
-    // 2. We can enforce a Dart-side timeout that's shorter than the
-    //    coordinator's command timeout, giving a clearer error message.
+    // Fire Device1.Connect() without waiting for the D-Bus reply.
+    //
+    // BlueZ's Connect() doesn't reply until *all* profile connection attempts
+    // finish (including BR/EDR profiles). For dual-mode devices (e.g. a Mac
+    // whose public address appears in both BR/EDR and LE advertisements),
+    // the BR/EDR profile attempts can take 25-30s to timeout even though the
+    // LE connection succeeds within 1-2s. The D-Bus reply timeout fires
+    // before Connect() replies, making it look like the connect failed.
+    //
+    // Instead we:
+    // 1. Subscribe to PropertiesChanged *before* calling Connect (same
+    //    broadcast-race guard as discoverServices).
+    // 2. Fire Connect() and ignore the eventual reply / timeout.
+    // 3. Wait for the Connected property to become true (or timeout).
+    final connectedFuture = device.propertiesChangedStream
+        .where((props) => props.contains('Connected'))
+        .first
+        .then((_) {
+      if (!device.connected) {
+        throw StateError(
+          'BlueZ Connected property changed but device is not connected '
+          'for ${session.peripheralIdentifier}',
+        );
+      }
+    });
+
+    // Check if already connected (race: connected between _requireDevice and
+    // the subscription above).
+    if (device.connected) return;
+
+    // Fire-and-forget: swallow the D-Bus reply/error.
     final bus = await _ensurePeripheralBus();
-    final macFragment = 'dev_${session.peripheralIdentifier.replaceAll(':', '_')}';
+    final macFragment =
+        'dev_${session.peripheralIdentifier.replaceAll(':', '_')}';
     final adapterPath = await _ensureAdapterPath();
     final devicePath = DBusObjectPath('$adapterPath/$macFragment');
-    final result = await bus.callMethod(
-      destination: 'org.bluez',
-      path: devicePath,
-      interface: 'org.bluez.Device1',
-      member: 'Connect',
-    ).timeout(
+    unawaited(
+      bus
+          .callMethod(
+            destination: 'org.bluez',
+            path: devicePath,
+            interface: 'org.bluez.Device1',
+            member: 'Connect',
+          )
+          .catchError((_) => DBusMethodSuccessResponse()),
+    );
+
+    await connectedFuture.timeout(
       const Duration(seconds: 25),
-      onTimeout: () => DBusMethodErrorResponse(
-        'org.bluez.Error.Timeout',
-        [const DBusString('Connect timed out after 25s')],
+      onTimeout: () => throw StateError(
+        'BlueZ Connect timed out for ${session.peripheralIdentifier}: '
+        'Connected property never became true within 25s',
       ),
     );
-    if (result is DBusMethodErrorResponse) {
-      throw StateError(
-        'BlueZ Connect failed for ${session.peripheralIdentifier}: '
-        '${result.errorName}',
-      );
-    }
   }
 
   @override
