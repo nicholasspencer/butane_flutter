@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bluez/bluez.dart';
@@ -7,6 +8,19 @@ import 'package:dbus/dbus.dart';
 
 import 'src/advertising.dart';
 import 'src/gatt_server.dart';
+
+/// DEBUG: print() is unreliable on Flutter Linux release (routed through engine
+/// logging, not stdout). Append diagnostic lines to /tmp/butane-diag.log so we
+/// can trace the scan/connect flow during burns.
+void _diag(String msg) {
+  try {
+    final ts = DateTime.now().toIso8601String();
+    File('/tmp/butane-diag.log')
+        .writeAsStringSync('$ts $msg\n', mode: FileMode.append);
+  } catch (_) {
+    // Best-effort; swallow any logging errors.
+  }
+}
 
 /// Linux implementation of `butane` backed by BlueZ over D-Bus.
 ///
@@ -192,12 +206,15 @@ base class ButaneBluez extends ButanePlatformInterface {
     _scanUuidFilter = forServices == null
         ? const {}
         : {for (final u in forServices) u.toLowerCase()};
+    _diag('scan() ENTRY filter=$_scanUuidFilter forServices=$forServices');
 
     await _ensureConnected();
     final adapter = _defaultAdapter;
     if (adapter == null) {
       throw StateError('No BlueZ adapter available');
     }
+    _diag('scan() adapter=${adapter.address} discovering=${adapter.discovering} '
+        'cacheSize=${_client.devices.length}');
 
     // Purge stale cached devices that match our filter. BlueZ's
     // `device.uuids` is cumulative — any service UUID ever seen for a MAC
@@ -218,15 +235,18 @@ base class ButaneBluez extends ButanePlatformInterface {
     // Targeted: only purge non-connected devices that match the filter,
     // so unrelated cached peers stay intact.
     if (_scanUuidFilter.isNotEmpty) {
+      var purged = 0;
       for (final device in List<BlueZDevice>.from(_client.devices)) {
         if (device.connected) continue;
         if (!_matchesScanFilter(device)) continue;
         try {
           await adapter.removeDevice(device);
-        } catch (_) {
-          // Ignore — device may be racing removal via another path.
+          purged++;
+        } catch (err) {
+          _diag('scan() purge ${device.address} FAILED: $err');
         }
       }
+      _diag('scan() purged=$purged');
     }
 
     // BlueZ's SetDiscoveryFilter expects a{sv} — each value is a variant.
@@ -246,11 +266,13 @@ base class ButaneBluez extends ButanePlatformInterface {
     // can apply the new filter cleanly. BlueZ requires filter updates to
     // happen while discovery is stopped.
     if (adapter.discovering) {
+      _diag('scan() stopping existing discovery');
       await adapter.stopDiscovery();
     }
     await adapter.setDiscoveryFilter(filter);
     await adapter.startDiscovery();
     _scanning = true;
+    _diag('scan() started discovery OK scanning=true');
   }
 
   /// True when [device] should be emitted under the current scan filter.
@@ -279,14 +301,23 @@ base class ButaneBluez extends ButanePlatformInterface {
     // against scan() would randomly drop entries depending on when the
     // async onListen body runs vs. when scan() flips the flag.
     void live(BlueZDevice device) {
-      if (!_scanning) return;
-      if (!_matchesScanFilter(device)) return;
+      if (!_scanning) {
+        _diag('live() ${device.address} SKIP scanning=false');
+        return;
+      }
+      final matches = _matchesScanFilter(device);
+      _diag('live() ${device.address} name="${device.name}" '
+          'uuids=${device.uuids.map((u) => u.toString()).toList()} '
+          'matches=$matches filter=$_scanUuidFilter');
+      if (!matches) return;
       if (!controller.isClosed) controller.add(_toScanResult(device));
     }
 
     void watchDevice(BlueZDevice device) {
       subs.add(
         device.propertiesChangedStream.listen((changed) {
+          _diag('propsChanged ${device.address} changed=$changed '
+              'uuids=${device.uuids.map((u) => u.toString()).toList()}');
           // A late `UUIDs` update may flip a previously-unmatched device into
           // the filter — live() re-checks, so no extra handling needed here.
           if (changed.any(_advertRelevantProps.contains)) live(device);
@@ -296,11 +327,15 @@ base class ButaneBluez extends ButanePlatformInterface {
 
     controller = StreamController<ScanResult>.broadcast(
       onListen: () async {
+        _diag('scanStream.onListen ENTRY');
         await _ensureConnected();
         if (_defaultAdapter == null) {
+          _diag('scanStream.onListen NO ADAPTER');
           await controller.close();
           return;
         }
+        _diag('scanStream.onListen cacheSize=${_client.devices.length} '
+            'scanning=$_scanning');
         // Do NOT seed from cache. CoreBluetooth's `scanForPeripherals`
         // only reports peripherals that emit a fresh advert in the current
         // scan session; already-cached peers come from
@@ -321,6 +356,8 @@ base class ButaneBluez extends ButanePlatformInterface {
         // New discoveries.
         subs.add(
           _client.deviceAddedStream.listen((device) {
+            _diag('deviceAddedStream ${device.address} name="${device.name}" '
+                'uuids=${device.uuids.map((u) => u.toString()).toList()}');
             live(device);
             watchDevice(device);
           }),
