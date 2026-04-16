@@ -182,10 +182,51 @@ base class ButaneBluez extends ButanePlatformInterface {
     Iterable<String>? forServices,
     Session? session,
   }) async {
+    // Set _scanUuidFilter SYNCHRONOUSLY before any awaits. The porcelain
+    // layer subscribes to [scanStream] before calling [scan] (see
+    // PlatformStreamController.stream getter → createStream listen →
+    // outer controller onListen_ → platform.scan), and the async bodies
+    // of the two are racing. If we set _scanUuidFilter after an await,
+    // [scanStream.onListen] can run first with the stale/empty filter
+    // and emit false-positive seed results.
+    _scanUuidFilter = forServices == null
+        ? const {}
+        : {for (final u in forServices) u.toLowerCase()};
+
     await _ensureConnected();
     final adapter = _defaultAdapter;
     if (adapter == null) {
       throw StateError('No BlueZ adapter available');
+    }
+
+    // Purge stale cached devices that match our filter. BlueZ's
+    // `device.uuids` is cumulative — any service UUID ever seen for a MAC
+    // stays cached. macOS/iOS peripherals rotate their random address per
+    // advertising session, so cache entries from prior runs linger with our
+    // test service UUID attached to MACs that are no longer advertising
+    // (or advertising something else). Without this purge,
+    // `PropertiesChanged(RSSI)` on those stale entries — which BlueZ fires
+    // whenever it picks up a nearby advert with the same MAC — feeds stale
+    // devices into our emission path via [_matchesScanFilter]'s cumulative
+    // UUID check, and the caller tries to connect to a dead address.
+    //
+    // Removing via adapter.RemoveDevice also clears any stuck Device1 DBus
+    // registration behind the "Unable to register device interface" errors
+    // seen in journalctl (bluez#1157-style collisions), letting BlueZ
+    // register a fresh object when the address re-appears.
+    //
+    // Targeted: only purge non-connected devices that match the filter,
+    // so unrelated cached peers stay intact.
+    if (_scanUuidFilter.isNotEmpty) {
+      for (final device in List<BlueZDevice>.from(_client.devices)) {
+        if (device.connected) continue;
+        if (!_matchesScanFilter(device)) continue;
+        try {
+          await adapter.removeDevice(device);
+        } catch (_) {
+          // Ignore — device may be racing removal via another path.
+        }
+      }
     }
 
     // BlueZ's SetDiscoveryFilter expects a{sv} — each value is a variant.
@@ -199,10 +240,6 @@ base class ButaneBluez extends ButanePlatformInterface {
     final filter = <String, DBusValue>{
       'Transport': DBusVariant(const DBusString('le')),
     };
-
-    _scanUuidFilter = forServices == null
-        ? const {}
-        : {for (final u in forServices) u.toLowerCase()};
 
     // If discovery is already running (because a prior cancelScan left it
     // going — see [cancelScan] for why), stop it first so SetDiscoveryFilter
@@ -264,25 +301,21 @@ base class ButaneBluez extends ButanePlatformInterface {
           await controller.close();
           return;
         }
-        // Seed-from-cache policy mirrors CoreBluetooth:
-        //   - `scanForPeripherals(withServices: nil)` (no filter) → app gets
-        //     a broad stream of anything nearby; we seed cached devices so
-        //     callers get immediate hits for paired/previously-seen peers.
-        //   - `scanForPeripherals(withServices: [uuid])` (filtered) → only
-        //     report peripherals *currently advertising* that service. We
-        //     suppress seed emissions in this branch because BlueZ's cache
-        //     retains stale `UUIDs` from prior sessions even after the real
-        //     peripheral has moved on (or rotated its random address), and
-        //     emitting those stale entries leads the caller to try connecting
-        //     to a device that is no longer reachable. Live adverts flow via
-        //     `PropertiesChanged(RSSI)` through `watchDevice`.
-        final seedFromCache = _scanUuidFilter.isEmpty;
+        // Do NOT seed from cache. CoreBluetooth's `scanForPeripherals`
+        // only reports peripherals that emit a fresh advert in the current
+        // scan session; already-cached peers come from
+        // `retrievePeripherals(withIdentifiers:)` instead. Seeding from
+        // BlueZ's cumulative cache is both non-canonical AND unreliable:
+        // BlueZ never drops stale UUIDs, so a `C4:EF:DA:...` entry from a
+        // prior Mac Studio session still reports our test UUID long after
+        // the peripheral has rotated its random address, and we'd emit a
+        // dead address to the caller.
+        //
+        // We still subscribe [watchDevice] on cached entries so that IF
+        // one of them re-advertises in the current session, the resulting
+        // `PropertiesChanged` flows through [live]. Any stale cached
+        // entries that match our filter were purged in [scan] above.
         for (final device in _client.devices) {
-          if (seedFromCache &&
-              _matchesScanFilter(device) &&
-              !controller.isClosed) {
-            controller.add(_toScanResult(device));
-          }
           watchDevice(device);
         }
         // New discoveries.
