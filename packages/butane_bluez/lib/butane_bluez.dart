@@ -128,10 +128,25 @@ base class ButaneBluez extends ButanePlatformInterface {
   };
 
   static void registerWith() {
-    _diag('registerWith() called');
+    // Write marker to filesystem BEFORE any other code so we can prove
+    // registerWith was entered. Use low-level File to avoid any dependency
+    // on _diag or log sinks that might fail.
+    try {
+      File('/home/nico/butane-register.log').writeAsStringSync(
+        '${DateTime.now().toIso8601String()} registerWith entered\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {}
     instance = ButaneBluez();
     ButanePlatformInterface.instance = instance;
-    _diag('registerWith() complete');
+    try {
+      File('/home/nico/butane-register.log').writeAsStringSync(
+        '${DateTime.now().toIso8601String()} registerWith complete '
+            'instance=${identityHashCode(instance)} '
+            'platformInstance=${identityHashCode(ButanePlatformInterface.instance)}\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {}
   }
 
   Future<void> _ensureConnected() {
