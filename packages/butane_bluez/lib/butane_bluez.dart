@@ -614,31 +614,41 @@ base class ButaneBluez extends ButanePlatformInterface {
     //     2026-04-15 (connect passed, discoverServices timed out at 25s
     //     waiting for ServicesResolved).
     //
-    // Earlier iterations avoided `Connect()` because it hung for ~25s on
-    // dual-mode peers (BR/EDR profile attempts on addresses that were only
-    // reachable via LE). The fix wasn't to switch methods — it was to stop
-    // scan() from seeding stale cached devices and to keep discovery running
-    // across cancelScan so the discovered random-address device survives
-    // to the connect step. With those fixes in place, `Connect()` on a
-    // freshly-advertised LE peer returns in ~1s without BR/EDR fallback.
-    // Fire-and-forget: poll `device.connected` below. The IIFE logs the
-    // eventual reply for diagnostics.
+    // Background: BlueZ's Connect() on a dual-mode public-address peer
+    // (like a Mac advertising with its BR/EDR MAC in LE privacy-disabled
+    // mode) attempts BR/EDR SDP *before* GATT. SDP times out internally
+    // at ~15-20s if the peer doesn't accept BR/EDR. So a successful
+    // connect can take 20-30s end-to-end, with the Connected property
+    // flipping to true partway through. We poll `device.connected` with
+    // a generous 60s deadline to tolerate the SDP phase.
+    //
+    // Fire-and-forget Connect() with error capture. If the DBus call
+    // itself fails (e.g. "org.bluez.Error.Failed: Not connectable"),
+    // surface that error in the poll loop rather than hiding it — an
+    // early error diagnoses faster than a 60s timeout.
+    Object? connectError;
     unawaited(() async {
       try {
         await device.connect();
       } catch (err) {
-        // ignore: avoid_print
-        print('[butane_bluez] connect errored: $err');
+        connectError = err;
       }
     }());
 
     const pollInterval = Duration(milliseconds: 250);
-    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    final deadline = DateTime.now().add(const Duration(seconds: 60));
     while (!device.connected) {
+      if (connectError != null) {
+        throw StateError(
+          'BlueZ Connect() failed for ${session.peripheralIdentifier}: '
+          '$connectError',
+        );
+      }
       if (DateTime.now().isAfter(deadline)) {
         throw StateError(
           'BlueZ connect timed out for ${session.peripheralIdentifier}: '
-          'device never became connected within 25s',
+          'device never became connected within 60s '
+          '(connectError=$connectError)',
         );
       }
       await Future<void>.delayed(pollInterval);
