@@ -585,38 +585,31 @@ base class ButaneBluez extends ButanePlatformInterface {
       'profileUuid=${profileUuid?.id}',
     );
 
-    if (profileUuid != null) {
-      // Fire-and-forget: ConnectProfile still has varying reply timing for
-      // some BlueZ versions. Poll `device.connected` instead of awaiting.
-      unawaited(
-        device.connectProfile(profileUuid).then<void>(
-          (_) {
-            // ignore: avoid_print
-            print('[butane_bluez] connectProfile replied OK');
-          },
-          onError: (Object err) {
-            // ignore: avoid_print
-            print('[butane_bluez] connectProfile errored: $err');
-          },
-        ),
-      );
-    } else {
-      // No UUID to target — fall back to the generic Connect(). This path
-      // is LE-safe because scan was set to `Transport: le`, but Connect()
-      // may still try all profiles.
-      unawaited(
-        device.connect().then<void>(
-          (_) {
-            // ignore: avoid_print
-            print('[butane_bluez] connect replied OK');
-          },
-          onError: (Object err) {
-            // ignore: avoid_print
-            print('[butane_bluez] connect errored: $err');
-          },
-        ),
-      );
-    }
+    // Fire-and-forget: both Connect/ConnectProfile can have varying reply
+    // timing. We poll `device.connected` below. This IIFE just logs the
+    // eventual reply so we can see BlueZ errors during debugging.
+    unawaited(() async {
+      try {
+        if (profileUuid != null) {
+          await device.connectProfile(profileUuid);
+          // ignore: avoid_print
+          print('[butane_bluez] connectProfile replied OK');
+        } else {
+          // No UUID to target — fall back to the generic Connect(). This
+          // path is LE-safe because scan was set to `Transport: le`, but
+          // Connect() may still try all profiles.
+          await device.connect();
+          // ignore: avoid_print
+          print('[butane_bluez] connect replied OK');
+        }
+      } catch (err) {
+        // ignore: avoid_print
+        print(
+          '[butane_bluez] ${profileUuid != null ? "connectProfile" : "connect"} '
+          'errored: $err',
+        );
+      }
+    }());
 
     const pollInterval = Duration(milliseconds: 250);
     final deadline = DateTime.now().add(const Duration(seconds: 25));
