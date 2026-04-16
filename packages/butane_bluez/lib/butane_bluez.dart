@@ -602,34 +602,45 @@ base class ButaneBluez extends ButanePlatformInterface {
     final device = _requireDevice(session);
     if (device.connected) return;
 
-    // We use the generic `Connect()` rather than `ConnectProfile(uuid)`:
+    // Connection strategy depends on whether the caller supplied a service
+    // UUID via [scan]'s `forServices`:
     //
-    //   * `Connect()` establishes the link AND kicks off full service
-    //     discovery — `ServicesResolved` transitions to true, and
-    //     `gattServices` populates. This is what callers expect from
-    //     "connect" in a GATT client.
-    //   * `ConnectProfile(uuid)` establishes the LE link only — it does
-    //     NOT trigger GATT service discovery, so `ServicesResolved` stays
-    //     false forever. Verified empirically in the ble_flow burn on
-    //     2026-04-15 (connect passed, discoverServices timed out at 25s
-    //     waiting for ServicesResolved).
+    //   * `ConnectProfile(uuid)` — used when a filter UUID is available.
+    //     Forces LE transport for dual-mode public-address peers (e.g. a
+    //     Mac advertising over LE with its BR/EDR MAC): BlueZ resolves the
+    //     UUID as a GATT profile, picks the LE bearer, and routes the
+    //     connection through bluetoothd's GATT client, which then issues
+    //     ATT primary service discovery. `ServicesResolved` flips to true
+    //     when discovery completes. Verified in the ble_flow burn on
+    //     2026-04-16: with `Connect()` the Mac's public-address peer was
+    //     connected via BR/EDR (HFP/AVDTP profile attempts in journalctl),
+    //     ServicesResolved stayed false. Switching to ConnectProfile with
+    //     the test-service UUID routes the connection over LE and GATT
+    //     discovery runs.
+    //   * `Connect()` — fallback when no filter UUID is known. For dual-mode
+    //     peers this may pick BR/EDR (which doesn't trigger LE GATT
+    //     discovery), but for single-mode LE peers it's correct.
     //
-    // Background: BlueZ's Connect() on a dual-mode public-address peer
-    // (like a Mac advertising with its BR/EDR MAC in LE privacy-disabled
-    // mode) attempts BR/EDR SDP *before* GATT. SDP times out internally
-    // at ~15-20s if the peer doesn't accept BR/EDR. So a successful
-    // connect can take 20-30s end-to-end, with the Connected property
-    // flipping to true partway through. We poll `device.connected` with
-    // a generous 60s deadline to tolerate the SDP phase.
+    // Per BlueZ docs (org.bluez.Device.rst): for unbonded dual-mode peers
+    // with equal bearer timestamps, `Connect()` breaks ties toward BR/EDR.
+    // `ConnectProfile(uuid)` sidesteps the tie-breaker by naming the
+    // profile explicitly.
     //
-    // Fire-and-forget Connect() with error capture. If the DBus call
-    // itself fails (e.g. "org.bluez.Error.Failed: Not connectable"),
-    // surface that error in the poll loop rather than hiding it — an
-    // early error diagnoses faster than a 60s timeout.
+    // Fire-and-forget + error capture. If the DBus call itself fails
+    // (e.g. "org.bluez.Error.Failed: Not connectable"), surface that
+    // error in the poll loop rather than hiding it — an early error
+    // diagnoses faster than a 60s timeout.
+    final profileUuid = _scanUuidFilter.isNotEmpty
+        ? BlueZUUID(_scanUuidFilter.first)
+        : null;
     Object? connectError;
     unawaited(() async {
       try {
-        await device.connect();
+        if (profileUuid != null) {
+          await device.connectProfile(profileUuid);
+        } else {
+          await device.connect();
+        }
       } catch (err) {
         connectError = err;
       }
