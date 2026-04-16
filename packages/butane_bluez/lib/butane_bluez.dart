@@ -399,6 +399,107 @@ base class ButaneBluez extends ButanePlatformInterface {
     );
   }
 
+  BlueZGattCharacteristic _requireCharacteristic(
+    BlueZDevice device,
+    String serviceUuid,
+    String characteristicUuid,
+  ) {
+    final service = _requireService(device, serviceUuid);
+    final want = characteristicUuid.toLowerCase();
+    for (final char in service.gattCharacteristics) {
+      if (char.uuid.id.toLowerCase() == want) return char;
+    }
+    throw StateError(
+      'Characteristic $characteristicUuid not found in service '
+      '$serviceUuid on ${device.address}',
+    );
+  }
+
+  /// Resolve the D-Bus object path of a GATT characteristic. The `bluez`
+  /// package hides `_BlueZObject.path` behind a private field, so we
+  /// walk BlueZ's ObjectManager tree via our own system-bus client.
+  ///
+  /// BlueZ structures the tree as:
+  ///   /org/bluez/hci0/dev_XX_XX/serviceNNNN/charNNNN
+  /// We match by `org.bluez.GattCharacteristic1.UUID` property
+  /// under any child of a path containing the device's MAC (with `:`→`_`).
+  ///
+  /// Results are cached for the lifetime of the connection since BlueZ
+  /// assigns paths deterministically per device+service+char combination.
+  final Map<String, DBusObjectPath> _charPathCache = {};
+
+  Future<DBusObjectPath> _resolveCharacteristicPath(
+    String deviceAddress,
+    String serviceUuid,
+    String characteristicUuid,
+  ) async {
+    final cacheKey =
+        '${deviceAddress.toLowerCase()}/$serviceUuid/$characteristicUuid'
+            .toLowerCase();
+    final cached = _charPathCache[cacheKey];
+    if (cached != null) return cached;
+
+    final bus = await _ensurePeripheralBus();
+    final result = await bus.callMethod(
+      destination: 'org.bluez',
+      path: DBusObjectPath('/'),
+      interface: 'org.freedesktop.DBus.ObjectManager',
+      member: 'GetManagedObjects',
+    );
+    if (result is! DBusMethodSuccessResponse ||
+        result.returnValues.isEmpty) {
+      throw StateError('BlueZ GetManagedObjects returned no data');
+    }
+    final dict = result.returnValues.first as DBusDict;
+    // Device path fragment: MAC with colons → underscores (BlueZ convention).
+    final macFragment = 'dev_${deviceAddress.replaceAll(':', '_')}';
+    final wantSvc = serviceUuid.toLowerCase();
+    final wantChar = characteristicUuid.toLowerCase();
+
+    for (final entry in dict.children.entries) {
+      final objPath = (entry.key as DBusObjectPath).value;
+      if (!objPath.contains(macFragment)) continue;
+      final ifaces = (entry.value as DBusDict).children;
+      final charIface =
+          ifaces[const DBusString('org.bluez.GattCharacteristic1')];
+      if (charIface == null) continue;
+      final props = (charIface as DBusDict).children;
+      final uuidProp = props[const DBusString('UUID')];
+      if (uuidProp == null) continue;
+      final uuidVal =
+          (uuidProp is DBusVariant ? uuidProp.value : uuidProp) as DBusString;
+      if (uuidVal.value.toLowerCase() != wantChar) continue;
+
+      // Verify the parent service UUID matches — two services could have
+      // a characteristic with the same UUID (unlikely but spec-legal).
+      final svcPath = objPath.substring(0, objPath.lastIndexOf('/'));
+      final svcIfaces =
+          (dict.children[DBusObjectPath(svcPath)] as DBusDict?)?.children;
+      if (svcIfaces != null) {
+        final svcIface =
+            svcIfaces[const DBusString('org.bluez.GattService1')];
+        if (svcIface != null) {
+          final svcProps = (svcIface as DBusDict).children;
+          final svcUuidProp = svcProps[const DBusString('UUID')];
+          if (svcUuidProp != null) {
+            final svcUuid =
+                (svcUuidProp is DBusVariant ? svcUuidProp.value : svcUuidProp)
+                    as DBusString;
+            if (svcUuid.value.toLowerCase() != wantSvc) continue;
+          }
+        }
+      }
+
+      final resolved = DBusObjectPath(objPath);
+      _charPathCache[cacheKey] = resolved;
+      return resolved;
+    }
+    throw StateError(
+      'Could not resolve D-Bus path for characteristic '
+      '$characteristicUuid (service $serviceUuid) on $deviceAddress',
+    );
+  }
+
   @override
   Future<Iterable<Peripheral>> peripherals({
     Iterable<String> peripheralIdentifiers = const [],
@@ -619,15 +720,20 @@ base class ButaneBluez extends ButanePlatformInterface {
     );
   }
 
-  // --- Unimplemented: Central: read/write/notify, RSSI ----------------------
+  // --- Central: read/write/notify, RSSI --------------------------------------
 
   @override
   Future<Uint8List> readCharacteristic({
     required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    final char = _requireCharacteristic(device, serviceUuid, characteristicUuid);
+    final bytes = await char.readValue();
+    return Uint8List.fromList(bytes.toList());
+  }
 
   @override
   Future<void> writeCharacteristic({
@@ -636,8 +742,17 @@ base class ButaneBluez extends ButanePlatformInterface {
     required String characteristicUuid,
     required Uint8List value,
     bool withoutResponse = false,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    final char = _requireCharacteristic(device, serviceUuid, characteristicUuid);
+    await char.writeValue(
+      value,
+      type: withoutResponse
+          ? BlueZGattCharacteristicWriteType.command
+          : BlueZGattCharacteristicWriteType.request,
+    );
+  }
 
   @override
   Future<void> observeCharacteristic({
@@ -645,21 +760,98 @@ base class ButaneBluez extends ButanePlatformInterface {
     required String serviceUuid,
     required String characteristicUuid,
     bool observe = true,
-  }) async =>
-      throw UnimplementedError();
+  }) async {
+    await _ensureConnected();
+    _requireDevice(session);
+    // The bluez 0.1.4 package does not expose StartNotify/StopNotify
+    // (it TODO'd them as "require fd manipulation"). Call via raw D-Bus.
+    final charPath = await _resolveCharacteristicPath(
+      session.peripheralIdentifier,
+      serviceUuid,
+      characteristicUuid,
+    );
+    final bus = await _ensurePeripheralBus();
+    final method = observe ? 'StartNotify' : 'StopNotify';
+    final result = await bus.callMethod(
+      destination: 'org.bluez',
+      path: charPath,
+      interface: 'org.bluez.GattCharacteristic1',
+      member: method,
+    );
+    if (result is DBusMethodErrorResponse) {
+      throw StateError(
+        'BlueZ $method failed on $charPath: '
+        '${result.errorName} ${result.values}',
+      );
+    }
+  }
 
   @override
   Stream<Uint8List> characteristicValueStream({
     required PeripheralSession session,
     required String serviceUuid,
     required String characteristicUuid,
-  }) async* {
-    throw UnimplementedError();
+  }) {
+    // Subscribe to PropertiesChanged on the characteristic's D-Bus path.
+    // BlueZ emits `org.freedesktop.DBus.Properties.PropertiesChanged`
+    // with the interface name + changed property map whenever the Value
+    // property is updated by a notification or indication.
+    late StreamController<Uint8List> controller;
+    StreamSubscription<DBusSignal>? sub;
+
+    controller = StreamController<Uint8List>(
+      onListen: () async {
+        await _ensureConnected();
+        final charPath = await _resolveCharacteristicPath(
+          session.peripheralIdentifier,
+          serviceUuid,
+          characteristicUuid,
+        );
+        final bus = await _ensurePeripheralBus();
+        sub = bus
+            .subscribeSignals(
+          sender: 'org.bluez',
+          interface: 'org.freedesktop.DBus.Properties',
+          member: 'PropertiesChanged',
+          path: charPath,
+        )
+            .listen((signal) {
+          // PropertiesChanged args: (interface_name: s, changed: a{sv},
+          //                          invalidated: as)
+          if (signal.values.length < 2) return;
+          final ifaceName = (signal.values[0] as DBusString).value;
+          if (ifaceName != 'org.bluez.GattCharacteristic1') return;
+          final changed = (signal.values[1] as DBusDict).children;
+          final valueProp = changed[const DBusString('Value')];
+          if (valueProp == null) return;
+          final inner =
+              valueProp is DBusVariant ? valueProp.value : valueProp;
+          if (inner is! DBusArray) return;
+          final bytes = Uint8List.fromList(
+            inner.children.map((v) => (v as DBusByte).value).toList(),
+          );
+          if (!controller.isClosed) controller.add(bytes);
+        });
+      },
+      onCancel: () async {
+        await sub?.cancel();
+        sub = null;
+      },
+    );
+
+    return controller.stream;
   }
 
   @override
-  Future<int> readRssi({required PeripheralSession session}) async =>
-      throw UnimplementedError();
+  Future<int> readRssi({required PeripheralSession session}) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    // BlueZ updates the RSSI property periodically while connected.
+    // If the device isn't connected or BlueZ hasn't published an RSSI
+    // update yet, the cached value may be 0 — match CoreBluetooth
+    // semantics (which also returns the last known value).
+    return device.rssi;
+  }
 
   // --- Peripheral: advertising ----------------------------------------------
 
