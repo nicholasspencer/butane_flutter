@@ -685,10 +685,23 @@ base class ButaneBluez extends ButanePlatformInterface {
   }) async {
     await _ensureConnected();
     final device = _requireDevice(session);
-    // BlueZ materializes characteristics as part of ServicesResolved — there
-    // is no separate discover step. Validate the service exists so callers
-    // fail fast rather than getting an empty list from [characteristics()].
-    _requireService(device, serviceUuid);
+    final service = _requireService(device, serviceUuid);
+    // BlueZ materializes characteristics as part of ServicesResolved.
+    // However, the InterfacesAdded D-Bus signals for characteristic objects
+    // may arrive slightly after ServicesResolved becomes true. Poll until
+    // at least one characteristic appears (or timeout).
+    if (service.gattCharacteristics.isNotEmpty) return;
+    const pollInterval = Duration(milliseconds: 250);
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (service.gattCharacteristics.isEmpty) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw TimeoutException(
+          'No characteristics materialized for service $serviceUuid on '
+          '${session.peripheralIdentifier} within 10 s',
+        );
+      }
+      await Future<void>.delayed(pollInterval);
+    }
   }
 
   @override
