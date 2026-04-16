@@ -539,61 +539,22 @@ base class ButaneBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final device = _requireDevice(session);
     if (device.connected) return;
-    // Remove the device from BlueZ's cache before connecting.
+    // Fire Device1.Connect() and poll for the Connected property.
     //
-    // BlueZ merges LE advertisements with existing BR/EDR device records
-    // when the addresses match (common for macOS peripherals that advertise
-    // with their public Bluetooth address). When a merged device entry has
-    // BR/EDR profiles, Device1.Connect() attempts a classic connection that
-    // (a) hangs for 25-30s while profile negotiations timeout, and (b) may
-    // succeed as BR/EDR-only, which means GATT service discovery never
-    // happens (GATT is LE-only on our peripherals).
+    // BlueZ's Connect() doesn't reply until *all* profile connection attempts
+    // finish (including BR/EDR profiles). For dual-mode devices (e.g. a Mac
+    // whose public address appears in both BR/EDR and LE advertisements),
+    // the BR/EDR profile attempts can take 25-30s to timeout even though the
+    // LE connection succeeds within 1-2s. The D-Bus reply timeout fires
+    // before Connect() replies, making it look like the connect failed.
     //
-    // RemoveDevice purges the BR/EDR history. The subsequent scan cache hit
-    // (InterfacesAdded) recreates the device as LE-only, giving a clean
-    // connect path.
-    final adapter = _defaultAdapter;
-    if (adapter != null) {
-      try {
-        await adapter.removeDevice(device);
-      } catch (_) {
-        // Device might already be gone — that's fine.
-      }
-    }
+    // Instead we fire Connect() without awaiting and poll device.connected.
+    unawaited(device.connect().catchError((_) {}));
 
-    // Re-scan briefly to let BlueZ recreate the device from the LE
-    // advertisement (it's still broadcasting). Then re-fetch the device.
-    try {
-      await adapter?.startDiscovery();
-    } catch (_) {
-      // Already scanning — fine.
-    }
-    BlueZDevice? freshDevice;
     const pollInterval = Duration(milliseconds: 250);
-    final scanDeadline = DateTime.now().add(const Duration(seconds: 10));
-    while (freshDevice == null) {
-      if (DateTime.now().isAfter(scanDeadline)) {
-        throw StateError(
-          'BlueZ could not re-discover ${session.peripheralIdentifier} '
-          'after RemoveDevice within 10s',
-        );
-      }
-      await Future<void>.delayed(pollInterval);
-      freshDevice = _findDevice(session.peripheralIdentifier);
-    }
-    try {
-      await adapter?.stopDiscovery();
-    } catch (_) {}
-
-    // Cache the fresh device.
-    _deviceCache[session.peripheralIdentifier] = freshDevice;
-
-    // Fire Connect() without awaiting the D-Bus reply (still hangs for
-    // dual-mode devices) and poll for the Connected property.
-    unawaited(freshDevice.connect().catchError((_) {}));
-    final connectDeadline = DateTime.now().add(const Duration(seconds: 25));
-    while (!freshDevice.connected) {
-      if (DateTime.now().isAfter(connectDeadline)) {
+    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    while (!device.connected) {
+      if (DateTime.now().isAfter(deadline)) {
         throw StateError(
           'BlueZ Connect timed out for ${session.peripheralIdentifier}: '
           'device never became connected within 25s',
