@@ -686,7 +686,20 @@ base class ButaneBluez extends ButanePlatformInterface {
     // However, the InterfacesAdded D-Bus signals for characteristic objects
     // may arrive slightly after ServicesResolved becomes true. Poll until
     // at least one characteristic appears (or timeout).
-    if (service.gattCharacteristics.isNotEmpty) return;
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] discoverCharacteristics entry: service=$serviceUuid '
+      'gattServices=${device.gattServices.length} '
+      'charCount=${service.gattCharacteristics.length}',
+    );
+    if (service.gattCharacteristics.isNotEmpty) {
+      // ignore: avoid_print
+      print(
+        '[butane_bluez] discoverCharacteristics early-return '
+        '(chars=${service.gattCharacteristics.length})',
+      );
+      return;
+    }
     const pollInterval = Duration(milliseconds: 250);
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (service.gattCharacteristics.isEmpty) {
@@ -698,6 +711,11 @@ base class ButaneBluez extends ButanePlatformInterface {
       }
       await Future<void>.delayed(pollInterval);
     }
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] discoverCharacteristics poll-done '
+      '(chars=${service.gattCharacteristics.length})',
+    );
   }
 
   @override
@@ -708,6 +726,12 @@ base class ButaneBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final device = _requireDevice(session);
     final service = _requireService(device, serviceUuid);
+    // ignore: avoid_print
+    print(
+      '[butane_bluez] characteristics() service=$serviceUuid '
+      'chars=${service.gattCharacteristics.length} '
+      'uuids=[${service.gattCharacteristics.map((c) => c.uuid.id).join(",")}]',
+    );
     return [
       for (final char in service.gattCharacteristics)
         Characteristic(
