@@ -6,6 +6,66 @@ End-to-end BLE verification completed on **2026-04-02** using macOS (Central) an
 
 **Result: 15/15 steps PASS ✓**
 
+## Architecture
+
+The `butane_coordinator` CLI and two `butane_harness` instances form the
+test rig. Each harness exposes a WebSocket control plane; the coordinator
+sends scripted BLE commands (`scan`, `connect`, `write`, …) to whichever
+side should perform them, and the actual BLE traffic happens over the
+radio between the two devices.
+
+### Mac ↔ iPad (CoreBluetooth on both ends)
+
+```mermaid
+flowchart LR
+    coord["butane_coordinator<br/>(CLI on Mac)"]
+
+    subgraph mac["Mac — central"]
+        macApp["butane_harness<br/>ROLE=central<br/>WS_PORT=19100"]
+        macBle["butane_core_bluetooth<br/>(CoreBluetooth)"]
+        macApp --- macBle
+    end
+
+    subgraph ipad["iPad — peripheral"]
+        ipadApp["butane_harness<br/>ROLE=peripheral<br/>WS_PORT=19101"]
+        ipadBle["butane_core_bluetooth<br/>(CoreBluetooth)"]
+        ipadApp --- ipadBle
+    end
+
+    coord <-->|"WebSocket<br/>ws://localhost:19100"| macApp
+    coord <-->|"WebSocket<br/>ws://ipad-ip:19101"| ipadApp
+    macBle <==>|"BLE radio<br/>advertise / scan / GATT"| ipadBle
+```
+
+### Mac ↔ Linux (CoreBluetooth ↔ BlueZ)
+
+Linux runs as central because BlueZ 5.72 can't reliably force LE on a
+dual-mode peer advertising at a public address — the Mac is the
+peripheral. Linux requires `ControllerMode = le` in
+`/etc/bluetooth/main.conf`; see
+[`linux-dev-environment.md`](linux-dev-environment.md).
+
+```mermaid
+flowchart LR
+    coord["butane_coordinator<br/>(CLI, run from Mac or Linux)"]
+
+    subgraph linux["Linux — central"]
+        linuxApp["butane_harness<br/>ROLE=central<br/>WS_PORT=19100"]
+        linuxBle["butane_bluez<br/>(BlueZ / D-Bus)"]
+        linuxApp --- linuxBle
+    end
+
+    subgraph mac["Mac — peripheral"]
+        macApp["butane_harness<br/>ROLE=peripheral<br/>WS_PORT=19101"]
+        macBle["butane_core_bluetooth<br/>(CoreBluetooth)"]
+        macApp --- macBle
+    end
+
+    coord <-->|"WebSocket<br/>ws://linux-ip:19100"| linuxApp
+    coord <-->|"WebSocket<br/>ws://mac-ip:19101"| macApp
+    linuxBle <==>|"BLE radio<br/>advertise / scan / GATT"| macBle
+```
+
 ## Environment
 
 | Component | Details |
