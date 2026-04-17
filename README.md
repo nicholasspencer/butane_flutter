@@ -68,7 +68,11 @@ Additional notes live under [`docs/`](docs):
   required `ControllerMode = le` configuration for BlueZ on Linux when
   acting as central against dual-mode peers (Apple devices). Without this,
   bluetoothd will try BR/EDR and GATT will never resolve.
+- [`docs/burn-workflow.md`](docs/burn-workflow.md) — end-to-end
+  operational walkthrough for cross-device BLE integration runs: git
+  remote setup, SSH orchestration, harness launch on each platform,
+  coordinator invocation, and report artifacts.
 - [`docs/harness-verification.md`](docs/harness-verification.md) —
-  running the coordinator + harness integration tests.
+  architecture diagrams and the 15-step verification report.
 - [`docs/bluetoothctl.md`](docs/bluetoothctl.md) — `bluetoothctl` cheat
   sheet for Linux debugging.

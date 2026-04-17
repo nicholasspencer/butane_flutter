@@ -25,9 +25,12 @@ dart run packages/butane_coordinator/bin/coordinator.dart --help
 ```
 
 Higher-level workflow (launch harnesses + run a scenario + capture
-report) is orchestrated by the `burn` skill; see
+report) is orchestrated by the `/burn` skill. See
+[`docs/burn-workflow.md`](../../docs/burn-workflow.md) for the full
+operational walkthrough (selectors, SSH setup, per-platform launch
+commands) and
 [`docs/harness-verification.md`](../../docs/harness-verification.md)
-for the end-to-end guide.
+for the end-to-end verification report.
 
 ## When to touch this package
 

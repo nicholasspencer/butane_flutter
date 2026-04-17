@@ -20,10 +20,26 @@ Dart plugin registrant only walks direct dependencies when wiring up
   [`tool/ws_relay.dart`](../../tool/ws_relay.dart)), useful when
   harness and coordinator can't reach each other directly.
 
+## Configuration
+
+`HarnessConfig.fromEnvironment()` reads three flags (dart-defines first,
+runtime env as fallback):
+
+| Flag           | Required | Meaning |
+|----------------|----------|---------|
+| `ROLE`         | yes      | `central` or `peripheral` |
+| `WS_PORT`      | yes      | Port the harness listens on (server mode) |
+| `WS_RELAY_URL` | no       | If set, dial this relay instead of listening (used with [`tool/ws_relay.dart`](../../tool/ws_relay.dart) when the device can't accept inbound connections) |
+
+iOS must pass these as `--dart-define` at build time (no runtime env).
+macOS accepts them via `open -n ... --env`. Linux accepts them via
+`env FLAG=VALUE ./butane_harness`.
+
 ## Running a burn
 
-Harnesses are usually launched by the `burn` skill, which handles
+Harnesses are usually launched by the `/burn` skill, which handles
 selector-addressed device launching, coordinator dispatch, and report
 collection in `.burns/`. See
-[`docs/harness-verification.md`](../../docs/harness-verification.md)
-for the manual flow.
+[`docs/burn-workflow.md`](../../docs/burn-workflow.md) for the full
+operational walkthrough — git remote setup, SSH orchestration,
+per-platform launch commands, and report artifacts.
