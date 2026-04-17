@@ -1,15 +1,23 @@
 # butane_android
 
-A new Flutter plugin project.
+Android implementation of the Butane BLE plugin.
 
-## Getting Started
+> ⚠️ **Stub.** The Kotlin plugin is wired up (registered as the Android
+> implementation of [`butane_platform_interface`](../butane_platform_interface),
+> Pigeon channels generated) but no real BLE functionality is
+> implemented yet. Depending on this on Android gets you a working
+> channel with unimplemented method handlers.
 
-This project is a starting point for a Flutter
-[plug-in package](https://flutter.dev/developing-packages/),
-a specialized package that includes platform-specific implementation code for
-Android and/or iOS.
+## What's inside
 
-For help getting started with Flutter development, view the
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- `android/src/main/kotlin/com/nicospencer/butane_android/` — Kotlin
+  plugin skeleton: `ButaneAndroidPlugin` and the generated
+  `Api.gen.kt` bindings.
+- [`example/`](example) — Android host app for exercising the plugin
+  once implementation lands.
 
+## Regenerating channels
+
+Pigeon output is checked in. After editing
+`packages/butane_platform_interface/pigeons/api.dart`, run
+[`../../tool/gen_api.sh`](../../tool/gen_api.sh) from the repo root.

@@ -1,17 +1,29 @@
 # butane_harness
 
-A new Flutter project.
+Flutter app that hosts a Butane BLE role (central **or** peripheral)
+behind a WebSocket control plane, so that
+[`butane_coordinator`](../butane_coordinator) can drive it through
+scripted integration scenarios. This is **integration-test
+scaffolding**, not a product.
 
-## Getting Started
+The harness imports `butane` directly but also pins direct deps on
+`butane_core_bluetooth` and `butane_platform_interface` — Flutter's
+Dart plugin registrant only walks direct dependencies when wiring up
+`dartPluginClass`, so the indirect path through `butane`'s
+`default_package` isn't enough.
 
-This project is a starting point for a Flutter application.
+## Two transport modes
 
-A few resources to get you started if this is your first Flutter project:
+- **Server mode** — harness listens on a local port; the coordinator
+  connects in. Uses `nsd` for mDNS advertisement on the LAN.
+- **Client-bridge mode** — harness dials out to a relay (see
+  [`tool/ws_relay.dart`](../../tool/ws_relay.dart)), useful when
+  harness and coordinator can't reach each other directly.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Running a burn
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Harnesses are usually launched by the `burn` skill, which handles
+selector-addressed device launching, coordinator dispatch, and report
+collection in `.burns/`. See
+[`docs/harness-verification.md`](../../docs/harness-verification.md)
+for the manual flow.
