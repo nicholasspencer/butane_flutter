@@ -3,6 +3,9 @@ set -euo pipefail
 
 # run_harness.sh — Build and launch BLE test harness, run coordinator.
 #
+# By default, the coordinator discovers harness instances via mDNS.
+# Set HOST to disable mDNS and use manual host/port addressing.
+#
 # Supports two modes:
 #   1. macOS-only: both central and peripheral run as macOS apps (same machine)
 #   2. Cross-device: central on macOS, peripheral on a connected iOS device
@@ -10,35 +13,27 @@ set -euo pipefail
 # Environment variables:
 #   CENTRAL_PORT      — WebSocket port for central harness (default: 19100)
 #   PERIPHERAL_PORT   — WebSocket port for peripheral harness (default: 19101)
-#   HOST              — Coordinator host address (default: localhost)
 #   TIMEOUT           — Command timeout in seconds (default: 30)
 #   SKIP_BUILD        — Set to 1 to skip the build step
 #   IOS_DEVICE        — iOS device UDID for peripheral role (enables cross-device mode)
 #   IOS_DEVICE_UUID   — CoreDevice UUID for devicectl (auto-detected if not set)
-#   PERIPHERAL_HOST   — IP/hostname of the iOS device for coordinator to reach it
-#                       (required when IOS_DEVICE is set)
+#   HOST              — Set to disable mDNS and use this host (triggers --no-discover)
+#   PERIPHERAL_HOST   — Host for peripheral harness (used with HOST; defaults to HOST)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 CENTRAL_PORT="${CENTRAL_PORT:-19100}"
 PERIPHERAL_PORT="${PERIPHERAL_PORT:-19101}"
-HOST="${HOST:-localhost}"
 TIMEOUT="${TIMEOUT:-30}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 IOS_DEVICE="${IOS_DEVICE:-}"
 IOS_DEVICE_UUID="${IOS_DEVICE_UUID:-}"
-PERIPHERAL_HOST="${PERIPHERAL_HOST:-}"
 
 # If IOS_DEVICE is set, we're in cross-device mode.
 CROSS_DEVICE=0
 if [[ -n "$IOS_DEVICE" ]]; then
   CROSS_DEVICE=1
-  if [[ -z "$PERIPHERAL_HOST" ]]; then
-    echo "ERROR: PERIPHERAL_HOST is required when IOS_DEVICE is set."
-    echo "  Set PERIPHERAL_HOST to the IP address of the iOS device on the local network."
-    exit 1
-  fi
 fi
 
 # Auto-detect CoreDevice UUID if not provided.
@@ -64,38 +59,22 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-wait_for_port() {
-  local host="$1"
-  local port="$2"
-  local label="$3"
-  local max_attempts=60
-  local attempt=0
-
-  echo "Waiting for $label on $host:$port..."
-  while ! nc -z "$host" "$port" 2>/dev/null; do
-    attempt=$((attempt + 1))
-    if [[ $attempt -ge $max_attempts ]]; then
-      echo "ERROR: $label on $host:$port did not start within ${max_attempts}s"
-      exit 1
-    fi
-    sleep 1
-  done
-  echo "  $label is ready on $host:$port"
-}
-
 echo "=== Butane BLE Test Harness ==="
 echo ""
 if [[ "$CROSS_DEVICE" == "1" ]]; then
   echo "Mode:            Cross-device (macOS central + iOS peripheral)"
   echo "iOS device:      $IOS_DEVICE"
   echo "CoreDevice UUID: ${IOS_DEVICE_UUID:-<not detected>}"
-  echo "Peripheral host: $PERIPHERAL_HOST"
 else
   echo "Mode:            macOS-only (both roles on this machine)"
 fi
+if [[ -n "${HOST:-}" ]]; then
+  echo "Discovery:       disabled (HOST=$HOST)"
+else
+  echo "Discovery:       mDNS (default)"
+fi
 echo "Central port:    $CENTRAL_PORT"
 echo "Peripheral port: $PERIPHERAL_PORT"
-echo "Host:            $HOST"
 echo "Timeout:         ${TIMEOUT}s"
 echo ""
 
@@ -180,36 +159,24 @@ fi
 
 echo ""
 
-# --- Wait for servers ---
-if [[ "$CROSS_DEVICE" == "1" ]]; then
-  wait_for_port "$PERIPHERAL_HOST" "$PERIPHERAL_PORT" "peripheral harness (iOS)"
-else
-  wait_for_port "localhost" "$PERIPHERAL_PORT" "peripheral harness"
-fi
-wait_for_port "localhost" "$CENTRAL_PORT" "central harness"
-
-# Extra settle time for CoreBluetooth to transition to poweredOn.
-echo "Waiting for BLE initialization..."
-sleep 3
-
-echo ""
-
-# --- Determine coordinator args ---
-if [[ "$CROSS_DEVICE" == "1" ]]; then
-  COORD_PERIPHERAL_HOST="$PERIPHERAL_HOST"
-else
-  COORD_PERIPHERAL_HOST="$HOST"
-fi
-
 # --- Run coordinator ---
+# mDNS discovery is the default — the coordinator will wait for harness instances
+# to advertise before connecting. No need for wait_for_port or BLE sleep.
 echo "Running coordinator..."
 cd "$PROJECT_DIR"
-dart run packages/butane_coordinator/bin/coordinator.dart \
-  --central-port "$CENTRAL_PORT" \
-  --peripheral-port "$PERIPHERAL_PORT" \
-  --host "$HOST" \
-  --peripheral-host "$COORD_PERIPHERAL_HOST" \
-  --timeout "$TIMEOUT"
+
+COORD_ARGS=(--timeout "$TIMEOUT")
+
+if [[ -n "${HOST:-}" ]]; then
+  # Manual mode — disable mDNS, pass all connection details.
+  COORD_ARGS+=(--no-discover)
+  COORD_ARGS+=(--host "$HOST")
+  COORD_ARGS+=(--central-port "$CENTRAL_PORT")
+  COORD_ARGS+=(--peripheral-port "$PERIPHERAL_PORT")
+  COORD_ARGS+=(--peripheral-host "${PERIPHERAL_HOST:-$HOST}")
+fi
+
+dart run packages/butane_coordinator/bin/coordinator.dart "${COORD_ARGS[@]}"
 
 COORDINATOR_EXIT=$?
 echo ""
