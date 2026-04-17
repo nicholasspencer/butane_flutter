@@ -68,12 +68,15 @@ class HarnessDiscovery {
   /// Discovers harness instances via mDNS.
   ///
   /// Performs PTR → SRV → TXT lookups for `_butane-harness._tcp` services.
-  /// Waits until both `central` and `peripheral` roles are found, or
-  /// [timeout] expires.
+  /// Polls repeatedly until both `central` and `peripheral` roles are found.
   ///
-  /// Throws [DiscoveryTimeoutException] if both roles are not found in time.
+  /// If [timeout] is provided, throws [DiscoveryTimeoutException] when it
+  /// expires before both roles are found. If omitted, polls indefinitely.
+  ///
+  /// [onProgress] is called between poll rounds with a human-readable status.
   Future<DiscoveredHarnesses> discover({
-    Duration timeout = const Duration(seconds: 5),
+    Duration? timeout,
+    void Function(String message)? onProgress,
   }) async {
     final client = MDnsClient();
     final endpoints = <String, HarnessEndpoint>{};
@@ -81,29 +84,54 @@ class HarnessDiscovery {
     try {
       await client.start();
 
-      final deadline = Future<void>.delayed(timeout);
       final completer = Completer<DiscoveredHarnesses>();
 
-      // Run discovery in a zone that won't leak errors after completion.
-      unawaited(_poll(client, endpoints, completer));
+      unawaited(_pollLoop(client, endpoints, completer, onProgress));
 
-      // Race: either we find both roles or the timeout fires.
-      final result = await Future.any<DiscoveredHarnesses?>([
-        completer.future,
-        deadline.then((_) => null),
-      ]);
-
-      if (result != null) {
-        return result;
+      if (timeout != null) {
+        final result = await Future.any<DiscoveredHarnesses?>([
+          completer.future,
+          Future<DiscoveredHarnesses?>.delayed(timeout),
+        ]);
+        if (result != null) return result;
+        throw DiscoveryTimeoutException(endpoints.keys.toSet());
       }
 
-      throw DiscoveryTimeoutException(endpoints.keys.toSet());
+      return await completer.future;
     } finally {
       client.stop();
     }
   }
 
-  /// Continuously polls mDNS until both roles are discovered.
+  /// Repeatedly polls mDNS until both roles are discovered.
+  Future<void> _pollLoop(
+    MDnsClient client,
+    Map<String, HarnessEndpoint> endpoints,
+    Completer<DiscoveredHarnesses> completer,
+    void Function(String)? onProgress,
+  ) async {
+    var round = 0;
+    while (!completer.isCompleted) {
+      round++;
+      if (round > 1 && onProgress != null) {
+        final found = endpoints.keys.toSet();
+        if (found.isEmpty) {
+          onProgress('Still looking for harness instances...');
+        } else {
+          final missing = {'central', 'peripheral'}.difference(found);
+          onProgress(
+            'Found ${found.join(", ")}, looking for ${missing.join(", ")}...',
+          );
+        }
+      }
+      await _poll(client, endpoints, completer);
+      if (!completer.isCompleted) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
+  }
+
+  /// Single mDNS poll pass.
   Future<void> _poll(
     MDnsClient client,
     Map<String, HarnessEndpoint> endpoints,

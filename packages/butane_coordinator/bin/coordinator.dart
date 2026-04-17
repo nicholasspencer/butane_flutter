@@ -7,22 +7,19 @@ Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
     ..addOption(
       'central-port',
-      defaultsTo: '8080',
-      help: 'WebSocket port for central harness',
+      help: 'WebSocket port for central harness (overrides mDNS)',
     )
     ..addOption(
       'peripheral-port',
-      defaultsTo: '8081',
-      help: 'WebSocket port for peripheral harness',
+      help: 'WebSocket port for peripheral harness (overrides mDNS)',
     )
     ..addOption(
       'host',
-      defaultsTo: 'localhost',
-      help: 'Host address for central harness (and peripheral if --peripheral-host is not set)',
+      help: 'Host for central harness (overrides mDNS)',
     )
     ..addOption(
       'peripheral-host',
-      help: 'Host address for peripheral harness (defaults to --host)',
+      help: 'Host for peripheral harness (overrides mDNS; defaults to --host)',
     )
     ..addOption(
       'timeout',
@@ -36,14 +33,12 @@ Future<void> main(List<String> arguments) async {
     )
     ..addFlag(
       'discover',
-      negatable: false,
-      help: 'Resolve both harness endpoints via mDNS '
-          '(overrides --host / --peripheral-host / ports)',
+      defaultsTo: true,
+      help: 'Use mDNS to discover harness instances',
     )
     ..addOption(
       'discover-timeout',
-      defaultsTo: '15',
-      help: 'mDNS discovery timeout in seconds (with --discover)',
+      help: 'mDNS discovery timeout in seconds (default: no limit)',
     )
     ..addFlag(
       'help',
@@ -64,57 +59,68 @@ Future<void> main(List<String> arguments) async {
   final timeout = Duration(seconds: int.parse(results.option('timeout')!));
   final runs = int.parse(results.option('runs')!);
 
-  String host;
-  String peripheralHost;
-  int centralPort;
-  int peripheralPort;
+  // Parse explicit overrides (null if not provided).
+  var host = results.option('host');
+  var peripheralHost = results.option('peripheral-host');
+  final centralPortArg = results.option('central-port');
+  var centralPort = centralPortArg != null ? int.parse(centralPortArg) : null;
+  final peripheralPortArg = results.option('peripheral-port');
+  var peripheralPort =
+      peripheralPortArg != null ? int.parse(peripheralPortArg) : null;
 
   print('=== Butane BLE Coordinator ===');
   print('');
 
-  if (discover) {
-    final discoveryTimeout = Duration(
-      seconds: int.parse(results.option('discover-timeout')!),
-    );
-    print('Discovering harness endpoints via mDNS '
-        '(timeout ${discoveryTimeout.inSeconds}s)...');
+  if (discover &&
+      (host == null ||
+          peripheralHost == null ||
+          centralPort == null ||
+          peripheralPort == null)) {
+    final discoverTimeoutArg = results.option('discover-timeout');
+    final discoverTimeout = discoverTimeoutArg != null
+        ? Duration(seconds: int.parse(discoverTimeoutArg))
+        : null;
+    final label = discoverTimeout != null
+        ? '(timeout ${discoverTimeout.inSeconds}s)'
+        : '(no timeout limit)';
+    print('Discovering harness endpoints via mDNS $label...');
     try {
-      final found =
-          await HarnessDiscovery().discover(timeout: discoveryTimeout);
-      host = found.central.host;
-      centralPort = found.central.port;
-      peripheralHost = found.peripheral.host;
-      peripheralPort = found.peripheral.port;
-      print('  central:    ${found.central.host}:${found.central.port}');
-      print('  peripheral: '
-          '${found.peripheral.host}:${found.peripheral.port}');
+      final found = await HarnessDiscovery().discover(
+        timeout: discoverTimeout,
+        onProgress: (msg) => print('  $msg'),
+      );
+      host ??= found.central.host;
+      centralPort ??= found.central.port;
+      peripheralHost ??= found.peripheral.host;
+      peripheralPort ??= found.peripheral.port;
     } on DiscoveryTimeoutException catch (e) {
       print('FATAL: $e');
       exit(2);
     }
-  } else {
-    host = results.option('host')!;
-    peripheralHost = results.option('peripheral-host') ?? host;
-    centralPort = int.parse(results.option('central-port')!);
-    peripheralPort = int.parse(results.option('peripheral-port')!);
   }
 
-  print('Central:    ws://$host:$centralPort');
-  print('Peripheral: ws://$peripheralHost:$peripheralPort');
+  // Final defaults for --no-discover or fully-overridden mode.
+  final resolvedHost = host ?? 'localhost';
+  final resolvedPeripheralHost = peripheralHost ?? resolvedHost;
+  final resolvedCentralPort = centralPort ?? 8080;
+  final resolvedPeripheralPort = peripheralPort ?? 8081;
+
+  print('Central:    ws://$resolvedHost:$resolvedCentralPort');
+  print('Peripheral: ws://$resolvedPeripheralHost:$resolvedPeripheralPort');
   print('Timeout:    ${timeout.inSeconds}s');
   print('');
 
   // Connect to both harness instances.
   final central = HarnessClient(
     role: 'central',
-    host: host,
-    port: centralPort,
+    host: resolvedHost,
+    port: resolvedCentralPort,
     defaultTimeout: timeout,
   );
   final peripheral = HarnessClient(
     role: 'peripheral',
-    host: peripheralHost,
-    port: peripheralPort,
+    host: resolvedPeripheralHost,
+    port: resolvedPeripheralPort,
     defaultTimeout: timeout,
   );
 
