@@ -18,7 +18,7 @@ for arg in "$@"; do
 done
 [[ -n "$central" && -n "$peripheral" ]] || { echo "deploy: --central and --peripheral required" >&2; exit 64; }
 
-repo="$(cd "$(dirname "$0")/../../../.." && pwd)"
+repo="$(git rev-parse --show-toplevel)"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$repo/.burns"
 log="$repo/.burns/${ts}-${scenario}.log"
