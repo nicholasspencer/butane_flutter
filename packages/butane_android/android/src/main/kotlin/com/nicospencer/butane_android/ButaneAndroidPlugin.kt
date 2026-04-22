@@ -65,7 +65,46 @@ class ButaneAndroidPlugin: FlutterPlugin, ButaneHostApi, ActivityAware {
   /// Host API
 
   override fun state(session: Session?, callback: (kotlin.Result<ClientState>) -> Unit) {
-    TODO("Not yet implemented")
+    val adapter = bluetoothAdapter
+    if (adapter == null) {
+      callback(kotlin.Result.success(ClientState.UNSUPPORTED))
+      return
+    }
+
+    val clientId = session?.clientIdentifier
+
+    // Register state receiver if not already registered for this client
+    if (!stateReceivers.containsKey(clientId)) {
+      val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+          if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+            val newState = intent.getIntExtra(
+              BluetoothAdapter.EXTRA_STATE,
+              BluetoothAdapter.ERROR,
+            )
+            val clientState = mapAdapterState(newState)
+            flutterApi?.onClientState(clientId, clientState) {}
+          }
+        }
+      }
+      val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+      applicationContext?.registerReceiver(receiver, filter)
+      stateReceivers[clientId] = receiver
+    }
+
+    callback(kotlin.Result.success(mapAdapterState(adapter.state)))
+  }
+
+  companion object {
+    fun mapAdapterState(adapterState: Int): ClientState {
+      return when (adapterState) {
+        BluetoothAdapter.STATE_OFF -> ClientState.POWERED_OFF
+        BluetoothAdapter.STATE_TURNING_ON -> ClientState.POWERED_OFF
+        BluetoothAdapter.STATE_ON -> ClientState.POWERED_ON
+        BluetoothAdapter.STATE_TURNING_OFF -> ClientState.POWERED_ON
+        else -> ClientState.UNKNOWN
+      }
+    }
   }
 
   override fun scan(
