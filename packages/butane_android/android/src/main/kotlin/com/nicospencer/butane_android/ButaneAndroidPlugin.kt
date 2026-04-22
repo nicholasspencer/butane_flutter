@@ -1,171 +1,202 @@
 package com.nicospencer.butane_android
 
-import ButaneFlutterApi
-import ButaneHostApi
-import androidx.annotation.NonNull
-
 import io.flutter.embedding.engine.plugins.FlutterPlugin
-import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
-/** ButaneAndroidPlugin */
-class ButaneAndroidPlugin: FlutterPlugin, ButaneHostApi {
-  private var flutterApi: ButaneFlutterApi? = null
+class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi {
+    private var flutterApi: ButaneFlutterApi? = null
+    private var scope: CoroutineScope? = null
 
-  private var managers: Map<UUID, BluetoothManager> = mutableMapOf()
-  override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-    ButaneHostApi.setUp(flutterPluginBinding.binaryMessenger, this)
-    flutterApi = ButaneFlutterApi(flutterPluginBinding.binaryMessenger)
-  }
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        ButaneHostApi.setUp(binding.binaryMessenger, this)
+        flutterApi = ButaneFlutterApi(binding.binaryMessenger)
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    }
 
-  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) { }
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        ButaneHostApi.setUp(binding.binaryMessenger, null)
+        flutterApi = null
+        scope?.cancel()
+        scope = null
+    }
 
-  /// Host API
+    private fun <T> notImplemented(callback: (Result<T>) -> Unit) {
+        callback(
+            Result.failure(
+                FlutterError(
+                    "not-implemented",
+                    "Not yet implemented on Android",
+                    null,
+                ),
+            ),
+        )
+    }
 
-  override fun state(session: Session?, callback: (kotlin.Result<ClientState>) -> Unit) {
-    TODO("Not yet implemented")
-  }
+    // Central APIs
 
-  override fun scan(
-    session: Session?,
-    forServices: List<String>?,
-    callback: (kotlin.Result<Unit>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun state(session: ClientSession?, callback: (Result<ClientState>) -> Unit) =
+        notImplemented(callback)
 
-  override fun cancelScan(session: Session?, callback: (kotlin.Result<Unit>) -> Unit) {
-    TODO("Not yet implemented")
-  }
+    override fun scan(
+        session: ClientSession?,
+        forServices: List<String>?,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun peripherals(
-    session: Session?,
-    peripheralIdentifiers: List<String>,
-    callback: (kotlin.Result<List<Peripheral>>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun cancelScan(session: ClientSession?, callback: (Result<Unit>) -> Unit) =
+        notImplemented(callback)
 
-  override fun connectedPeripherals(
-    session: Session?,
-    serviceUuids: List<String>,
-    callback: (kotlin.Result<List<Peripheral>>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun peripherals(
+        session: ClientSession?,
+        peripheralIdentifiers: List<String>,
+        callback: (Result<List<Peripheral>>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun connect(session: PeripheralSession, callback: (kotlin.Result<Unit>) -> Unit) {
-    TODO("Not yet implemented")
-  }
+    override fun connectedPeripherals(
+        session: ClientSession?,
+        serviceUuids: List<String>,
+        callback: (Result<List<Peripheral>>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun cancelConnection(
-    session: PeripheralSession,
-    callback: (kotlin.Result<Unit>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun connect(session: PeripheralSession, callback: (Result<Unit>) -> Unit) =
+        notImplemented(callback)
 
-  override fun connectionState(
-    session: PeripheralSession,
-    callback: (kotlin.Result<ConnectionState>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun cancelConnection(
+        session: PeripheralSession,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun discoverServices(
-    session: PeripheralSession,
-    serviceUuids: List<String>?,
-    callback: (kotlin.Result<Unit>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun connectionState(
+        session: PeripheralSession,
+        callback: (Result<ConnectionState>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun services(
-    session: PeripheralSession,
-    callback: (kotlin.Result<List<Service>>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun discoverServices(
+        session: PeripheralSession,
+        serviceUuids: List<String>?,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun discoverCharacteristics(
-    session: PeripheralSession,
-    serviceUuid: String,
-    characteristicUuids: List<String>?,
-    callback: (kotlin.Result<Unit>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun services(
+        session: PeripheralSession,
+        callback: (Result<List<Service>>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun characteristics(
-    session: PeripheralSession,
-    serviceUuid: String,
-    callback: (kotlin.Result<List<Characteristic>>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun discoverCharacteristics(
+        session: PeripheralSession,
+        serviceUuid: String,
+        characteristicUuids: List<String>?,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun readCharacteristic(
-    session: PeripheralSession,
-    serviceUuid: String,
-    characteristicUuid: String,
-    callback: (kotlin.Result<ByteArray>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun characteristics(
+        session: PeripheralSession,
+        serviceUuid: String,
+        callback: (Result<List<Characteristic>>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun writeCharacteristic(
-    session: PeripheralSession,
-    serviceUuid: String,
-    characteristicUuid: String,
-    value: ByteArray,
-    withoutResponse: Boolean,
-    callback: (kotlin.Result<Unit>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun readCharacteristic(
+        session: PeripheralSession,
+        serviceUuid: String,
+        characteristicUuid: String,
+        callback: (Result<ByteArray>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun observeCharacteristic(
-    observe: Boolean,
-    session: PeripheralSession,
-    serviceUuid: String,
-    characteristicUuid: String,
-    callback: (kotlin.Result<Unit>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun writeCharacteristic(
+        session: PeripheralSession,
+        serviceUuid: String,
+        characteristicUuid: String,
+        value: ByteArray,
+        withoutResponse: Boolean,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun readDescriptor(
-    session: PeripheralSession,
-    serviceUuid: String,
-    characteristicUuid: String,
-    descriptorUuid: String,
-    callback: (kotlin.Result<ByteArray>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun observeCharacteristic(
+        observe: Boolean,
+        session: PeripheralSession,
+        serviceUuid: String,
+        characteristicUuid: String,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun writeDescriptor(
-    session: PeripheralSession,
-    serviceUuid: String,
-    characteristicUuid: String,
-    descriptorUuid: String,
-    value: ByteArray,
-    callback: (kotlin.Result<Unit>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun readDescriptor(
+        session: PeripheralSession,
+        serviceUuid: String,
+        characteristicUuid: String,
+        descriptorUuid: String,
+        callback: (Result<ByteArray>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun readRssi(session: PeripheralSession, callback: (kotlin.Result<Long>) -> Unit) {
-    TODO("Not yet implemented")
-  }
+    override fun writeDescriptor(
+        session: PeripheralSession,
+        serviceUuid: String,
+        characteristicUuid: String,
+        descriptorUuid: String,
+        value: ByteArray,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
 
-  override fun requestMtu(
-    session: PeripheralSession,
-    mtu: Long,
-    callback: (kotlin.Result<Long>) -> Unit
-  ) {
-    TODO("Not yet implemented")
-  }
+    override fun readRssi(session: PeripheralSession, callback: (Result<Long>) -> Unit) =
+        notImplemented(callback)
+
+    override fun requestMtu(
+        session: PeripheralSession,
+        mtu: Long,
+        callback: (Result<Long>) -> Unit,
+    ) = notImplemented(callback)
+
+    // Peripheral Manager APIs
+
+    override fun peripheralManagerState(
+        session: PeripheralManagerSession,
+        callback: (Result<ClientState>) -> Unit,
+    ) = notImplemented(callback)
+
+    override fun startAdvertising(
+        session: PeripheralManagerSession,
+        localName: String?,
+        serviceUuids: List<String>?,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
+
+    override fun stopAdvertising(
+        session: PeripheralManagerSession,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
+
+    override fun addService(
+        session: PeripheralManagerSession,
+        service: MutableService,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
+
+    override fun removeService(
+        session: PeripheralManagerSession,
+        serviceUuid: String,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
+
+    override fun removeAllServices(
+        session: PeripheralManagerSession,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
+
+    override fun respondToRequest(
+        session: PeripheralManagerSession,
+        requestId: Long,
+        result: AttResult,
+        value: ByteArray?,
+        callback: (Result<Unit>) -> Unit,
+    ) = notImplemented(callback)
+
+    override fun updateValue(
+        session: PeripheralManagerSession,
+        serviceUuid: String,
+        characteristicUuid: String,
+        value: ByteArray,
+        callback: (Result<Boolean>) -> Unit,
+    ) = notImplemented(callback)
 }
