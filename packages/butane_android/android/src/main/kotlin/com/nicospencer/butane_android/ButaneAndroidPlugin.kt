@@ -2,7 +2,18 @@ package com.nicospencer.butane_android
 
 import ButaneFlutterApi
 import ButaneHostApi
-import androidx.annotation.NonNull
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -11,16 +22,45 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
 /** ButaneAndroidPlugin */
-class ButaneAndroidPlugin: FlutterPlugin, ButaneHostApi {
+class ButaneAndroidPlugin: FlutterPlugin, ButaneHostApi, ActivityAware {
   private var flutterApi: ButaneFlutterApi? = null
+  private var scope: CoroutineScope? = null
 
-  private var managers: Map<UUID, BluetoothManager> = mutableMapOf()
+  private var applicationContext: Context? = null
+  private var bluetoothAdapter: BluetoothAdapter? = null
+  private val stateReceivers = mutableMapOf<String?, BroadcastReceiver>()
   override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     ButaneHostApi.setUp(flutterPluginBinding.binaryMessenger, this)
     flutterApi = ButaneFlutterApi(flutterPluginBinding.binaryMessenger)
+    scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    applicationContext = flutterPluginBinding.applicationContext
+    val bluetoothManager =
+        flutterPluginBinding.applicationContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    bluetoothAdapter = bluetoothManager?.adapter
   }
 
-  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) { }
+  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    ButaneHostApi.setUp(binding.binaryMessenger, null)
+    flutterApi = null
+    scope?.cancel()
+    scope = null
+    // Unregister all state receivers
+    stateReceivers.values.forEach { receiver ->
+      try {
+        applicationContext?.unregisterReceiver(receiver)
+      } catch (_: IllegalArgumentException) {
+        // Already unregistered
+      }
+    }
+    stateReceivers.clear()
+    applicationContext = null
+    bluetoothAdapter = null
+  }
+
+  override fun onAttachedToActivity(binding: ActivityPluginBinding) {}
+  override fun onDetachedFromActivityForConfigChanges() {}
+  override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
+  override fun onDetachedFromActivity() {}
 
   /// Host API
 
