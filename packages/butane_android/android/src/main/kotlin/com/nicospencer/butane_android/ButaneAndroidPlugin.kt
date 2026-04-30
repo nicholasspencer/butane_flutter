@@ -39,7 +39,14 @@ class ButaneAndroidPlugin: FlutterPlugin, ButaneHostApi {
     flutterApi = ButaneFlutterApi(flutterPluginBinding.binaryMessenger)
   }
 
-  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) { }
+  override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    // Stop any active scan
+    scanCallback?.let { cb ->
+      bluetoothAdapter?.bluetoothLeScanner?.stopScan(cb)
+      scanCallback = null
+    }
+    discoveredPeripherals.clear()
+  }
 
   /// Host API
 
