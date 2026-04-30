@@ -5,6 +5,10 @@ import ButaneHostApi
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.BluetoothLeAdvertiser
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -35,6 +39,8 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     private var scanCallback: ScanCallback? = null
     private val discoveredPeripherals = mutableMapOf<String, BluetoothDevice>()
 
+    private var advertiseCallback: AdvertiseCallback? = null
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         ButaneHostApi.setUp(binding.binaryMessenger, this)
         flutterApi = ButaneFlutterApi(binding.binaryMessenger)
@@ -59,6 +65,11 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             }
         }
         stateReceivers.clear()
+        // Stop advertising
+        advertiseCallback?.let { cb ->
+            bluetoothAdapter?.bluetoothLeAdvertiser?.stopAdvertising(cb)
+            advertiseCallback = null
+        }
         // Stop any active scan
         scanCallback?.let { cb ->
             bluetoothAdapter?.bluetoothLeScanner?.stopScan(cb)
@@ -361,19 +372,105 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     override fun peripheralManagerState(
         session: PeripheralManagerSession,
         callback: (Result<ClientState>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val adapter = bluetoothAdapter
+        if (adapter == null) {
+            callback(Result.success(ClientState.UNSUPPORTED))
+            return
+        }
+
+        val clientId = session.clientIdentifier
+
+        // Register state receiver for peripheral manager if not already registered.
+        // Use a prefixed key to avoid collision with central state receivers.
+        val receiverKey = "pm:$clientId"
+        if (!stateReceivers.containsKey(receiverKey)) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                        val newState = intent.getIntExtra(
+                            BluetoothAdapter.EXTRA_STATE,
+                            BluetoothAdapter.ERROR,
+                        )
+                        val clientState = mapAdapterState(newState)
+                        flutterApi?.onPeripheralManagerState(clientId, clientState) {}
+                    }
+                }
+            }
+            val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+            applicationContext?.registerReceiver(receiver, filter)
+            stateReceivers[receiverKey] = receiver
+        }
+
+        callback(Result.success(mapAdapterState(adapter.state)))
+    }
 
     override fun startAdvertising(
         session: PeripheralManagerSession,
         localName: String?,
         serviceUuids: List<String>?,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser
+        if (advertiser == null) {
+            callback(Result.failure(FlutterError("unavailable", "BLE advertiser not available", null)))
+            return
+        }
+
+        // Stop any existing advertising
+        advertiseCallback?.let { advertiser.stopAdvertising(it) }
+
+        val settings = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setConnectable(true)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .build()
+
+        val dataBuilder = AdvertiseData.Builder()
+            .setIncludeDeviceName(localName != null)
+        serviceUuids?.forEach { uuid ->
+            dataBuilder.addServiceUuid(ParcelUuid(UUID.fromString(uuid)))
+        }
+        val data = dataBuilder.build()
+
+        val cb = object : AdvertiseCallback() {
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
+                callback(Result.success(Unit))
+            }
+
+            override fun onStartFailure(errorCode: Int) {
+                val message = when (errorCode) {
+                    AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "Already advertising"
+                    AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Advertise data too large"
+                    AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Advertising not supported"
+                    AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "Internal error"
+                    AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
+                    else -> "Unknown error: $errorCode"
+                }
+                callback(Result.failure(FlutterError("advertise-failed", message, null)))
+            }
+        }
+        advertiseCallback = cb
+
+        // If localName is set, update the adapter name before advertising.
+        if (localName != null) {
+            bluetoothAdapter?.name = localName
+        }
+
+        advertiser.startAdvertising(settings, data, cb)
+    }
 
     override fun stopAdvertising(
         session: PeripheralManagerSession,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser
+        advertiseCallback?.let { cb ->
+            advertiser?.stopAdvertising(cb)
+            advertiseCallback = null
+        }
+        callback(Result.success(Unit))
+    }
 
     override fun addService(
         session: PeripheralManagerSession,
