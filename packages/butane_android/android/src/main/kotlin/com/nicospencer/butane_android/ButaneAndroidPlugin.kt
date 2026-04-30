@@ -1,7 +1,20 @@
 package com.nicospencer.butane_android
 
+import AdvertisementData
+import AttResult
 import ButaneFlutterApi
 import ButaneHostApi
+import Characteristic
+import ClientSession
+import ClientState
+import ConnectionState
+import FlutterError
+import MutableService
+import Peripheral
+import PeripheralManagerSession
+import PeripheralSession
+import ScanResult
+import Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -41,6 +54,8 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
 
     private var advertiseCallback: AdvertiseCallback? = null
 
+    private var gattServer: GattServerManager? = null
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         ButaneHostApi.setUp(binding.binaryMessenger, this)
         flutterApi = ButaneFlutterApi(binding.binaryMessenger)
@@ -76,6 +91,9 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             scanCallback = null
         }
         discoveredPeripherals.clear()
+        // Close GATT server
+        gattServer?.close()
+        gattServer = null
         applicationContext = null
         bluetoothAdapter = null
     }
@@ -95,6 +113,37 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 else -> ClientState.UNKNOWN
             }
         }
+    }
+
+    private fun getGattServer(): GattServerManager? {
+        if (gattServer != null) return gattServer
+        val ctx = applicationContext ?: return null
+        val mgr = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return null
+        val server = GattServerManager(
+            context = ctx,
+            bluetoothManager = mgr,
+            onReadRequest = { request ->
+                flutterApi?.onReadRequest(request) {}
+            },
+            onWriteRequests = { requests ->
+                flutterApi?.onWriteRequests(requests) {}
+            },
+            onServiceAdded = { uuid, error ->
+                flutterApi?.onServiceAdded(uuid, error) {}
+            },
+            onCentralSubscribed = { clientId, centralId, serviceUuid, charUuid ->
+                flutterApi?.onCentralSubscribed(clientId, centralId, serviceUuid, charUuid) {}
+            },
+            onCentralUnsubscribed = { clientId, centralId, serviceUuid, charUuid ->
+                flutterApi?.onCentralUnsubscribed(clientId, centralId, serviceUuid, charUuid) {}
+            },
+            onReadyToUpdateSubscribers = { clientId ->
+                flutterApi?.onReadyToUpdateSubscribers(clientId) {}
+            },
+        )
+        server.open()
+        gattServer = server
+        return server
     }
 
     private fun <T> notImplemented(callback: (Result<T>) -> Unit) {
@@ -476,18 +525,44 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         session: PeripheralManagerSession,
         service: MutableService,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val server = getGattServer()
+        if (server == null) {
+            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            return
+        }
+        try {
+            server.addService(service)
+            callback(Result.success(Unit))
+        } catch (e: Exception) {
+            callback(Result.failure(FlutterError("add-service-failed", e.message, null)))
+        }
+    }
 
     override fun removeService(
         session: PeripheralManagerSession,
         serviceUuid: String,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val server = getGattServer()
+        if (server == null) {
+            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            return
+        }
+        if (!server.removeService(serviceUuid)) {
+            callback(Result.failure(FlutterError("not-found", "Service $serviceUuid not found", null)))
+            return
+        }
+        callback(Result.success(Unit))
+    }
 
     override fun removeAllServices(
         session: PeripheralManagerSession,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        gattServer?.removeAllServices()
+        callback(Result.success(Unit))
+    }
 
     override fun respondToRequest(
         session: PeripheralManagerSession,
@@ -495,7 +570,15 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         result: AttResult,
         value: ByteArray?,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val server = getGattServer()
+        if (server == null) {
+            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            return
+        }
+        server.respondToRequest(requestId, result, value)
+        callback(Result.success(Unit))
+    }
 
     override fun updateValue(
         session: PeripheralManagerSession,
@@ -503,5 +586,13 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         characteristicUuid: String,
         value: ByteArray,
         callback: (Result<Boolean>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val server = getGattServer()
+        if (server == null) {
+            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            return
+        }
+        val sent = server.updateValue(serviceUuid, characteristicUuid, value)
+        callback(Result.success(sent))
+    }
 }
