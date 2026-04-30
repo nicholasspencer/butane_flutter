@@ -48,31 +48,146 @@ class ButaneAndroidPlugin: FlutterPlugin, ButaneHostApi {
   }
 
   override fun scan(
-    session: Session?,
+    session: ClientSession?,
     forServices: List<String>?,
     callback: (kotlin.Result<Unit>) -> Unit
   ) {
-    TODO("Not yet implemented")
+    val scanner = bluetoothAdapter?.bluetoothLeScanner
+    if (scanner == null) {
+      callback(Result.failure(FlutterError("unavailable", "BLE scanner not available", null)))
+      return
+    }
+
+    // Stop any existing scan first
+    scanCallback?.let { scanner.stopScan(it) }
+
+    val scanCb = object : ScanCallback() {
+      override fun onScanResult(callbackType: Int, result: AndroidScanResult) {
+        val device = result.device
+        val address = device.address
+        discoveredPeripherals[address] = device
+
+        val peripheralSession = PeripheralSession(
+          peripheralIdentifier = address,
+          clientIdentifier = session?.clientIdentifier,
+        )
+        val peripheral = Peripheral(
+          session = peripheralSession,
+          name = result.scanRecord?.deviceName,
+          rssi = result.rssi.toLong(),
+          state = ConnectionState.DISCONNECTED,
+        )
+
+        val advertisementData = AdvertisementData(
+          localName = result.scanRecord?.deviceName,
+          manufacturerData = result.scanRecord?.let { record ->
+            val sparseArray = record.manufacturerSpecificData
+            if (sparseArray != null && sparseArray.size() > 0) {
+              val manufacturerId = sparseArray.keyAt(0)
+              val data = sparseArray.valueAt(0)
+              // Combine manufacturer ID (2 bytes LE) + data
+              val combined = ByteArray(2 + data.size)
+              combined[0] = (manufacturerId and 0xFF).toByte()
+              combined[1] = ((manufacturerId shr 8) and 0xFF).toByte()
+              data.copyInto(combined, 2)
+              combined
+            } else {
+              null
+            }
+          },
+          serviceUuids = result.scanRecord?.serviceUuids
+            ?.map { it.uuid.toString() },
+          serviceData = result.scanRecord?.serviceData
+            ?.mapKeys { it.key.uuid.toString() },
+          txPowerLevel = result.scanRecord?.txPowerLevel?.toLong(),
+          isConnectable = if (result.isConnectable) true else null,
+        )
+
+        val scanResult = ScanResult(
+          peripheral = peripheral,
+          advertisementData = advertisementData,
+        )
+        flutterApi?.onScanResult(scanResult) {}
+      }
+
+      override fun onScanFailed(errorCode: Int) {
+        // Log scan failure — no way to propagate after scan() has returned
+      }
+    }
+    scanCallback = scanCb
+
+    val filters = forServices?.map { uuid ->
+      ScanFilter.Builder()
+        .setServiceUuid(ParcelUuid(UUID.fromString(uuid)))
+        .build()
+    }
+
+    val settings = ScanSettings.Builder()
+      .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+      .build()
+
+    if (filters.isNullOrEmpty()) {
+      scanner.startScan(settings, scanCb)
+    } else {
+      scanner.startScan(filters, settings, scanCb)
+    }
+    callback(Result.success(Unit))
   }
 
-  override fun cancelScan(session: Session?, callback: (kotlin.Result<Unit>) -> Unit) {
-    TODO("Not yet implemented")
+  override fun cancelScan(session: ClientSession?, callback: (kotlin.Result<Unit>) -> Unit) {
+    val scanner = bluetoothAdapter?.bluetoothLeScanner
+    scanCallback?.let { cb ->
+      scanner?.stopScan(cb)
+      scanCallback = null
+    }
+    callback(Result.success(Unit))
   }
 
   override fun peripherals(
-    session: Session?,
+    session: ClientSession?,
     peripheralIdentifiers: List<String>,
     callback: (kotlin.Result<List<Peripheral>>) -> Unit
   ) {
-    TODO("Not yet implemented")
+    val result = peripheralIdentifiers.mapNotNull { address ->
+      discoveredPeripherals[address]?.let { device ->
+        Peripheral(
+          session = PeripheralSession(
+            peripheralIdentifier = address,
+            clientIdentifier = session?.clientIdentifier,
+          ),
+          name = device.name,
+          rssi = null,
+          state = ConnectionState.DISCONNECTED,
+        )
+      }
+    }
+    callback(Result.success(result))
   }
 
   override fun connectedPeripherals(
-    session: Session?,
+    session: ClientSession?,
     serviceUuids: List<String>,
     callback: (kotlin.Result<List<Peripheral>>) -> Unit
   ) {
-    TODO("Not yet implemented")
+    val bluetoothManager =
+      applicationContext?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    if (bluetoothManager == null) {
+      callback(Result.success(emptyList()))
+      return
+    }
+    val connectedDevices = bluetoothManager.getConnectedDevices(android.bluetooth.BluetoothProfile.GATT)
+    val result = connectedDevices.map { device ->
+      Peripheral(
+        session = PeripheralSession(
+          peripheralIdentifier = device.address,
+          clientIdentifier = session?.clientIdentifier,
+        ),
+        name = device.name,
+        rssi = null,
+        state = ConnectionState.CONNECTED,
+      )
+    }
+    callback(Result.success(result))
   }
 
   override fun connect(session: PeripheralSession, callback: (kotlin.Result<Unit>) -> Unit) {
