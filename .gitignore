@@ -302,3 +302,12 @@ n
 # Burn skill run artifacts
 .burns/
 .claude/scheduled_tasks.lock
+/.worktrees/
+
+# factoryskills install artifacts (symlinks created by `fs init --dev`)
+.claude/agents/
+.claude/skills/discover
+.claude/skills/review
+.claude/skills/specify
+.claude/skills/supervise
+.claude/skills/build
