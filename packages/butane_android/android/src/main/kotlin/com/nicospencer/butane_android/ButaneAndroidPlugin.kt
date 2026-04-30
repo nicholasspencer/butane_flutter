@@ -1,19 +1,37 @@
 package com.nicospencer.butane_android
 
+import ButaneFlutterApi
+import ButaneHostApi
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
-class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi {
+class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     private var flutterApi: ButaneFlutterApi? = null
     private var scope: CoroutineScope? = null
+
+    private var applicationContext: Context? = null
+    private var bluetoothAdapter: BluetoothAdapter? = null
+    private val stateReceivers = mutableMapOf<String?, BroadcastReceiver>()
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         ButaneHostApi.setUp(binding.binaryMessenger, this)
         flutterApi = ButaneFlutterApi(binding.binaryMessenger)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        applicationContext = binding.applicationContext
+        val bluetoothManager =
+            binding.applicationContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        bluetoothAdapter = bluetoothManager?.adapter
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -21,6 +39,34 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi {
         flutterApi = null
         scope?.cancel()
         scope = null
+        // Unregister all state receivers
+        stateReceivers.values.forEach { receiver ->
+            try {
+                applicationContext?.unregisterReceiver(receiver)
+            } catch (_: IllegalArgumentException) {
+                // Already unregistered
+            }
+        }
+        stateReceivers.clear()
+        applicationContext = null
+        bluetoothAdapter = null
+    }
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {}
+    override fun onDetachedFromActivityForConfigChanges() {}
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
+    override fun onDetachedFromActivity() {}
+
+    companion object {
+        fun mapAdapterState(adapterState: Int): ClientState {
+            return when (adapterState) {
+                BluetoothAdapter.STATE_OFF -> ClientState.POWERED_OFF
+                BluetoothAdapter.STATE_TURNING_ON -> ClientState.POWERED_OFF
+                BluetoothAdapter.STATE_ON -> ClientState.POWERED_ON
+                BluetoothAdapter.STATE_TURNING_OFF -> ClientState.POWERED_ON
+                else -> ClientState.UNKNOWN
+            }
+        }
     }
 
     private fun <T> notImplemented(callback: (Result<T>) -> Unit) {
@@ -37,8 +83,36 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi {
 
     // Central APIs
 
-    override fun state(session: ClientSession?, callback: (Result<ClientState>) -> Unit) =
-        notImplemented(callback)
+    override fun state(session: ClientSession?, callback: (Result<ClientState>) -> Unit) {
+        val adapter = bluetoothAdapter
+        if (adapter == null) {
+            callback(Result.success(ClientState.UNSUPPORTED))
+            return
+        }
+
+        val clientId = session?.clientIdentifier
+
+        // Register state receiver if not already registered for this client
+        if (!stateReceivers.containsKey(clientId)) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                        val newState = intent.getIntExtra(
+                            BluetoothAdapter.EXTRA_STATE,
+                            BluetoothAdapter.ERROR,
+                        )
+                        val clientState = mapAdapterState(newState)
+                        flutterApi?.onClientState(clientId, clientState) {}
+                    }
+                }
+            }
+            val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+            applicationContext?.registerReceiver(receiver, filter)
+            stateReceivers[clientId] = receiver
+        }
+
+        callback(Result.success(mapAdapterState(adapter.state)))
+    }
 
     override fun scan(
         session: ClientSession?,
