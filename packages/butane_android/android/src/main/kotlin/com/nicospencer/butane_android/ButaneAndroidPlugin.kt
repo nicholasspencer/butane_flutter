@@ -5,9 +5,11 @@ import AttResult
 import ButaneFlutterApi
 import ButaneHostApi
 import Characteristic
+import CharacteristicProperty
 import ClientSession
 import ClientState
 import ConnectionState
+import Descriptor
 import FlutterError
 import MutableService
 import Peripheral
@@ -17,6 +19,7 @@ import ScanResult
 import Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
@@ -417,25 +420,99 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         session: PeripheralSession,
         serviceUuids: List<String>?,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        // Nordic BleManager discovers services automatically on connect.
+        // The GATT cache is already populated by the time onDeviceReady fires.
+        // If a filter is provided, we don't need to re-discover — the Dart layer
+        // filters services from the full set returned by services().
+        callback(Result.success(Unit))
+    }
 
     override fun services(
         session: PeripheralSession,
         callback: (Result<List<Service>>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        val gattServices = connection.getDiscoveredServices()
+        val result = gattServices.map { gattService ->
+            Service(
+                uuid = gattService.uuid.toString(),
+                isPrimary = gattService.type == BluetoothGattService.SERVICE_TYPE_PRIMARY,
+            )
+        }
+        callback(Result.success(result))
+    }
 
     override fun discoverCharacteristics(
         session: PeripheralSession,
         serviceUuid: String,
         characteristicUuids: List<String>?,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        // Characteristics are discovered along with services by Nordic BleManager.
+        callback(Result.success(Unit))
+    }
+
+    private fun mapCharacteristicProperties(properties: Int): CharacteristicProperty {
+        return CharacteristicProperty(
+            broadcast = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_BROADCAST) != 0,
+            read = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_READ) != 0,
+            writeWithoutResponse = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0,
+            write = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE) != 0,
+            notify = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0,
+            indicate = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0,
+            authenticatedSignedWrites = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_SIGNED_WRITE) != 0,
+            extendedProperties = (properties and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_EXTENDED_PROPS) != 0,
+            notifyEncryptionRequired = false,
+            indicateEncryptionRequired = false,
+        )
+    }
 
     override fun characteristics(
         session: PeripheralSession,
         serviceUuid: String,
         callback: (Result<List<Characteristic>>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        val gattService = connection.getDiscoveredServices()
+            .firstOrNull { it.uuid.toString().equals(serviceUuid, ignoreCase = true) }
+        if (gattService == null) {
+            callback(Result.failure(FlutterError("not-found", "Service $serviceUuid not found", null)))
+            return
+        }
+        val result = gattService.characteristics.map { gattChar ->
+            Characteristic(
+                uuid = gattChar.uuid.toString(),
+                value = gattChar.value,
+                descriptors = gattChar.descriptors.map { desc ->
+                    Descriptor(
+                        uuid = desc.uuid.toString(),
+                        value = desc.value,
+                    )
+                },
+                properties = mapCharacteristicProperties(gattChar.properties),
+            )
+        }
+        callback(Result.success(result))
+    }
 
     override fun readCharacteristic(
         session: PeripheralSession,

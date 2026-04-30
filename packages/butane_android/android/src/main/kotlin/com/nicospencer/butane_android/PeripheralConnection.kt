@@ -1,5 +1,6 @@
 package com.nicospencer.butane_android
 
+import ConnectionState
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.ktx.suspend
+import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.UUID
 
 class PeripheralConnection(
@@ -22,6 +24,21 @@ class PeripheralConnection(
 
     /** The underlying BluetoothGatt, available after connection. */
     private var gatt: BluetoothGatt? = null
+
+    init {
+        setConnectionObserver(object : ConnectionObserver {
+            override fun onDeviceConnecting(device: BluetoothDevice) {}
+            override fun onDeviceConnected(device: BluetoothDevice) {}
+            override fun onDeviceFailedToConnect(device: BluetoothDevice, reason: Int) {}
+            override fun onDeviceReady(device: BluetoothDevice) {}
+            override fun onDeviceDisconnecting(device: BluetoothDevice) {}
+            override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
+                _connectionState.value = ConnectionState.DISCONNECTED
+                onConnectionStateChanged(device, ConnectionState.DISCONNECTED)
+                gatt = null
+            }
+        })
+    }
 
     override fun initialize() {
         // Called after services are discovered. No-op for now.
@@ -42,12 +59,6 @@ class PeripheralConnection(
             _connectionState.value = ConnectionState.CONNECTED
             onConnectionStateChanged(device, ConnectionState.CONNECTED)
         }
-    }
-
-    override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
-        _connectionState.value = ConnectionState.DISCONNECTED
-        onConnectionStateChanged(device, ConnectionState.DISCONNECTED)
-        gatt = null
     }
 
     /**
