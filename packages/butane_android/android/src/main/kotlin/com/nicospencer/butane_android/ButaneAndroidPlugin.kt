@@ -26,6 +26,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
@@ -38,6 +39,8 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
 
     private var scanCallback: ScanCallback? = null
     private val discoveredPeripherals = mutableMapOf<String, BluetoothDevice>()
+
+    private val connections = mutableMapOf<String, PeripheralConnection>()
 
     private var advertiseCallback: AdvertiseCallback? = null
 
@@ -65,6 +68,9 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             }
         }
         stateReceivers.clear()
+        // Close all connections
+        connections.values.forEach { it.close() }
+        connections.clear()
         // Stop advertising
         advertiseCallback?.let { cb ->
             bluetoothAdapter?.bluetoothLeAdvertiser?.stopAdvertising(cb)
@@ -106,6 +112,19 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                     null,
                 ),
             ),
+        )
+    }
+
+    private fun buildPeripheral(
+        device: BluetoothDevice,
+        session: PeripheralSession,
+        state: ConnectionState,
+    ): Peripheral {
+        return Peripheral(
+            session = session,
+            name = device.name,
+            rssi = null,
+            state = state,
         )
     }
 
@@ -280,18 +299,70 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         callback(Result.success(result))
     }
 
-    override fun connect(session: PeripheralSession, callback: (Result<Unit>) -> Unit) =
-        notImplemented(callback)
+    override fun connect(session: PeripheralSession, callback: (Result<Unit>) -> Unit) {
+        val context = applicationContext
+        if (context == null) {
+            callback(Result.failure(FlutterError("unavailable", "Context not available", null)))
+            return
+        }
+
+        val address = session.peripheralIdentifier
+        val device = discoveredPeripherals[address]
+            ?: bluetoothAdapter?.getRemoteDevice(address)
+        if (device == null) {
+            callback(Result.failure(FlutterError("not-found", "Peripheral $address not found", null)))
+            return
+        }
+
+        // Get or create connection
+        val connection = connections.getOrPut(address) {
+            PeripheralConnection(context) { changedDevice, newState ->
+                val peripheral = buildPeripheral(changedDevice, session, newState)
+                flutterApi?.onConnectionState(peripheral, newState) {}
+            }
+        }
+
+        scope?.launch {
+            try {
+                connection.connectDevice(device)
+                callback(Result.success(Unit))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("connect-failed", e.message, null)))
+            }
+        } ?: callback(Result.failure(FlutterError("unavailable", "Plugin not attached", null)))
+    }
 
     override fun cancelConnection(
         session: PeripheralSession,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val address = session.peripheralIdentifier
+        val connection = connections[address]
+        if (connection == null) {
+            callback(Result.success(Unit))
+            return
+        }
+
+        scope?.launch {
+            try {
+                connection.disconnectDevice()
+                connections.remove(address)
+                callback(Result.success(Unit))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("disconnect-failed", e.message, null)))
+            }
+        } ?: callback(Result.failure(FlutterError("unavailable", "Plugin not attached", null)))
+    }
 
     override fun connectionState(
         session: PeripheralSession,
         callback: (Result<ConnectionState>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val address = session.peripheralIdentifier
+        val connection = connections[address]
+        val state = connection?.connectionState?.value ?: ConnectionState.DISCONNECTED
+        callback(Result.success(state))
+    }
 
     override fun discoverServices(
         session: PeripheralSession,
