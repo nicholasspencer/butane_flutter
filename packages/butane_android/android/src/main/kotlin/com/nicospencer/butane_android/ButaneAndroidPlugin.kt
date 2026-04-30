@@ -2,7 +2,18 @@ package com.nicospencer.butane_android
 
 import ButaneFlutterApi
 import ButaneHostApi
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult as AndroidScanResult
+import android.bluetooth.le.ScanSettings
+import android.content.Context
+import android.os.ParcelUuid
 import androidx.annotation.NonNull
+import java.util.UUID
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -14,8 +25,16 @@ import io.flutter.plugin.common.MethodChannel.Result
 class ButaneAndroidPlugin: FlutterPlugin, ButaneHostApi {
   private var flutterApi: ButaneFlutterApi? = null
 
-  private var managers: Map<UUID, BluetoothManager> = mutableMapOf()
+  private var bluetoothAdapter: BluetoothAdapter? = null
+  private var applicationContext: Context? = null
+
+  private var scanCallback: ScanCallback? = null
+  private val discoveredPeripherals = mutableMapOf<String, BluetoothDevice>()
+
   override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+    val bluetoothManager = flutterPluginBinding.applicationContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    bluetoothAdapter = bluetoothManager.adapter
+    applicationContext = flutterPluginBinding.applicationContext
     ButaneHostApi.setUp(flutterPluginBinding.binaryMessenger, this)
     flutterApi = ButaneFlutterApi(flutterPluginBinding.binaryMessenger)
   }
