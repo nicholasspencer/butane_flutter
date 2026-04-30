@@ -311,3 +311,5 @@ n
 .claude/skills/specify
 .claude/skills/supervise
 .claude/skills/build
+
+packages/butane_harness/ios/Podfile.lock
