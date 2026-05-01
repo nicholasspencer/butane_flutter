@@ -10,12 +10,14 @@ platform-specific implementations.
 
 ## Platform support
 
-| Platform | Status | Backend |
-|----------|--------|---------|
-| iOS      | ✅     | CoreBluetooth (Swift) |
-| macOS    | ✅     | CoreBluetooth (Swift) |
-| Linux    | ✅     | BlueZ over D-Bus (central + peripheral) |
-| Android  | 🚧 stub | Kotlin scaffold only, no BLE yet |
+| Platform | Central | Peripheral | Backend |
+|----------|---------|------------|---------|
+| iOS      | ✅      | ✅         | CoreBluetooth (Swift) |
+| macOS    | ✅      | ✅         | CoreBluetooth (Swift) |
+| Linux    | ✅      | ✅         | BlueZ 5.x via D-Bus + raw `dbus` for GATT server / advertising |
+| Android  | ✅      | ✅         | Android BLE APIs (Kotlin), min API 31 |
+
+All four platforms have passed the full 15-step [`ble_flow`](docs/harness-verification.md) scenario. Screen recordings of the Android ↔ macOS cross-device burns (both directions) are in [`docs/recordings/`](docs/recordings/).
 
 ## Monorepo layout
 
@@ -27,7 +29,7 @@ This repo is a Dart pub workspace. Packages live under `packages/`:
 | [`butane_platform_interface`](packages/butane_platform_interface) | Abstract platform interface + Pigeon-generated channels. |
 | [`butane_core_bluetooth`](packages/butane_core_bluetooth) | iOS / macOS implementation via CoreBluetooth. |
 | [`butane_bluez`](packages/butane_bluez) | Linux implementation via BlueZ. |
-| [`butane_android`](packages/butane_android) | Android implementation (stub). |
+| [`butane_android`](packages/butane_android) | Android implementation (Kotlin). |
 | [`butane_harness`](packages/butane_harness) | Integration-test harness app (central or peripheral role, WebSocket-controlled). |
 | [`butane_coordinator`](packages/butane_coordinator) | CLI that drives two harness instances through scripted scenarios. |
 
@@ -76,3 +78,6 @@ Additional notes live under [`docs/`](docs):
   architecture diagrams and the 15-step verification report.
 - [`docs/bluetoothctl.md`](docs/bluetoothctl.md) — `bluetoothctl` cheat
   sheet for Linux debugging.
+- [`docs/recordings/`](docs/recordings/) — screen recordings of the
+  Android ↔ macOS cross-device burns in both central/peripheral directions,
+  with per-step coordinator results.
