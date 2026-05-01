@@ -276,7 +276,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             }
 
             override fun onScanFailed(errorCode: Int) {
-                // Log scan failure — no way to propagate after scan() has returned
+                android.util.Log.e("ButaneAndroid", "BLE scan failed: errorCode=$errorCode")
             }
         }
         scanCallback = scanCb
