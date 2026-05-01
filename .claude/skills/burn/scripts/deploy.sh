@@ -188,16 +188,17 @@ launch_ipad() {
 
 launch_android() {
   local serial="$1" role="$2" port="$3"
+  local ADB="${ADB:-$(command -v adb 2>/dev/null || echo /opt/homebrew/share/android-commandlinetools/platform-tools/adb)}"
   echo "Building Android harness (release)..."
   ( cd "$harness" && flutter build apk --release )
   local apk="$harness/build/app/outputs/flutter-apk/app-release.apk"
   [[ -f "$apk" ]] || { echo "deploy: missing APK $apk" >&2; exit 2; }
 
   echo "Installing on Android device $serial..."
-  adb -s "$serial" install -r "$apk"
+  "$ADB" -s "$serial" install -r "$apk"
 
   echo "Launching $role on Android device $serial..."
-  adb -s "$serial" shell am start \
+  "$ADB" -s "$serial" shell am start \
     -n "com.nicospencer.butane_harness/.MainActivity" \
     --es ROLE "$role" \
     --es WS_PORT "$port"

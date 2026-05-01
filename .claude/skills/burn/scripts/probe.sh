@@ -20,8 +20,9 @@ case "$sel" in
     fi ;;
   adb:*)
     serial="${sel#adb:}"
+    ADB="${ADB:-$(command -v adb 2>/dev/null || echo /opt/homebrew/share/android-commandlinetools/platform-tools/adb)}"
     echo "Probing Android device $serial..."
-    if ! adb devices | grep -q "$serial"; then
+    if ! "$ADB" devices | grep -q "$serial"; then
       echo "probe: Android device $serial not found" >&2
       exit 1
     fi
