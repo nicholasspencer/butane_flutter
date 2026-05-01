@@ -1,2 +1,4 @@
 # factoryskills project configuration
 merge_strategy=pr
+agent_endpoint=http://localhost:8080
+agent_model=qwen3.6-moe
