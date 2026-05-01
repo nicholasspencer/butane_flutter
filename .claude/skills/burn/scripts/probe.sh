@@ -18,6 +18,14 @@ case "$sel" in
       echo "probe: $sel ssh to $target failed (auth, timeout, or host unreachable)" >&2
       exit 3
     fi ;;
-  adb:*|mdns:*) echo "probe: ${sel%%:*}: not implemented in vertical slice" >&2; exit 64 ;;
+  adb:*)
+    serial="${sel#adb:}"
+    echo "Probing Android device $serial..."
+    if ! adb devices | grep -q "$serial"; then
+      echo "probe: Android device $serial not found" >&2
+      exit 1
+    fi
+    echo "probe: $sel ok" ;;
+  mdns:*) echo "probe: ${sel%%:*}: not implemented in vertical slice" >&2; exit 64 ;;
   *) echo "probe: unrecognized selector '$sel'" >&2; exit 65 ;;
 esac
