@@ -369,7 +369,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 // MARK: Peripheral Actor
 
 actor PeripheralActor: Equatable {
-  let peripheral: CBPeripheral
+  nonisolated let peripheral: CBPeripheral
   
   let flutterApi: ButaneFlutterApi
   
