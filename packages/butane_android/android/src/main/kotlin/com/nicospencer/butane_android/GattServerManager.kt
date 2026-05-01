@@ -15,6 +15,8 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import java.util.UUID
 
 class GattServerManager(
@@ -27,6 +29,8 @@ class GattServerManager(
     private val onCentralUnsubscribed: (String?, String, String, String) -> Unit,
     private val onReadyToUpdateSubscribers: (String?) -> Unit,
 ) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private var gattServer: BluetoothGattServer? = null
     private val services = mutableMapOf<String, BluetoothGattService>()
     private val pendingRequests = mutableMapOf<Long, PendingRequest>()
@@ -41,7 +45,7 @@ class GattServerManager(
     private val serverCallback = object : BluetoothGattServerCallback() {
         override fun onServiceAdded(status: Int, service: BluetoothGattService) {
             val error = if (status != BluetoothGatt.GATT_SUCCESS) "Failed with status $status" else null
-            onServiceAdded(service.uuid.toString(), error)
+            mainHandler.post { onServiceAdded(service.uuid.toString(), error) }
         }
 
         override fun onCharacteristicReadRequest(
@@ -62,7 +66,7 @@ class GattServerManager(
                 offset = offset.toLong(),
                 value = null,
             )
-            onReadRequest(request)
+            mainHandler.post { onReadRequest(request) }
         }
 
         override fun onCharacteristicWriteRequest(
@@ -88,7 +92,7 @@ class GattServerManager(
                 offset = offset.toLong(),
                 value = value,
             )
-            onWriteRequests(listOf(request))
+            mainHandler.post { onWriteRequests(listOf(request)) }
 
             if (!responseNeeded) {
                 // No response needed — auto-respond success
@@ -113,9 +117,9 @@ class GattServerManager(
 
                 if (value != null && (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ||
                             value.contentEquals(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE))) {
-                    onCentralSubscribed(null, device.address, serviceUuid, charUuid)
+                    mainHandler.post { onCentralSubscribed(null, device.address, serviceUuid, charUuid) }
                 } else {
-                    onCentralUnsubscribed(null, device.address, serviceUuid, charUuid)
+                    mainHandler.post { onCentralUnsubscribed(null, device.address, serviceUuid, charUuid) }
                 }
             }
 
@@ -125,7 +129,7 @@ class GattServerManager(
         }
 
         override fun onNotificationSent(device: BluetoothDevice, status: Int) {
-            onReadyToUpdateSubscribers(null)
+            mainHandler.post { onReadyToUpdateSubscribers(null) }
         }
     }
 

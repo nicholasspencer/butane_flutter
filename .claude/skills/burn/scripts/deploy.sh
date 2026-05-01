@@ -189,8 +189,13 @@ launch_ipad() {
 launch_android() {
   local serial="$1" role="$2" port="$3"
   local ADB="${ADB:-$(command -v adb 2>/dev/null || echo /opt/homebrew/share/android-commandlinetools/platform-tools/adb)}"
-  echo "Building Android harness (release)..."
-  ( cd "$harness" && flutter build apk --release )
+  # Bake ROLE and WS_PORT at compile time — Flutter's Platform.environment
+  # can't read Android Intent extras (Java-side only), so --dart-define is the
+  # only way to pass config to the Dart layer.
+  echo "Building Android harness (release, ROLE=$role, WS_PORT=$port)..."
+  ( cd "$harness" && flutter build apk --release \
+      --dart-define=ROLE="$role" \
+      --dart-define=WS_PORT="$port" )
   local apk="$harness/build/app/outputs/flutter-apk/app-release.apk"
   [[ -f "$apk" ]] || { echo "deploy: missing APK $apk" >&2; exit 2; }
 
@@ -199,9 +204,7 @@ launch_android() {
 
   echo "Launching $role on Android device $serial..."
   "$ADB" -s "$serial" shell am start \
-    -n "com.nicospencer.butane_harness/.MainActivity" \
-    --es ROLE "$role" \
-    --es WS_PORT "$port"
+    -n "com.nicospencer.butane_harness/.MainActivity"
 }
 
 {
@@ -234,14 +237,43 @@ launch_android() {
     android) launch_android "$central_detail" central "$CENTRAL_PORT" ;;
   esac
 
-  # --- Let CoreBluetooth / BlueZ settle and mDNS advertise ---
+  # --- ADB port forwarding for Android roles (exposes device WS port at localhost) ---
+  ADB="${ADB:-$(command -v adb 2>/dev/null || echo /opt/homebrew/share/android-commandlinetools/platform-tools/adb)}"
+  if [[ "$peripheral_kind" == "android" ]]; then
+    echo "ADB forward: localhost:$PERIPHERAL_PORT -> device:$PERIPHERAL_PORT"
+    "$ADB" -s "$peripheral_detail" forward tcp:"$PERIPHERAL_PORT" tcp:"$PERIPHERAL_PORT"
+  fi
+  if [[ "$central_kind" == "android" ]]; then
+    echo "ADB forward: localhost:$CENTRAL_PORT -> device:$CENTRAL_PORT"
+    "$ADB" -s "$central_detail" forward tcp:"$CENTRAL_PORT" tcp:"$CENTRAL_PORT"
+  fi
+
+  # --- Let CoreBluetooth / BlueZ settle ---
   sleep 4
 
-  # --- Run coordinator in mDNS discovery mode (no host args) ---
+  # --- Run coordinator ---
+  # For local/android roles we know the exact host:port, so pass them explicitly
+  # to avoid multicast DNS socket issues (errno=65 on macOS loopback).
   echo ""
-  echo "Running coordinator (--discover)..."
-  cd "$repo"
-  dart run packages/butane_coordinator/bin/coordinator.dart --discover --timeout 30
+  central_ws_host=""; central_ws_port=""; peripheral_ws_host=""; peripheral_ws_port=""
+  [[ "$central_kind"    == "local"   || "$central_kind"    == "android" ]] && { central_ws_host=localhost; central_ws_port="$CENTRAL_PORT"; }
+  [[ "$peripheral_kind" == "local"   || "$peripheral_kind" == "android" ]] && { peripheral_ws_host=localhost; peripheral_ws_port="$PERIPHERAL_PORT"; }
+
+  if [[ -n "$central_ws_host" && -n "$peripheral_ws_host" ]]; then
+    echo "Running coordinator (explicit host:port — no mDNS)..."
+    cd "$repo"
+    dart run packages/butane_coordinator/bin/coordinator.dart \
+      --no-discover \
+      --host "$central_ws_host" \
+      --central-port "$central_ws_port" \
+      --peripheral-host "$peripheral_ws_host" \
+      --peripheral-port "$peripheral_ws_port" \
+      --timeout 30
+  else
+    echo "Running coordinator (--discover)..."
+    cd "$repo"
+    dart run packages/butane_coordinator/bin/coordinator.dart --discover --timeout 30
+  fi
   rc=$?
   echo ""
   echo "Coordinator exited with code $rc"

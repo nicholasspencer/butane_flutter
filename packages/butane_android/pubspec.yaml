@@ -22,8 +22,9 @@ dev_dependencies:
 
 flutter:
   plugin:
+    implements: butane_platform_interface
     platforms:
       android:
         package: com.nicospencer.butane_android
         pluginClass: ButaneAndroidPlugin
-        dartClass: ButaneAndroid
+        dartPluginClass: ButaneAndroid

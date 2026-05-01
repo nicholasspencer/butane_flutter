@@ -26,6 +26,8 @@ dev_dependencies:
 flutter:
   plugin:
     platforms:
+      android:
+        default_package: butane_android
       ios:
         default_package: butane_core_bluetooth
       macos:
