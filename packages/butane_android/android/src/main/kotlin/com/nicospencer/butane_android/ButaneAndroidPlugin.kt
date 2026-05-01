@@ -519,7 +519,26 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         serviceUuid: String,
         characteristicUuid: String,
         callback: (Result<ByteArray>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        val characteristic = connection.findCharacteristic(serviceUuid, characteristicUuid)
+        if (characteristic == null) {
+            callback(Result.failure(FlutterError("not-found", "Characteristic $characteristicUuid not found", null)))
+            return
+        }
+        scope?.launch {
+            try {
+                val value = connection.readCharacteristicValue(characteristic)
+                callback(Result.success(value))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("read-failed", e.message, null)))
+            }
+        }
+    }
 
     override fun writeCharacteristic(
         session: PeripheralSession,
@@ -528,7 +547,26 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         value: ByteArray,
         withoutResponse: Boolean,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        val characteristic = connection.findCharacteristic(serviceUuid, characteristicUuid)
+        if (characteristic == null) {
+            callback(Result.failure(FlutterError("not-found", "Characteristic $characteristicUuid not found", null)))
+            return
+        }
+        scope?.launch {
+            try {
+                connection.writeCharacteristicValue(characteristic, value, withoutResponse)
+                callback(Result.success(Unit))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("write-failed", e.message, null)))
+            }
+        }
+    }
 
     override fun observeCharacteristic(
         observe: Boolean,
@@ -536,7 +574,46 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         serviceUuid: String,
         characteristicUuid: String,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        val characteristic = connection.findCharacteristic(serviceUuid, characteristicUuid)
+        if (characteristic == null) {
+            callback(Result.failure(FlutterError("not-found", "Characteristic $characteristicUuid not found", null)))
+            return
+        }
+        scope?.launch {
+            try {
+                if (observe) {
+                    connection.notificationCallback = { notifiedChar, notifiedValue ->
+                        val peripheral = Peripheral(
+                            session = session,
+                            name = null,
+                            rssi = null,
+                            state = ConnectionState.CONNECTED,
+                        )
+                        val charObj = Characteristic(
+                            uuid = notifiedChar.uuid.toString(),
+                            value = notifiedValue,
+                            descriptors = null,
+                            properties = null,
+                        )
+                        flutterApi?.onCharacteristicValue(peripheral, charObj, notifiedValue) {}
+                    }
+                    connection.enableNotificationsForCharacteristic(characteristic)
+                } else {
+                    connection.disableNotificationsForCharacteristic(characteristic)
+                    connection.notificationCallback = null
+                }
+                callback(Result.success(Unit))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("notify-failed", e.message, null)))
+            }
+        }
+    }
 
     override fun readDescriptor(
         session: PeripheralSession,
@@ -544,7 +621,26 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         characteristicUuid: String,
         descriptorUuid: String,
         callback: (Result<ByteArray>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        val descriptor = connection.findDescriptor(serviceUuid, characteristicUuid, descriptorUuid)
+        if (descriptor == null) {
+            callback(Result.failure(FlutterError("not-found", "Descriptor $descriptorUuid not found", null)))
+            return
+        }
+        scope?.launch {
+            try {
+                val value = connection.readDescriptorValue(descriptor)
+                callback(Result.success(value))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("read-failed", e.message, null)))
+            }
+        }
+    }
 
     override fun writeDescriptor(
         session: PeripheralSession,
@@ -553,16 +649,62 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         descriptorUuid: String,
         value: ByteArray,
         callback: (Result<Unit>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        val descriptor = connection.findDescriptor(serviceUuid, characteristicUuid, descriptorUuid)
+        if (descriptor == null) {
+            callback(Result.failure(FlutterError("not-found", "Descriptor $descriptorUuid not found", null)))
+            return
+        }
+        scope?.launch {
+            try {
+                connection.writeDescriptorValue(descriptor, value)
+                callback(Result.success(Unit))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("write-failed", e.message, null)))
+            }
+        }
+    }
 
-    override fun readRssi(session: PeripheralSession, callback: (Result<Long>) -> Unit) =
-        notImplemented(callback)
+    override fun readRssi(session: PeripheralSession, callback: (Result<Long>) -> Unit) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        scope?.launch {
+            try {
+                val rssi = connection.readRemoteRssi()
+                callback(Result.success(rssi))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("rssi-failed", e.message, null)))
+            }
+        }
+    }
 
     override fun requestMtu(
         session: PeripheralSession,
         mtu: Long,
         callback: (Result<Long>) -> Unit,
-    ) = notImplemented(callback)
+    ) {
+        val connection = connections[session.peripheralIdentifier]
+        if (connection == null) {
+            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            return
+        }
+        scope?.launch {
+            try {
+                val negotiatedMtu = connection.requestMtuValue(mtu.toInt())
+                callback(Result.success(negotiatedMtu))
+            } catch (e: Exception) {
+                callback(Result.failure(FlutterError("mtu-failed", e.message, null)))
+            }
+        }
+    }
 
     // Peripheral Manager APIs
 

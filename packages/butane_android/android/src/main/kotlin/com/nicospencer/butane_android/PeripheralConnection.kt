@@ -10,6 +10,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import no.nordicsemi.android.ble.BleManager
+import no.nordicsemi.android.ble.ktx.asFlow
 import no.nordicsemi.android.ble.ktx.suspend
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.UUID
@@ -103,4 +104,67 @@ class PeripheralConnection(
         return findCharacteristic(serviceUuid, characteristicUuid)
             ?.getDescriptor(UUID.fromString(descriptorUuid))
     }
+
+    suspend fun readCharacteristicValue(
+        characteristic: BluetoothGattCharacteristic,
+    ): ByteArray {
+        val response = readCharacteristic(characteristic).suspend()
+        return response.value ?: ByteArray(0)
+    }
+
+    suspend fun writeCharacteristicValue(
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray,
+        withoutResponse: Boolean,
+    ) {
+        val type = if (withoutResponse) {
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        } else {
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        }
+        writeCharacteristic(characteristic, value, type).suspend()
+    }
+
+    suspend fun enableNotificationsForCharacteristic(
+        characteristic: BluetoothGattCharacteristic,
+    ) {
+        setNotificationCallback(characteristic).with { _, data ->
+            // Notification data handled in the plugin via the callback
+            notificationCallback?.invoke(characteristic, data.value ?: ByteArray(0))
+        }
+        enableNotifications(characteristic).suspend()
+    }
+
+    suspend fun disableNotificationsForCharacteristic(
+        characteristic: BluetoothGattCharacteristic,
+    ) {
+        disableNotifications(characteristic).suspend()
+    }
+
+    suspend fun readDescriptorValue(
+        descriptor: BluetoothGattDescriptor,
+    ): ByteArray {
+        val response = readDescriptor(descriptor).suspend()
+        return response.value ?: ByteArray(0)
+    }
+
+    suspend fun writeDescriptorValue(
+        descriptor: BluetoothGattDescriptor,
+        value: ByteArray,
+    ) {
+        writeDescriptor(descriptor, value).suspend()
+    }
+
+    suspend fun readRemoteRssi(): Long {
+        val rssi = readRssi().suspend()
+        return rssi.toLong()
+    }
+
+    suspend fun requestMtuValue(mtu: Int): Long {
+        val result = requestMtu(mtu).suspend()
+        return result.toLong()
+    }
+
+    /** Callback for characteristic notification values. Set by the plugin. */
+    var notificationCallback: ((BluetoothGattCharacteristic, ByteArray) -> Unit)? = null
 }
