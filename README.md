@@ -1,7 +1,5 @@
 # Butane 🔥
 
-> Light your comm on fire.
-
 Butane is a Flutter Bluetooth Low Energy plugin. It uses a federated plugin
 architecture with [Pigeon](https://pub.dev/packages/pigeon) for the
 Dart ↔ native bridge, and exposes a unified porcelain API
