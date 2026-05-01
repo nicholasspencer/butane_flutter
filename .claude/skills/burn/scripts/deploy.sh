@@ -65,6 +65,7 @@ resolve_role() {
     local)  echo "local:" ;;
     ssh:*)  echo "ssh:${sel#ssh:}" ;;
     udid:*) echo "ipad:${sel#udid:}" ;;
+    adb:*)  echo "android:${sel#adb:}" ;;
     *) echo "deploy: selector '$sel' not supported" >&2; exit 64 ;;
   esac
 }
@@ -185,6 +186,24 @@ launch_ipad() {
     com.nicospencer.butaneHarness
 }
 
+launch_android() {
+  local serial="$1" role="$2" port="$3"
+  local ADB="${ADB:-$(command -v adb 2>/dev/null || echo /opt/homebrew/share/android-commandlinetools/platform-tools/adb)}"
+  echo "Building Android harness (release)..."
+  ( cd "$harness" && flutter build apk --release )
+  local apk="$harness/build/app/outputs/flutter-apk/app-release.apk"
+  [[ -f "$apk" ]] || { echo "deploy: missing APK $apk" >&2; exit 2; }
+
+  echo "Installing on Android device $serial..."
+  "$ADB" -s "$serial" install -r "$apk"
+
+  echo "Launching $role on Android device $serial..."
+  "$ADB" -s "$serial" shell am start \
+    -n "com.nicospencer.butane_harness/.MainActivity" \
+    --es ROLE "$role" \
+    --es WS_PORT "$port"
+}
+
 {
   echo "=== burn deploy: central=$central peripheral=$peripheral scenario=$scenario ==="
 
@@ -202,15 +221,17 @@ launch_ipad() {
 
   # --- Launch peripheral first (advertiser must be up before central scans) ---
   case "$peripheral_kind" in
-    local) launch_local peripheral "$PERIPHERAL_PORT" ;;
-    ssh)   launch_ssh   "$peripheral_detail" peripheral "$PERIPHERAL_PORT" ;;
-    ipad)  launch_ipad  "$peripheral_detail" "$PERIPHERAL_PORT" ;;
+    local)   launch_local   peripheral "$PERIPHERAL_PORT" ;;
+    ssh)     launch_ssh     "$peripheral_detail" peripheral "$PERIPHERAL_PORT" ;;
+    ipad)    launch_ipad    "$peripheral_detail" "$PERIPHERAL_PORT" ;;
+    android) launch_android "$peripheral_detail" peripheral "$PERIPHERAL_PORT" ;;
   esac
 
   # --- Launch central ---
   case "$central_kind" in
-    local) launch_local central "$CENTRAL_PORT" ;;
-    ssh)   launch_ssh   "$central_detail" central "$CENTRAL_PORT" ;;
+    local)   launch_local central "$CENTRAL_PORT" ;;
+    ssh)     launch_ssh   "$central_detail" central "$CENTRAL_PORT" ;;
+    android) launch_android "$central_detail" central "$CENTRAL_PORT" ;;
   esac
 
   # --- Let CoreBluetooth / BlueZ settle and mDNS advertise ---
