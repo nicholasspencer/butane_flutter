@@ -40,6 +40,14 @@ Future<void> main(List<String> arguments) async {
       'discover-timeout',
       help: 'mDNS discovery timeout in seconds (default: no limit)',
     )
+    ..addOption(
+      'scenario',
+      help: 'Scenario to run. Omit for the default full BLE flow. '
+            'Use "nus" for the full NUS bench, or "nus:<name>" for one '
+            'scenario (round-trip, notify-lifecycle, large-write, '
+            'burst-writes, reconnect, peripheral-vanishes, '
+            'cancel-mid-discovery).',
+    )
     ..addFlag(
       'help',
       abbr: 'h',
@@ -53,6 +61,15 @@ Future<void> main(List<String> arguments) async {
     print('Usage: coordinator [options]');
     print(parser.usage);
     exit(0);
+  }
+
+  // Validate scenario option early
+  final scenarioArg = results.option('scenario');
+  final isNusSuite = scenarioArg == 'nus';
+  final isNusOne   = scenarioArg != null && scenarioArg.startsWith('nus:');
+  if (scenarioArg != null && !isNusSuite && !isNusOne) {
+    print('FATAL: unknown --scenario "$scenarioArg". Valid: nus, nus:<name>.');
+    exit(2);
   }
 
   final discover = results.flag('discover');
@@ -172,33 +189,23 @@ Future<void> main(List<String> arguments) async {
         print('');
       }
 
-      print('Running full BLE flow...');
-      print('');
-
-      final results = await runner.runFullBleFlow();
-
-      // Print results table.
-      print('Step                                     Result    Duration');
-      print('-----------------------------------------------------------');
-
-      var allPassed = true;
-      for (final result in results) {
-        final status = result.success ? 'PASS' : 'FAIL';
-        final ms = '${result.duration.inMilliseconds}ms';
-        final name = result.name.padRight(40);
-        print('$name  $status      $ms');
-        if (!result.success && result.error != null) {
-          print('  Error: ${result.error}');
-        }
-        if (!result.success) allPassed = false;
+      bool runPassed;
+      if (isNusSuite || isNusOne) {
+        print('Running NUS bench...');
+        print('');
+        final suite = NusSuite(central: central, peripheral: peripheral);
+        final scenarios = isNusOne
+          ? <ScenarioResult>[await suite.runOne(scenarioArg.substring(4))]
+          : await suite.runAll();
+        runPassed = _printNusResults(scenarios);
+      } else {
+        print('Running full BLE flow...');
+        print('');
+        final stepResults = await runner.runFullBleFlow();
+        runPassed = _printStepResults(stepResults);
       }
 
-      print('');
-      final passed = results.where((r) => r.success).length;
-      final total = results.length;
-      print('Results: $passed/$total passed');
-
-      if (allPassed) {
+      if (runPassed) {
         print('');
         print('RUN $run PASSED ✓');
       } else {
@@ -231,4 +238,45 @@ Future<void> main(List<String> arguments) async {
     await central.disconnect();
     await peripheral.disconnect();
   }
+}
+
+bool _printStepResults(List<StepResult> results) {
+  // Print results table.
+  print('Step                                     Result    Duration');
+  print('-----------------------------------------------------------');
+
+  var allPassed = true;
+  for (final result in results) {
+    final status = result.success ? 'PASS' : 'FAIL';
+    final ms = '${result.duration.inMilliseconds}ms';
+    final name = result.name.padRight(40);
+    print('$name  $status      $ms');
+    if (!result.success && result.error != null) {
+      print('  Error: ${result.error}');
+    }
+    if (!result.success) allPassed = false;
+  }
+
+  print('');
+  final passed = results.where((r) => r.success).length;
+  final total = results.length;
+  print('Results: $passed/$total passed');
+  return allPassed;
+}
+
+bool _printNusResults(List<ScenarioResult> results) {
+  print('Scenario                  Result    Duration');
+  print('-------------------------------------------');
+  var all = true;
+  for (final r in results) {
+    final status = r.success ? 'PASS' : 'FAIL';
+    print('${r.name.padRight(24)}  $status      ${r.duration.inMilliseconds}ms');
+    if (r.diagnostics.isNotEmpty) print('  Diagnostics: ${r.diagnostics}');
+    if (!r.success && r.error != null) print('  Error: ${r.error}');
+    if (!r.success) all = false;
+  }
+  final passed = results.where((r) => r.success).length;
+  final totalMs = results.fold<int>(0, (a, r) => a + r.duration.inMilliseconds);
+  print('Suite: $passed/${results.length} passed in ${(totalMs / 1000).toStringAsFixed(1)}s');
+  return all;
 }
