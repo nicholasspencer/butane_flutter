@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'step_result.dart';
+import 'step_runner.dart';
 import 'ws_client.dart';
 
 /// Well-known UUIDs for the test BLE service and characteristic.
@@ -453,25 +454,6 @@ class ScenarioRunner {
     String name,
     Future<Map<String, dynamic>> Function() action,
   ) async {
-    final stopwatch = Stopwatch()..start();
-    try {
-      final response = await action();
-      stopwatch.stop();
-      final success = response['success'] as bool? ?? true;
-      return StepResult(
-        name: name,
-        success: success,
-        duration: stopwatch.elapsed,
-        error: success ? null : response['error'] as String?,
-      );
-    } catch (e) {
-      stopwatch.stop();
-      return StepResult(
-        name: name,
-        success: false,
-        duration: stopwatch.elapsed,
-        error: e.toString(),
-      );
-    }
+    return StepRunner.runStep(name, action);
   }
 }

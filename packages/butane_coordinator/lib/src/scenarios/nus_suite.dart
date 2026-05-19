@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import '../profiles/nus.dart';
 import '../scenario_result.dart';
 import '../step_result.dart';
+import '../step_runner.dart';
 import '../ws_client.dart';
 
 typedef _ScenarioFn = Future<ScenarioResult> Function();
@@ -140,26 +141,7 @@ extension on NusSuite {
     String name,
     Future<Map<String, dynamic>> Function() fn,
   ) async {
-    final sw = Stopwatch()..start();
-    try {
-      final r = await fn();
-      sw.stop();
-      final ok = r['success'] as bool? ?? true;
-      return StepResult(
-        name: name,
-        success: ok,
-        duration: sw.elapsed,
-        error: ok ? null : r['error'] as String?,
-      );
-    } catch (e) {
-      sw.stop();
-      return StepResult(
-        name: name,
-        success: false,
-        duration: sw.elapsed,
-        error: e.toString(),
-      );
-    }
+    return StepRunner.runStep(name, fn);
   }
 
   Future<ScenarioResult> _roundTrip() async {
