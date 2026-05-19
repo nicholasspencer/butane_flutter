@@ -1,4 +1,8 @@
 # factoryskills project configuration
 merge_strategy=pr
-agent_endpoint=http://localhost:8080
-agent_model=qwen3.6-moe
+# fs_agent dispatch disabled — qwen3.6-moe ignored its grading mandate on
+# bead butane_flutter-1a2 (2026-05-18), implemented the spec instead, and
+# auto-committed wip: files directly on main. Until a different fast-tier
+# model is pinned, fs deliberate must dispatch via subagent.
+# agent_endpoint=http://localhost:8080
+# agent_model=qwen3.6-moe
