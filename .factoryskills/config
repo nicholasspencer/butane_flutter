@@ -6,3 +6,4 @@ merge_strategy=pr
 # model is pinned, fs deliberate must dispatch via subagent.
 # agent_endpoint=http://localhost:8080
 # agent_model=qwen3.6-moe
+gt_root=/opt/homebrew/share/factoryskills

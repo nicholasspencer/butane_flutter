@@ -1,0 +1,26 @@
+# butane_flutter's OWN rig pack — Dart/Flutter-stack opinions for developing butane.
+#
+# ADR 0012 rig overlay: the generic factoryskills pack ships stack-NEUTRAL
+# rubrics (they say "run the project's build/test/format command named in the
+# bead's Validation Plan", never `dart test`). This rig pack overlays
+# Dart-flavored code rubrics (`dart analyze`, `dart test`/`flutter test`,
+# `dart format`) that shadow the neutral defaults — but ONLY for the
+# butane_flutter rig. butane runs the generic factoryskills pack on itself and
+# injects its Dart/Flutter stack opinions through this rig. The opinions live in
+# the rubric BODIES here, not inferred from a Validation Plan.
+#
+# Mirrors lenny/.gascity-pack/ (the other Dart rig). butane is a Dart **pub
+# workspace** (`butane_workspace`, the native `workspace:` key in pubspec.yaml —
+# not melos), so the canonical validation commands are the bare dart/flutter
+# tools run from the workspace root:
+#   analyze → dart analyze        (workspace-aware; Dart's compile gate)
+#   test    → dart test (pure-Dart pkgs) + flutter test (Flutter pkgs)
+#   format  → dart format --output=none --set-exit-if-changed .
+#
+# Convention: every rig keeps its rig-specific pack config in a committed
+# `.gascity-pack/` and joins the city with `gc rig add <repo> --include .gascity-pack`.
+[pack]
+name        = "butane-dart"
+schema      = 2
+version     = "0.1.0"
+description = "butane_flutter rig overlay: Dart/Flutter-stack code rubrics (dart analyze / dart+flutter test / dart format) layered over the generic factoryskills pack. Dart pub-workspace sibling of the lenny rig (ADR 0012/0013 multi-rig committee resolution)."
