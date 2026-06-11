@@ -317,3 +317,38 @@ packages/butane_harness/ios/Podfile.lock
 # Beads / Dolt files (added by bd init)
 .beads-credential-key
 .beads/proxieddb/
+
+# Gas City
+.beads/*
+!.beads/identity.toml
+
+# Gas City factory committee — DERIVED artifacts composed by
+# scripts/install-rig-committee.sh (the neutral factoryskills pack + the
+# rig overlay in .gascity-pack/). Reproducible; do not commit.
+.agents/agents/
+.claude/agents/
+.agents/skills/critique/
+.agents/skills/deliberate/
+.agents/skills/discover/
+.agents/skills/factory/
+.agents/skills/factoryskills/
+.agents/skills/forge/
+.agents/skills/land/
+.agents/skills/marshal/
+.agents/skills/merge/
+.agents/skills/route/
+.agents/skills/specify/
+.claude/skills/critique/
+.claude/skills/deliberate/
+.claude/skills/discover/
+.claude/skills/factory/
+.claude/skills/factoryskills/
+.claude/skills/forge/
+.claude/skills/land/
+.claude/skills/marshal/
+.claude/skills/merge/
+.claude/skills/route/
+.claude/skills/specify/
+# gc-projected core operational skills (symlinks into the city; machine-specific, derived)
+.claude/skills/core.gc-*
+.agents/skills/core.gc-*
