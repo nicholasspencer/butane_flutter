@@ -313,3 +313,7 @@ n
 .claude/skills/build
 
 packages/butane_harness/ios/Podfile.lock
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
+.beads/proxieddb/
