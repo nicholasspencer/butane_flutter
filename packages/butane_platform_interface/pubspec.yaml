@@ -12,8 +12,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  butane_dart:
+    path: ../butane_dart
   meta: ^1.0.0
-  uuid: ^4.0.0
 
 dev_dependencies:
   test: ^1.0.0

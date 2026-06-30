@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
-import '../interface/interface.dart';
+import 'package:butane_dart/interface.dart';
 import 'api.g.dart' as api;
 
 typedef ClientStateResult = ({
