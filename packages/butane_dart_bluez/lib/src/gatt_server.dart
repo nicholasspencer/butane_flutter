@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:butane_platform_interface/butane_platform_interface.dart';
+import 'package:butane_dart/interface.dart';
 import 'package:dbus/dbus.dart';
 
 /// Wrap raw bytes as a D-Bus `ay` value. The dbus 0.2.5 package has no
@@ -16,7 +16,7 @@ DBusArray _byteArray(List<int> bytes) => DBusArray(
 /// manager plumbs these through its [AttRequest] streams so application
 /// code can respond via `respondToRequest`.
 ///
-/// Keeping a callback-interface rather than importing `ButaneBluez`
+/// Keeping a callback-interface rather than importing `ButaneDartBluez`
 /// directly avoids a cycle between this file and the main plugin class.
 abstract class GattServerDelegate {
   /// Allocate a monotonic request id. Ids are scoped to the peripheral
@@ -591,7 +591,7 @@ class GattDescriptor extends DBusObject {
 
 /// Map a [CharacteristicProperty] to the BlueZ Flags string list used in
 /// `org.bluez.GattCharacteristic1.Flags`. Inverse of the mapping in
-/// ButaneBluez._flagsToProperties.
+/// ButaneDartBluez._flagsToProperties.
 List<String> flagsFromCharacteristicProperty(CharacteristicProperty? props) {
   if (props == null) return const ['read'];
   final flags = <String>[];

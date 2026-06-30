@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:butane_platform_interface/butane_platform_interface.dart'
-    as api;
 import 'package:meta/meta.dart';
+
+import '../interface/interface.dart' as api;
 
 import 'services/platform_stream_controller.dart';
 

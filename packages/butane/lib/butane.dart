@@ -1,3 +1,3 @@
 library butane;
 
-export 'src/porcelain/porcelain.dart';
+export 'package:butane_dart/butane_dart.dart';

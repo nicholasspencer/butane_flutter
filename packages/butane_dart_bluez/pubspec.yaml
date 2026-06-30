@@ -1,5 +1,5 @@
-name: butane_platform_interface
-description: A new Flutter package project.
+name: butane_dart_bluez
+description: Pure-Dart BlueZ/D-Bus backend for butane_dart (no Flutter).
 version: 0.0.1
 homepage: https://github.com/nicholasspencer/butane
 publish_to: none
@@ -7,19 +7,12 @@ resolution: workspace
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
-  flutter: ">=3.27.0"
 
 dependencies:
-  flutter:
-    sdk: flutter
   butane_dart:
     path: ../butane_dart
-  meta: ^1.0.0
+  bluez: ^0.1.4
+  dbus: ^0.2.5
 
 dev_dependencies:
   test: ^1.0.0
-  flutter_lints: ^3.0.0
-  build_runner: ^2.12.2
-  pigeon: ^26.2.3
-
-flutter:

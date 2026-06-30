@@ -397,3 +397,4 @@
 {"id":"int-fa86c79e","kind":"field_change","created_at":"2026-05-19T05:45:52.532948Z","actor":"Nico Spencer","issue_id":"butane_flutter-1a2","extra":{"field":"status","new_value":"ready","old_value":"code_review"}}
 {"id":"int-3a00002d","kind":"field_change","created_at":"2026-05-19T05:49:41.53668Z","actor":"Nico Spencer","issue_id":"butane_flutter-1a2","extra":{"field":"status","new_value":"code_review","old_value":"ready"}}
 {"id":"int-8059b2e9","kind":"field_change","created_at":"2026-05-22T00:28:48.079736Z","actor":"Nico Spencer","issue_id":"butane_flutter-1a2","extra":{"field":"status","new_value":"closed","old_value":"code_review","reason":"Closed"}}
+{"id":"int-08e30c06f0801a2bd146e93e952c9d01","kind":"field_change","created_at":"2026-06-29T23:59:00.668915Z","actor":"Nico Spencer","issue_id":"butane_flutter-y91","extra":{"field":"priority","new_value":"2","old_value":"4"}}

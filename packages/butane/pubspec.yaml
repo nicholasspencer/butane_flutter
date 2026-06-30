@@ -12,11 +12,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  butane_dart:
+    path: ../butane_dart
   butane_platform_interface:
     path: ../butane_platform_interface
   butane_bluez:
     path: ../butane_bluez
-  meta: ^1.0.0
 
 dev_dependencies:
   flutter_test:

@@ -1,3 +1,3 @@
 library butane.platform_interface;
 
-export 'src/interface/interface.dart';
+export 'package:butane_dart/interface.dart';

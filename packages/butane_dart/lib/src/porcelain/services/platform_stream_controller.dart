@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:butane_platform_interface/butane_platform_interface.dart'
-    as api;
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
+
+import '../../interface/interface.dart' as api;
 
 /// Manages a stream controller that is used to communicate with the host
 /// platform.
