@@ -9,6 +9,7 @@ environment:
 
 workspace:
   - packages/butane
+  - packages/butane_dart
   - packages/butane_platform_interface
   - packages/butane_core_bluetooth
   - packages/butane_bluez

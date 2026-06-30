@@ -1,0 +1,28 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:meta/meta.dart';
+
+import '../interface/interface.dart' as api;
+
+import 'services/platform_stream_controller.dart';
+
+part 'models/att_request.dart';
+part 'models/att_result.dart';
+part 'models/attribute.dart';
+part 'models/central.dart';
+part 'models/characteristic.dart';
+part 'models/characteristic_permissions.dart';
+part 'models/characteristic_properties.dart';
+part 'models/descriptor.dart';
+part 'models/identifier.dart';
+part 'models/mac_address.dart';
+part 'models/mutable_characteristic.dart';
+part 'models/mutable_descriptor.dart';
+part 'models/mutable_service.dart';
+part 'models/peer.dart';
+part 'models/peripheral.dart';
+part 'models/service.dart';
+part 'services/central_manager.dart';
+part 'services/peer_manager.dart';
+part 'services/peripheral_manager.dart';

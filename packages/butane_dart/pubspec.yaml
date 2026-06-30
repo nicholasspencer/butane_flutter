@@ -1,0 +1,15 @@
+name: butane_dart
+description: Pure-Dart reactive BLE porcelain and platform abstraction (no Flutter).
+version: 0.0.1
+homepage: https://github.com/nicholasspencer/butane
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  meta: ^1.0.0
+
+dev_dependencies:
+  test: ^1.0.0
