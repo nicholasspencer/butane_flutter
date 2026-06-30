@@ -1,0 +1,13 @@
+name: butane_dart_bluez_example
+description: Runtime smoke tests for butane_dart_bluez (Linux/BlueZ).
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  butane_dart_bluez:
+    path: ../
+  butane_dart:
+    path: ../../butane_dart

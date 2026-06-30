@@ -1,0 +1,11 @@
+linter:
+  rules:
+    - require_trailing_commas
+
+analyzer:
+  errors:
+    require_trailing_commas: error
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
