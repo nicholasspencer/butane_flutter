@@ -31,14 +31,13 @@
 /// 127.0.0.1. No butane, no beads, no network beyond the local VM service.
 library;
 
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:grid_runtime/grid_runtime.dart'
     show ProcessGroupController, SystemProcessGroupController;
 
 import 'follower.dart';
+import 'launch_scrape.dart';
 
 void _noLog(String _) {}
 
@@ -97,7 +96,7 @@ class LocalDartFollowerLauncher implements FollowerLauncher {
 
     final String wsUri;
     try {
-      wsUri = await _scrapeWsUri(process).timeout(readyTimeout);
+      wsUri = await scrapeVmServiceWsUri(process).timeout(readyTimeout);
     } on Object {
       // The daemon never became ready: kill EXACTLY the pid we spawned.
       Process.killPid(process.pid, ProcessSignal.sigkill);
@@ -113,59 +112,6 @@ class LocalDartFollowerLauncher implements FollowerLauncher {
       pgid: pgid,
       endpoint: FollowerEndpoint(vmServiceUri: wsUri, station: station),
     );
-  }
-
-  /// Completes with the daemon's ws:// VM-service URI: the `GRID_VM_URI=`
-  /// sentinel (primary — printed post-registration) or the VM's
-  /// `The Dart VM service is listening on <http…>` banner (fallback, converted
-  /// to ws + `/ws` as the attach test forms it). Keeps draining both stdio
-  /// streams afterwards so the daemon can never block on a full pipe.
-  Future<String> _scrapeWsUri(Process process) {
-    final completer = Completer<String>();
-    String? bannerUri;
-    Timer? bannerFallback;
-
-    void inspect(String line) {
-      if (completer.isCompleted) return;
-      final trimmed = line.trim();
-      final sentinel = RegExp(r'GRID_VM_URI=(\S+)').firstMatch(trimmed);
-      if (sentinel != null) {
-        bannerFallback?.cancel();
-        completer.complete(sentinel.group(1));
-        return;
-      }
-      final banner = RegExp(
-        r'The Dart VM service is listening on (\S+)',
-      ).firstMatch(trimmed);
-      if (banner != null && bannerUri == null) {
-        bannerUri = _toWs(banner.group(1)!);
-        // Give the sentinel a grace window (it follows registration); if it
-        // never comes, the banner-derived ws URI is still a usable endpoint.
-        bannerFallback = Timer(const Duration(seconds: 10), () {
-          if (!completer.isCompleted) completer.complete(bannerUri);
-        });
-      }
-    }
-
-    void drain(Stream<List<int>> stream) {
-      stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen(inspect, onError: (Object _) {}, cancelOnError: false);
-    }
-
-    drain(process.stdout);
-    drain(process.stderr);
-    return completer.future;
-  }
-
-  /// `http://127.0.0.1:PORT/[token/]` → `ws://127.0.0.1:PORT/[token/]ws`.
-  static String _toWs(String httpUri) {
-    final uri = Uri.parse(httpUri);
-    final path = uri.path.endsWith('/') ? '${uri.path}ws' : '${uri.path}/ws';
-    return uri
-        .replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws', path: path)
-        .toString();
   }
 
   /// The nearest ancestor of [dartFile] carrying a resolved

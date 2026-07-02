@@ -31,6 +31,8 @@ export 'src/burn/burn_capabilities.dart';
 export 'src/burn/burn_dispatch_handler.dart';
 export 'src/burn/burn_report.dart';
 export 'src/burn/burn_scenario.dart';
+export 'src/burn/butane_follower_launcher.dart';
 export 'src/burn/follower.dart';
+export 'src/burn/launch_scrape.dart';
 export 'src/burn/local_follower_launcher.dart';
 export 'src/burn/process_leonard_drive.dart';

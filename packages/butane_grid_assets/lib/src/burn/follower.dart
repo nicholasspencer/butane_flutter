@@ -24,11 +24,14 @@ import 'package:meta/meta.dart';
 /// dispatch payload, serialized into the kind-agnostic federation bus envelope.
 @immutable
 class LaunchSpec {
-  /// Creates a launch spec for [app] built for [target], optionally naming the
-  /// [scenario] the host will drive (a hint; the host owns the actual scenario).
+  /// Creates a launch spec for [app] built for [target], booted as [role]
+  /// (the burn's follower is the peripheral by convention — the host drives
+  /// its own local central), optionally naming the [scenario] the host will
+  /// drive (a hint; the host owns the actual scenario).
   const LaunchSpec({
     required this.app,
     required this.target,
+    this.role = 'peripheral',
     this.scenario = '',
   });
 
@@ -40,6 +43,10 @@ class LaunchSpec {
   /// capability profile by the host before it leases (Track C containment).
   final String target;
 
+  /// The harness role the launched app boots as (`central`/`peripheral`;
+  /// the launcher passes it through as the `ROLE` runtime env).
+  final String role;
+
   /// An optional scenario hint carried to the follower (the host owns the drive).
   final String scenario;
 
@@ -47,13 +54,16 @@ class LaunchSpec {
   Map<String, dynamic> toJson() => {
     'app': app,
     'target': target,
+    'role': role,
     if (scenario.isNotEmpty) 'scenario': scenario,
   };
 
-  /// Parses [j].
+  /// Parses [j] (a missing role defaults to `peripheral` — the burn's
+  /// follower convention).
   static LaunchSpec fromJson(Map<String, dynamic> j) => LaunchSpec(
     app: j['app'] as String,
     target: j['target'] as String,
+    role: (j['role'] as String?) ?? 'peripheral',
     scenario: (j['scenario'] as String?) ?? '',
   );
 }
