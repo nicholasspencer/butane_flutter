@@ -181,6 +181,14 @@ class PeripheralRole {
           handler: _handleCheckState,
         ),
         HarnessCommand(
+          action: 'wait_for_state',
+          description: 'Poll the peripheral manager until it reaches a state '
+              '(default poweredOn; optional state, timeoutMs). add_service/'
+              'advertise before poweredOn hang in CoreBluetooth — call this '
+              'first.',
+          handler: _handleWaitForState,
+        ),
+        HarnessCommand(
           action: 'add_service',
           description: 'Add a GATT service (uuid, optional isPrimary, '
               'characteristics list with properties/permissions/value/'
@@ -246,6 +254,32 @@ class PeripheralRole {
     _lastKnownState = state.name;
     _log.add('BLE state: ${state.name}');
     return {'state': state.name};
+  }
+
+  /// Polls the peripheral manager until it reaches the wanted state (default
+  /// `poweredOn`) or the timeout elapses. Returns the final state either way
+  /// — the caller asserts. GATT mutations issued before `poweredOn` hang in
+  /// CoreBluetooth (no delegate callback), so scripted scenarios gate on
+  /// this first.
+  Future<Map<String, dynamic>> _handleWaitForState(
+    Map<String, dynamic> params,
+  ) async {
+    final want = params['state'] as String? ?? 'poweredOn';
+    final timeoutMs = params['timeoutMs'] as int? ?? 10000;
+    final deadline = DateTime.now().add(Duration(milliseconds: timeoutMs));
+    Future<String> current() async => PeerManagerState.fromApi(
+          await api.ButanePlatformInterface.instance.peripheralManagerState(
+            const api.PeripheralManagerSession(),
+          ),
+        ).name;
+    var state = await current();
+    while (state != want && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      state = await current();
+    }
+    _lastKnownState = state;
+    _log.add('Waited for $want → $state');
+    return {'state': state, 'matched': state == want};
   }
 
   /// Adds a GATT service with characteristics to the local database.

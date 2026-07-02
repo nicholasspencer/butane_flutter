@@ -61,6 +61,13 @@ class CentralRole {
           handler: _handleCheckState,
         ),
         HarnessCommand(
+          action: 'wait_for_state',
+          description: 'Poll the adapter until it reaches a state (default '
+              'poweredOn; optional state, timeoutMs). BLE ops invoked before '
+              'poweredOn hang in CoreBluetooth — call this first.',
+          handler: _handleWaitForState,
+        ),
+        HarnessCommand(
           action: 'scan',
           description: 'Scan for peripherals (optional serviceUuids list), '
               'return the first match, then stop.',
@@ -120,6 +127,27 @@ class CentralRole {
     _lastKnownState = state.name;
     _log.add('BLE state: ${state.name}');
     return {'state': state.name};
+  }
+
+  /// Polls the adapter until it reaches the wanted state (default
+  /// `poweredOn`) or the timeout elapses. Returns the final state either way
+  /// — the caller asserts. BLE operations issued before `poweredOn` hang in
+  /// CoreBluetooth (no delegate callback), so scripted scenarios gate on
+  /// this first.
+  Future<Map<String, dynamic>> _handleWaitForState(
+    Map<String, dynamic> params,
+  ) async {
+    final want = params['state'] as String? ?? 'poweredOn';
+    final timeoutMs = params['timeoutMs'] as int? ?? 10000;
+    final deadline = DateTime.now().add(Duration(milliseconds: timeoutMs));
+    var state = (await _manager.state).name;
+    while (state != want && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      state = (await _manager.state).name;
+    }
+    _lastKnownState = state;
+    _log.add('Waited for $want → $state');
+    return {'state': state, 'matched': state == want};
   }
 
   /// Scans for peripherals, returns the first match, then stops.

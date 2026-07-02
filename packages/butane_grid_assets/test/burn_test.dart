@@ -585,4 +585,182 @@ void main() {
       expect(processes.signals.where((s) => s.startsWith('TERM')).length, 1);
     });
   });
+
+  group('the TWO-DRIVE burn-host (local central + leased follower peripheral)', () {
+    // The follower's published sibling payload, hand-threaded (the fan-out
+    // mechanics are proven above — these tests isolate the host order).
+    final published = <String, String>{
+      'endpoint': _published.vmServiceUri,
+      'station': _published.station,
+      'lease': 'burn-lease-0',
+    };
+
+    test('steps route by endpoint selector; the local harness launches, both '
+        'drives attach, and teardown closes both + reaps the local', () async {
+      final localProcesses = _FakeProcessGroupController();
+      final localLauncher = _FakeLocalLauncher();
+      final localRunner = ButaneFollowerRunner(
+        launcher: localLauncher,
+        processes: localProcesses,
+      );
+      final followerDrive = _ScriptedLeonardDrive(
+        invokeResponses: const {'butane.start_advertising': '{"ok":true}'},
+      );
+      final localDrive = _ScriptedLeonardDrive(
+        observeResponses: const {'extensions.butane.data.role': '"central"'},
+        invokeResponses: const {'butane.check_state': '{"ok":true}'},
+      );
+      final host = BurnHostCapability(
+        drive: followerDrive,
+        scenario: const DriveScenario(
+          name: 'two-drive-smoke',
+          steps: [
+            DriveStep.invoke('butane.start_advertising', expectContains: 'ok'),
+            DriveStep.invoke(
+              'butane.check_state',
+              expectContains: 'ok',
+              on: DriveEndpoint.local,
+            ),
+            DriveStep.observe(
+              'extensions.butane.data.role',
+              expectContains: 'central',
+              on: DriveEndpoint.local,
+            ),
+          ],
+        ),
+        localRunner: localRunner,
+        localSpec: const LaunchSpec(
+          app: 'butane_harness',
+          target: 'macos',
+          role: 'central',
+        ),
+        localDrive: localDrive,
+      );
+
+      final hCtx = _ctx(
+        nodePath: _hostPath,
+        siblings: SiblingView(results: {_followerPath: published}),
+      );
+      final out = await host.run(hCtx);
+      expect(out, isA<Ok>());
+
+      // Routing: follower steps hit the follower drive, local steps the local.
+      expect(followerDrive.attachedTo, _published.vmServiceUri);
+      expect(localDrive.attachedTo, _FakeLocalLauncher.endpoint.vmServiceUri);
+      expect(followerDrive.calls.where((c) => c.startsWith('invoke:')),
+          ['invoke:butane.start_advertising']);
+      expect(localDrive.calls.where((c) => c.startsWith('invoke:')),
+          ['invoke:butane.check_state']);
+      expect(localDrive.calls, contains('observe:extensions.butane.data.role'));
+
+      // The report records the endpoint prefix in local step descriptions.
+      final report = host.reportFor(hCtx)!;
+      expect(report.passed, isTrue);
+      expect(report.total, 3);
+      expect(
+        report.steps.map((s) => s.description),
+        contains('[local] invoke butane.check_state'),
+      );
+
+      // Teardown: both channels closed, the local harness reaped ONCE.
+      await host.teardown(hCtx);
+      expect(followerDrive.closed, isTrue);
+      expect(localDrive.closed, isTrue);
+      expect(localRunner.isRunning, isFalse,
+          reason: 'the local harness is the host order\'s reap');
+      expect(localProcesses.terminated, isTrue);
+    });
+
+    test('a local step with no local trio is a FAILED step (fail-closed, '
+        'report-collecting) → the host escalates Failed', () async {
+      final followerDrive = _ScriptedLeonardDrive(
+        invokeResponses: const {'butane.start_advertising': '{"ok":true}'},
+      );
+      final host = BurnHostCapability(
+        drive: followerDrive,
+        scenario: const DriveScenario(
+          name: 'missing-local',
+          steps: [
+            DriveStep.invoke('butane.start_advertising', expectContains: 'ok'),
+            DriveStep.invoke('butane.check_state', on: DriveEndpoint.local),
+          ],
+        ),
+      );
+      final hCtx = _ctx(
+        nodePath: _hostPath,
+        siblings: SiblingView(results: {_followerPath: published}),
+      );
+      final out = await host.run(hCtx);
+      expect(out, isA<Failed>());
+      final report = host.reportFor(hCtx)!;
+      expect(report.passed, isFalse);
+      expect(report.failures, 1, reason: 'only the local step fails');
+      expect(
+        report.steps.last.observed,
+        contains('no local drive'),
+      );
+    });
+
+    test('a partial local trio is a constructor-time ArgumentError', () {
+      expect(
+        () => BurnHostCapability(
+          drive: _passingDrive(),
+          scenario: _passingScenario(),
+          localDrive: _ScriptedLeonardDrive(),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('a local launch failure fails the order; teardown still reaps '
+        'nothing (once-only, nothing launched)', () async {
+      final localProcesses = _FakeProcessGroupController();
+      final localRunner = ButaneFollowerRunner(
+        launcher: _ThrowingLauncher(),
+        processes: localProcesses,
+      );
+      final host = BurnHostCapability(
+        drive: _passingDrive(),
+        scenario: _passingScenario(),
+        localRunner: localRunner,
+        localSpec: const LaunchSpec(
+          app: 'butane_harness',
+          target: 'macos',
+          role: 'central',
+        ),
+        localDrive: _ScriptedLeonardDrive(),
+      );
+      final hCtx = _ctx(
+        nodePath: _hostPath,
+        siblings: SiblingView(results: {_followerPath: published}),
+      );
+      final out = await host.run(hCtx);
+      expect(out, isA<Failed>());
+      expect((out as Failed).reason, contains('local harness launch'));
+
+      // Teardown after the failure path is safe (nothing launched → no-op).
+      await host.teardown(hCtx);
+      expect(await localRunner.teardown(), GroupTerminateResult.alreadyGone);
+    });
+  });
+}
+
+/// A headless LOCAL launcher stand-in publishing a DISTINCT endpoint so the
+/// two-drive routing is observable.
+class _FakeLocalLauncher implements FollowerLauncher {
+  static const FollowerEndpoint endpoint = FollowerEndpoint(
+    vmServiceUri: 'ws://127.0.0.1:5600/Local9=/ws',
+    station: 'the-studio-local',
+  );
+
+  @override
+  Future<LaunchedDaemon> launch(LaunchSpec spec) async =>
+      const LaunchedDaemon(pid: 5151, pgid: 5151, endpoint: endpoint);
+}
+
+/// A launcher that always fails (the local launch failure path).
+class _ThrowingLauncher implements FollowerLauncher {
+  @override
+  Future<LaunchedDaemon> launch(LaunchSpec spec) async =>
+      throw StateError('flutter build exploded');
 }

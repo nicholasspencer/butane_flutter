@@ -265,26 +265,46 @@ class _HostHold {
 }
 
 /// The `burn-host` order (ADR-0011 D9): await the follower endpoint, attach
-/// `leonard_drive` over the DIRECT perception channel, run a SCRIPTED scenario,
-/// and collect a [TestReport].
+/// `leonard_drive` over the DIRECT perception channel — and, for the
+/// TWO-DRIVE burn, launch the host's own LOCAL harness (the central, per the
+/// convention: the leased follower runs the peripheral) and attach a second
+/// drive to it — then run a SCRIPTED scenario and collect a [TestReport].
 ///
 /// It reads the follower's published endpoint pull-free through the threaded
 /// [SiblingView] (D-5; never a subscription/re-query — invariant 1). The drive is
 /// the SECOND, orthogonal channel: point-to-point over the follower's VM service,
-/// NOT tunneled through the federation bus. UNMOUNT (`teardown`) closes the drive
-/// channel (the follower app teardown is the `burn-follower` order's release).
+/// NOT tunneled through the federation bus. UNMOUNT (`teardown`) closes both
+/// drive channels and reaps the local harness through [localRunner]'s
+/// once-only reaper (the follower app teardown stays the `burn-follower`
+/// order's lease release).
 class BurnHostCapability extends ServiceCapability {
   /// Creates the host order driving [scenario] over [drive]. [followerStep] is
   /// the sibling step id whose published endpoint to read (default
-  /// [kBurnFollowerStep]).
+  /// [kBurnFollowerStep]). For the two-drive burn pass [localRunner] (launch +
+  /// guaranteed reap on the host box), [localSpec] (conventionally
+  /// `role: central`), and [localDrive] (the second perception channel) —
+  /// all three together, or none.
   BurnHostCapability({
     required this.drive,
     required this.scenario,
     this.followerStep = kBurnFollowerStep,
+    this.localRunner,
+    this.localSpec,
+    this.localDrive,
     void Function(String)? onLog,
-  }) : _onLog = onLog ?? _noLog;
+  }) : _onLog = onLog ?? _noLog {
+    final given =
+        [localRunner, localSpec, localDrive].where((p) => p != null).length;
+    if (given != 0 && given != 3) {
+      throw ArgumentError(
+        'two-drive burn-host needs localRunner + localSpec + localDrive '
+        'together (got $given of 3)',
+      );
+    }
+  }
 
-  /// The direct perception channel (`leonard_drive`; a scripted fake offline).
+  /// The direct perception channel to the FOLLOWER (`leonard_drive`; a
+  /// scripted fake offline).
   final LeonardDrive drive;
 
   /// The SCRIPTED scenario to run (zero inference).
@@ -292,6 +312,16 @@ class BurnHostCapability extends ServiceCapability {
 
   /// The sibling step id whose published endpoint to await + drive.
   final String followerStep;
+
+  /// Launches + reaps the host's LOCAL harness (two-drive burn); null for a
+  /// follower-only burn.
+  final ButaneFollowerRunner? localRunner;
+
+  /// What the local harness boots as (conventionally `role: central`).
+  final LaunchSpec? localSpec;
+
+  /// The perception channel to the LOCAL harness.
+  final LeonardDrive? localDrive;
 
   final void Function(String) _onLog;
 
@@ -320,10 +350,30 @@ class BurnHostCapability extends ServiceCapability {
     // scenario. The drive is closed in teardown (the guaranteed channel teardown).
     await drive.attach(endpoint);
     _onLog('host attached leonard_drive to ${endpoint.vmServiceUri}');
+
+    // TWO-DRIVE burn: launch the host's own local harness (the central) and
+    // attach the second drive. A local launch failure fails the order —
+    // teardown still reaps whatever launched (the runner is once-only).
+    final localRunner = this.localRunner;
+    if (localRunner != null) {
+      final FollowerEndpoint localEndpoint;
+      try {
+        localEndpoint = await localRunner.launch(localSpec!);
+      } on Object catch (e) {
+        return Failed('local harness launch failed: $e');
+      }
+      if (ctx.cancel.isCancelled) return const Failed('cancelled');
+      await localDrive!.attach(localEndpoint);
+      _onLog(
+        'host attached local leonard_drive to ${localEndpoint.vmServiceUri}',
+      );
+    }
+
     final report = await runDriveScenario(
       drive: drive,
       scenario: scenario,
       endpoint: endpoint,
+      localDrive: localRunner == null ? null : localDrive,
       isCancelled: () => ctx.cancel.isCancelled,
     );
     hold.report = report;
@@ -349,9 +399,13 @@ class BurnHostCapability extends ServiceCapability {
 
   @override
   Future<void> teardown(CapabilityContext ctx) async {
-    // Close the DIRECT perception channel (idempotent). The follower app is reaped
-    // by the `burn-follower` order's lease release (the bus channel teardown).
+    // Close the DIRECT perception channels (idempotent) and reap the local
+    // harness (once-only runner; even on the failure path). The follower app
+    // is reaped by the `burn-follower` order's lease release (the bus
+    // channel teardown).
     await drive.close();
+    await localDrive?.close();
+    await localRunner?.teardown();
   }
 }
 
@@ -369,14 +423,18 @@ String _parentPath(String nodePath) {
 /// `composeRunTree` swap is the cross-machine arm's concern (Track H).
 ///
 /// [peers]/[launchSpec]/[requires] parameterize the follower order; [drive]/
-/// [scenario] the host order. Offline these are fakes; the live arm wires real
-/// `StationClient`s + `leonard_drive`.
+/// [scenario] the host order; [localRunner]/[localSpec]/[localDrive] (all or
+/// none) arm the two-drive host. Offline these are fakes; the live arm wires
+/// real `StationClient`s + `leonard_drive` + a real launcher.
 DefaultCapabilityRegistry buildBurnRegistry({
   required List<FollowerPeer> peers,
   required LaunchSpec launchSpec,
   required LeonardDrive drive,
   required DriveScenario scenario,
   CapabilityFacts? requires,
+  ButaneFollowerRunner? localRunner,
+  LaunchSpec? localSpec,
+  LeonardDrive? localDrive,
   void Function(String)? onLog,
   DateTime Function()? clock,
 }) => DefaultCapabilityRegistry(
@@ -390,6 +448,9 @@ DefaultCapabilityRegistry buildBurnRegistry({
     kBurnHostStep: BurnHostCapability(
       drive: drive,
       scenario: scenario,
+      localRunner: localRunner,
+      localSpec: localSpec,
+      localDrive: localDrive,
       onLog: onLog,
     ),
   },

@@ -25,26 +25,50 @@ enum DriveAction {
   invoke,
 }
 
+/// Which end of the burn a scripted step drives (the two-drive host).
+///
+/// The burn's convention: the leased [follower] runs the PERIPHERAL harness
+/// on the remote box; the host's [local] harness runs the CENTRAL on its own
+/// box (macos+ble per ADR-0011 D9's host requirements) — so a real BLE
+/// round-trip scripts both ends from one scenario.
+enum DriveEndpoint {
+  /// The leased follower app (the rendezvous endpoint) — the default.
+  follower,
+
+  /// The host's own locally-launched harness.
+  local,
+}
+
 /// One SCRIPTED step of a drive scenario (ADR-0011 D9) — an `observe`/`invoke`
 /// over the direct perception channel plus the substring the result must contain
 /// (zero inference: an exact, scripted assertion). An empty [expectContains]
 /// asserts only that the step ran without error.
 class DriveStep {
   /// An `observe <path>` step asserting the observed value contains
-  /// [expectContains].
-  const DriveStep.observe(this.path, {this.expectContains = ''})
-    : action = DriveAction.observe,
-      tool = '',
-      args = const {};
+  /// [expectContains], driven [on] an endpoint (default: the follower).
+  const DriveStep.observe(
+    this.path, {
+    this.expectContains = '',
+    this.on = DriveEndpoint.follower,
+  }) : action = DriveAction.observe,
+       tool = '',
+       args = const {};
 
   /// An `invoke <tool>` step (with [args]) asserting the result contains
-  /// [expectContains].
-  const DriveStep.invoke(this.tool, {this.args = const {}, this.expectContains = ''})
-    : action = DriveAction.invoke,
-      path = '';
+  /// [expectContains], driven [on] an endpoint (default: the follower).
+  const DriveStep.invoke(
+    this.tool, {
+    this.args = const {},
+    this.expectContains = '',
+    this.on = DriveEndpoint.follower,
+  }) : action = DriveAction.invoke,
+       path = '';
 
   /// Whether this step observes a path or invokes a tool.
   final DriveAction action;
+
+  /// Which end of the burn this step drives.
+  final DriveEndpoint on;
 
   /// The path to observe (for [DriveAction.observe]).
   final String path;
@@ -61,11 +85,15 @@ class DriveStep {
   /// The substring the step's result must contain to pass (empty = ran-ok only).
   final String expectContains;
 
-  /// A human-readable description of the step (its action + target).
-  String get description => switch (action) {
-    DriveAction.observe => 'observe $path',
-    DriveAction.invoke => 'invoke $tool',
-  };
+  /// A human-readable description of the step (its endpoint + action +
+  /// target).
+  String get description {
+    final prefix = on == DriveEndpoint.local ? '[local] ' : '';
+    return switch (action) {
+      DriveAction.observe => '${prefix}observe $path',
+      DriveAction.invoke => '${prefix}invoke $tool',
+    };
+  }
 }
 
 /// A named, SCRIPTED drive scenario (ADR-0011 D9) — the ordered steps the
@@ -102,19 +130,25 @@ abstract interface class LeonardDrive {
   Future<void> close();
 }
 
-/// Runs a SCRIPTED [scenario] against an already-attached [drive] over the direct
-/// perception channel and collects a [TestReport] for [endpoint] (ADR-0011 D9).
+/// Runs a SCRIPTED [scenario] against an already-attached [drive] (the
+/// follower channel) — and, for two-drive scenarios, [localDrive] (the
+/// host's own locally-launched harness) — and collects a [TestReport] for
+/// [endpoint] (ADR-0011 D9).
 ///
-/// Each step's result is checked against its substring expectation (zero
-/// inference); EVERY step is recorded even after the first failure, and the
-/// aggregate verdict is "every step passed AND at least one ran". A step's I/O
-/// error is recorded as a failed step (the drive channel hiccuped) rather than
-/// thrown — the burn collects a report either way. [isCancelled] (when given) is
-/// polled between steps so a host unmount stops the drive politely.
+/// Each step routes by its [DriveStep.on] selector; a step targeting
+/// [DriveEndpoint.local] when no [localDrive] was provided is recorded as a
+/// failed step (fail-closed, report-collecting). Each step's result is
+/// checked against its substring expectation (zero inference); EVERY step is
+/// recorded even after the first failure, and the aggregate verdict is
+/// "every step passed AND at least one ran". A step's I/O error is recorded
+/// as a failed step (the drive channel hiccuped) rather than thrown — the
+/// burn collects a report either way. [isCancelled] (when given) is polled
+/// between steps so a host unmount stops the drive politely.
 Future<TestReport> runDriveScenario({
   required LeonardDrive drive,
   required DriveScenario scenario,
   required FollowerEndpoint endpoint,
+  LeonardDrive? localDrive,
   bool Function()? isCancelled,
 }) async {
   final results = <DriveStepResult>[];
@@ -122,15 +156,23 @@ Future<TestReport> runDriveScenario({
     if (isCancelled?.call() ?? false) break;
     String observed;
     bool passed;
-    try {
-      observed = switch (step.action) {
-        DriveAction.observe => await drive.observe(step.path),
-        DriveAction.invoke => await drive.invoke(step.tool, step.args),
-      };
-      passed = step.expectContains.isEmpty || observed.contains(step.expectContains);
-    } on Object catch (e) {
-      observed = 'drive error: $e';
+    final target = step.on == DriveEndpoint.local ? localDrive : drive;
+    if (target == null) {
+      observed = 'no local drive: scenario step targets the local endpoint '
+          'but the host launched no local harness';
       passed = false;
+    } else {
+      try {
+        observed = switch (step.action) {
+          DriveAction.observe => await target.observe(step.path),
+          DriveAction.invoke => await target.invoke(step.tool, step.args),
+        };
+        passed =
+            step.expectContains.isEmpty || observed.contains(step.expectContains);
+      } on Object catch (e) {
+        observed = 'drive error: $e';
+        passed = false;
+      }
     }
     results.add(
       DriveStepResult(
