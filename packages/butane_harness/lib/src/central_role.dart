@@ -5,14 +5,18 @@ import 'dart:typed_data';
 import 'package:butane/butane.dart';
 import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
+import 'command_registry.dart';
 import 'harness_connection.dart';
 import 'harness_log.dart';
 
 /// Implements the BLE Central role for the harness app.
 ///
-/// Handles WebSocket commands from the coordinator to scan, connect,
-/// discover services/characteristics, read/write values, subscribe
-/// to notifications, and disconnect from peripherals.
+/// Exposes its command vocabulary (scan, connect, discover
+/// services/characteristics, read/write values, subscribe to notifications,
+/// disconnect) as [commands] on the transport-agnostic registry — the
+/// WebSocket control plane and the leonard extension are two frontends over
+/// the same table. [server] remains the unsolicited-event channel
+/// (notifications, errors).
 class CentralRole {
   CentralRole({
     required HarnessConnection server,
@@ -20,7 +24,6 @@ class CentralRole {
   })  : _server = server,
         _log = log {
     _manager = CentralManager();
-    server.onCommand(_handleCommand);
   }
 
   final HarnessConnection _server;
@@ -34,42 +37,87 @@ class CentralRole {
   final Map<String, StreamSubscription<Uint8List>> _notificationSubscriptions =
       {};
 
-  /// Routes incoming commands to the appropriate handler.
-  Future<Map<String, dynamic>> _handleCommand(
-    Map<String, dynamic> command,
-  ) async {
-    final action = command['action'] as String?;
-    final params = command;
+  /// Last adapter state observed by `check_state` (perception cache — the
+  /// leonard fragment is a synchronous snapshot).
+  String? _lastKnownState;
 
-    switch (action) {
-      case 'check_state':
-        return _handleCheckState(params);
-      case 'scan':
-        return _handleScan(params);
-      case 'connect':
-        return _handleConnect(params);
-      case 'disconnect':
-        return _handleDisconnect(params);
-      case 'discover_services':
-        return _handleDiscoverServices(params);
-      case 'discover_characteristics':
-        return _handleDiscoverCharacteristics(params);
-      case 'read_characteristic':
-        return _handleReadCharacteristic(params);
-      case 'write_characteristic':
-        return _handleWriteCharacteristic(params);
-      case 'subscribe':
-        return _handleSubscribe(params);
-      default:
-        return {'success': false, 'error': 'Unknown action: $action'};
-    }
-  }
+  /// A synchronous snapshot of central-side state, serialized into the
+  /// leonard extension's `extensions.butane` perception fragment.
+  Map<String, Object?> perceptionSnapshot() => {
+        'role': 'central',
+        'adapter_state': _lastKnownState,
+        'peripherals': [
+          for (final entry in _peripherals.entries)
+            {'id': entry.key, 'name': entry.value.name},
+        ],
+        'subscriptions': _notificationSubscriptions.keys.toList(),
+      };
+
+  /// The central command vocabulary, in wire order.
+  List<HarnessCommand> get commands => [
+        HarnessCommand(
+          action: 'check_state',
+          description: 'Return the BLE adapter state (e.g. poweredOn).',
+          handler: _handleCheckState,
+        ),
+        HarnessCommand(
+          action: 'scan',
+          description: 'Scan for peripherals (optional serviceUuids list), '
+              'return the first match, then stop.',
+          handler: _handleScan,
+        ),
+        HarnessCommand(
+          action: 'connect',
+          description:
+              'Connect to a previously discovered peripheral (peripheralId).',
+          handler: _handleConnect,
+        ),
+        HarnessCommand(
+          action: 'disconnect',
+          description: 'Disconnect from a peripheral (peripheralId), '
+              'cleaning up notification subscriptions.',
+          handler: _handleDisconnect,
+        ),
+        HarnessCommand(
+          action: 'discover_services',
+          description: 'Discover services on a connected peripheral '
+              '(peripheralId, optional serviceUuids).',
+          handler: _handleDiscoverServices,
+        ),
+        HarnessCommand(
+          action: 'discover_characteristics',
+          description: 'Discover characteristics on a service (peripheralId, '
+              'serviceUuid, optional characteristicUuids).',
+          handler: _handleDiscoverCharacteristics,
+        ),
+        HarnessCommand(
+          action: 'read_characteristic',
+          description: 'Read a characteristic value (peripheralId, '
+              'serviceUuid, characteristicUuid) → base64.',
+          handler: _handleReadCharacteristic,
+        ),
+        HarnessCommand(
+          action: 'write_characteristic',
+          description: 'Write a base64 value to a characteristic '
+              '(peripheralId, serviceUuid, characteristicUuid, value, '
+              'optional withoutResponse).',
+          handler: _handleWriteCharacteristic,
+        ),
+        HarnessCommand(
+          action: 'subscribe',
+          description: 'Subscribe to characteristic notifications '
+              '(peripheralId, serviceUuid, characteristicUuid); events '
+              'stream to the coordinator.',
+          handler: _handleSubscribe,
+        ),
+      ];
 
   /// Returns the BLE adapter state.
   Future<Map<String, dynamic>> _handleCheckState(
     Map<String, dynamic> params,
   ) async {
     final state = await _manager.state;
+    _lastKnownState = state.name;
     _log.add('BLE state: ${state.name}');
     return {'state': state.name};
   }
