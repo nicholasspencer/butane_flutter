@@ -115,11 +115,15 @@ class FollowerEndpoint {
 @immutable
 class LaunchedDaemon {
   /// Creates a handle for a launched follower app: its [pid] + process-group
-  /// [pgid] (the reaper subjects) and the published [endpoint].
+  /// [pgid] (the reaper subjects) and the published [endpoint]. [onReap] is an
+  /// optional extra teardown the runner awaits AFTER the pgid reap — for a
+  /// launch whose cleanup reaches beyond one local process group (the iOS
+  /// path: kill the loopback relay, terminate the on-device app).
   const LaunchedDaemon({
     required this.pid,
     required this.pgid,
     required this.endpoint,
+    this.onReap,
   });
 
   /// The launched leader process pid (the liveness-probe subject for the reaper).
@@ -131,6 +135,11 @@ class LaunchedDaemon {
 
   /// The endpoint the launched app published.
   final FollowerEndpoint endpoint;
+
+  /// Extra teardown run once, after the pgid reap (exception-isolated by the
+  /// runner). Null for the desktop path (the process group IS the whole
+  /// launch); set by the iOS launcher to reap its off-group resources.
+  final Future<void> Function()? onReap;
 }
 
 /// Provisions + builds + launches the app-under-test on the follower box,
@@ -215,6 +224,16 @@ class ButaneFollowerRunner {
       grace: _reapGrace,
     );
     _onLog('follower: reaped pgid ${daemon.pgid} → ${result.name}');
+    // Off-group cleanup (the iOS relay + on-device app). Exception-isolated:
+    // the pgid reap already succeeded, so a hiccup here never fails teardown.
+    final onReap = daemon.onReap;
+    if (onReap != null) {
+      try {
+        await onReap();
+      } on Object catch (e) {
+        _onLog('follower: onReap hiccup (ignored): $e');
+      }
+    }
     return result;
   }
 }
