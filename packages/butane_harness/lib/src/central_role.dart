@@ -41,6 +41,15 @@ class CentralRole {
   /// leonard fragment is a synchronous snapshot).
   String? _lastKnownState;
 
+  /// The most recently scanned peripheral id — the default target when a
+  /// command omits `peripheralId` (scripted scenarios are static and cannot
+  /// thread the scan result into later steps).
+  String? _lastScannedId;
+
+  /// Received notifications keyed by "serviceUuid:characteristicUuid":
+  /// count + last base64 value (perception cache + `wait_for_notification`).
+  final Map<String, Map<String, Object?>> _notifications = {};
+
   /// A synchronous snapshot of central-side state, serialized into the
   /// leonard extension's `extensions.butane` perception fragment.
   Map<String, Object?> perceptionSnapshot() => {
@@ -51,6 +60,10 @@ class CentralRole {
             {'id': entry.key, 'name': entry.value.name},
         ],
         'subscriptions': _notificationSubscriptions.keys.toList(),
+        'notifications': {
+          for (final entry in _notifications.entries)
+            entry.key: Map<String, Object?>.of(entry.value),
+        },
       };
 
   /// The central command vocabulary, in wire order.
@@ -117,6 +130,14 @@ class CentralRole {
               'stream to the coordinator.',
           handler: _handleSubscribe,
         ),
+        HarnessCommand(
+          action: 'wait_for_notification',
+          description: 'Poll until a notification has been received on a '
+              'subscribed characteristic (serviceUuid, characteristicUuid; '
+              'optional timeoutMs) → count + last base64 value. Delivery is '
+              'async — scripted scenarios gate on this, not a bare observe.',
+          handler: _handleWaitForNotification,
+        ),
       ];
 
   /// Returns the BLE adapter state.
@@ -150,6 +171,34 @@ class CentralRole {
     return {'state': state, 'matched': state == want};
   }
 
+  /// Polls until a notification for the characteristic has arrived (or the
+  /// timeout elapses); returns the received count + last base64 value either
+  /// way — the caller asserts. Notification delivery is asynchronous, so
+  /// scripted scenarios gate on this rather than racing an observe.
+  Future<Map<String, dynamic>> _handleWaitForNotification(
+    Map<String, dynamic> params,
+  ) async {
+    final serviceUuid = _requireParam<String>(params, 'serviceUuid');
+    final characteristicUuid =
+        _requireParam<String>(params, 'characteristicUuid');
+    final timeoutMs = params['timeoutMs'] as int? ?? 10000;
+    final key = '$serviceUuid:$characteristicUuid'.toLowerCase();
+    final deadline = DateTime.now().add(Duration(milliseconds: timeoutMs));
+    while (_notifications[key] == null && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    final entry = _notifications[key];
+    _log.add(
+      'Waited for notification on $key → '
+      '${entry == null ? 'none' : 'count=${entry['count']}'}',
+    );
+    return {
+      'received': entry != null,
+      'count': entry?['count'] ?? 0,
+      'last_value': entry?['last_value'],
+    };
+  }
+
   /// Scans for peripherals, returns the first match, then stops.
   Future<Map<String, dynamic>> _handleScan(
     Map<String, dynamic> params,
@@ -159,14 +208,28 @@ class CentralRole {
     final serviceUuids =
         serviceUuidStrings?.map((s) => UuidIdentifier(s)).toList();
 
+    final timeoutMs = params['timeoutMs'] as int? ?? 15000;
+
     _log.add('Scanning${serviceUuids != null ? ' for ${serviceUuids.map((u) => u.toString()).join(', ')}' : ''}...');
 
+    // Bounded: an empty airspace returns found:false instead of hanging the
+    // caller's drive channel (the same-box lesson — a central never sees its
+    // own machine's advertisement).
     final scanStream = _manager.scan(forServices: serviceUuids);
-    final result = await scanStream.first;
+    final ScanResult result;
+    try {
+      result = await scanStream.first.timeout(
+        Duration(milliseconds: timeoutMs),
+      );
+    } on TimeoutException {
+      _log.add('Scan timed out after ${timeoutMs}ms (nothing found)');
+      return {'found': false, 'timeoutMs': timeoutMs};
+    }
 
     final peripheral = result.peripheral;
     final id = peripheral.identifier.toString();
     _peripherals[id] = peripheral;
+    _lastScannedId = id;
 
     _log.add('Found peripheral: $id (${peripheral.name ?? 'unnamed'})');
 
@@ -182,7 +245,7 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleConnect(
     Map<String, dynamic> params,
   ) async {
-    final peripheralId = _requireParam<String>(params, 'peripheralId');
+    final peripheralId = _peripheralIdFrom(params);
     final peripheral = _findPeripheral(peripheralId);
 
     _log.add('Connecting to $peripheralId...');
@@ -203,7 +266,7 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleDisconnect(
     Map<String, dynamic> params,
   ) async {
-    final peripheralId = _requireParam<String>(params, 'peripheralId');
+    final peripheralId = _peripheralIdFrom(params);
     final peripheral = _findPeripheral(peripheralId);
 
     // Disable BLE notifications before cancelling stream subscriptions.
@@ -222,7 +285,7 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleDiscoverServices(
     Map<String, dynamic> params,
   ) async {
-    final peripheralId = _requireParam<String>(params, 'peripheralId');
+    final peripheralId = _peripheralIdFrom(params);
     final peripheral = _findPeripheral(peripheralId);
 
     final serviceUuidStrings = (params['serviceUuids'] as List<dynamic>?)
@@ -251,7 +314,7 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleDiscoverCharacteristics(
     Map<String, dynamic> params,
   ) async {
-    final peripheralId = _requireParam<String>(params, 'peripheralId');
+    final peripheralId = _peripheralIdFrom(params);
     final serviceUuid = _requireParam<String>(params, 'serviceUuid');
     final peripheral = _findPeripheral(peripheralId);
 
@@ -280,7 +343,7 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleReadCharacteristic(
     Map<String, dynamic> params,
   ) async {
-    final peripheralId = _requireParam<String>(params, 'peripheralId');
+    final peripheralId = _peripheralIdFrom(params);
     final serviceUuid = _requireParam<String>(params, 'serviceUuid');
     final characteristicUuid =
         _requireParam<String>(params, 'characteristicUuid');
@@ -303,7 +366,7 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleWriteCharacteristic(
     Map<String, dynamic> params,
   ) async {
-    final peripheralId = _requireParam<String>(params, 'peripheralId');
+    final peripheralId = _peripheralIdFrom(params);
     final serviceUuid = _requireParam<String>(params, 'serviceUuid');
     final characteristicUuid =
         _requireParam<String>(params, 'characteristicUuid');
@@ -337,7 +400,7 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleSubscribe(
     Map<String, dynamic> params,
   ) async {
-    final peripheralId = _requireParam<String>(params, 'peripheralId');
+    final peripheralId = _peripheralIdFrom(params);
     final serviceUuid = _requireParam<String>(params, 'serviceUuid');
     final characteristicUuid =
         _requireParam<String>(params, 'characteristicUuid');
@@ -389,6 +452,13 @@ class CentralRole {
       if (value.isEmpty) return;
 
       final encoded = base64Encode(value);
+      final notifKey = '$serviceUuid:$characteristicUuid'.toLowerCase();
+      final entry = _notifications.putIfAbsent(
+        notifKey,
+        () => <String, Object?>{'count': 0, 'last_value': ''},
+      );
+      entry['count'] = (entry['count']! as int) + 1;
+      entry['last_value'] = encoded;
       _log.add('Notification $characteristicUuid: ${value.length} bytes');
       _server.sendEvent(
         event: 'notification',
@@ -424,6 +494,18 @@ class CentralRole {
       );
     }
     return value;
+  }
+
+  /// Resolves the target peripheral id: an explicit `peripheralId` param, or
+  /// the most recently scanned peripheral (scripted scenarios are static and
+  /// cannot thread the scan result forward). Throws when neither exists.
+  String _peripheralIdFrom(Map<String, dynamic> params) {
+    final explicit = params['peripheralId'] as String?;
+    final id = explicit ?? _lastScannedId;
+    if (id == null) {
+      throw StateError('No peripheralId given and nothing scanned yet.');
+    }
+    return id;
   }
 
   /// Looks up a peripheral by ID. Throws if not found.
