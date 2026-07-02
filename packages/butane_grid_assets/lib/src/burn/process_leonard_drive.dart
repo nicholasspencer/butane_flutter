@@ -156,7 +156,7 @@ class ProcessLeonardDrive implements LeonardDrive {
   }
 
   @override
-  Future<String> invoke(String tool, Map<String, String> args) async {
+  Future<String> invoke(String tool, Map<String, Object?> args) async {
     final envelope = await _driveJson([
       'invoke',
       '--tool',

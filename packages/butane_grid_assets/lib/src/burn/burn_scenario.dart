@@ -52,8 +52,11 @@ class DriveStep {
   /// The tool to invoke (for [DriveAction.invoke]).
   final String tool;
 
-  /// The invoke arguments (for [DriveAction.invoke]).
-  final Map<String, String> args;
+  /// The invoke arguments (for [DriveAction.invoke]). JSON-safe values,
+  /// carried verbatim through `leonard_drive --args` — butane tools take
+  /// structured params (serviceUuids lists, add_service characteristic maps,
+  /// bools); a String-only map was an accidental narrowing.
+  final Map<String, Object?> args;
 
   /// The substring the step's result must contain to pass (empty = ran-ok only).
   final String expectContains;
@@ -92,8 +95,8 @@ abstract interface class LeonardDrive {
   /// Reads the perceived value at [path]. (An observation, point-read.)
   Future<String> observe(String path);
 
-  /// Invokes [tool] with [args] and returns the result. (An act.)
-  Future<String> invoke(String tool, Map<String, String> args);
+  /// Invokes [tool] with JSON-safe [args] and returns the result. (An act.)
+  Future<String> invoke(String tool, Map<String, Object?> args);
 
   /// Detaches + releases the perception channel. (An act; idempotent.)
   Future<void> close();

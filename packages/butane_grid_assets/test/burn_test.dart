@@ -202,7 +202,7 @@ class _ScriptedLeonardDrive implements LeonardDrive {
   }
 
   @override
-  Future<String> invoke(String tool, Map<String, String> args) async {
+  Future<String> invoke(String tool, Map<String, Object?> args) async {
     calls.add('invoke:$tool');
     return invokeResponses[tool] ?? '';
   }
