@@ -45,22 +45,28 @@ enum DriveEndpoint {
 /// asserts only that the step ran without error.
 class DriveStep {
   /// An `observe <path>` step asserting the observed value contains
-  /// [expectContains], driven [on] an endpoint (default: the follower).
+  /// [expectContains], driven [on] an endpoint (default: the follower). Set
+  /// [caseInsensitive] for platform-cased tokens like GATT UUIDs (uppercase
+  /// on CoreBluetooth, lowercase on BlueZ) — leave it off for base64
+  /// payloads, whose casing is load-bearing.
   const DriveStep.observe(
     this.path, {
     this.expectContains = '',
     this.on = DriveEndpoint.follower,
+    this.caseInsensitive = false,
   }) : action = DriveAction.observe,
        tool = '',
        args = const {};
 
   /// An `invoke <tool>` step (with [args]) asserting the result contains
-  /// [expectContains], driven [on] an endpoint (default: the follower).
+  /// [expectContains], driven [on] an endpoint (default: the follower). See
+  /// [caseInsensitive] re: UUID casing across BLE stacks.
   const DriveStep.invoke(
     this.tool, {
     this.args = const {},
     this.expectContains = '',
     this.on = DriveEndpoint.follower,
+    this.caseInsensitive = false,
   }) : action = DriveAction.invoke,
        path = '';
 
@@ -84,6 +90,10 @@ class DriveStep {
 
   /// The substring the step's result must contain to pass (empty = ran-ok only).
   final String expectContains;
+
+  /// Whether the [expectContains] match ignores case (for platform-cased
+  /// tokens like GATT UUIDs; NOT for base64 payloads).
+  final bool caseInsensitive;
 
   /// A human-readable description of the step (its endpoint + action +
   /// target).
@@ -167,8 +177,12 @@ Future<TestReport> runDriveScenario({
           DriveAction.observe => await target.observe(step.path),
           DriveAction.invoke => await target.invoke(step.tool, step.args),
         };
-        passed =
-            step.expectContains.isEmpty || observed.contains(step.expectContains);
+        final haystack =
+            step.caseInsensitive ? observed.toLowerCase() : observed;
+        final needle = step.caseInsensitive
+            ? step.expectContains.toLowerCase()
+            : step.expectContains;
+        passed = needle.isEmpty || haystack.contains(needle);
       } on Object catch (e) {
         observed = 'drive error: $e';
         passed = false;

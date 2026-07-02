@@ -140,14 +140,16 @@ const DriveScenario kNusRoundTripScenario = DriveScenario(
       args: {
         'serviceUuids': [kNusServiceUuid],
       },
-      expectContains: '6e400001',
+      expectContains: kNusServiceUuid, // UUIDs are platform-cased
       on: DriveEndpoint.local,
+      caseInsensitive: true,
     ),
     DriveStep.invoke(
       'butane.discover_characteristics',
       args: {'serviceUuid': kNusServiceUuid},
-      expectContains: '6e400002',
+      expectContains: kNusRxUuid,
       on: DriveEndpoint.local,
+      caseInsensitive: true,
     ),
     // Write `burn` over the air; the peripheral proves the bytes arrived.
     DriveStep.invoke(
