@@ -346,7 +346,7 @@ packages:
       path: "../../engineering.memento/genesis/packages/tree"
       relative: true
     source: path
-    version: "0.1.5"
+    version: "0.1.4"
   glob:
     dependency: transitive
     description:

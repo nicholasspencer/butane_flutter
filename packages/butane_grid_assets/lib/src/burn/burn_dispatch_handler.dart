@@ -4,16 +4,11 @@
 /// the [ButaneFollowerRunner], and return the published [FollowerEndpoint] as
 /// the opaque dispatch result (the rendezvous handoff).
 ///
-/// **The release seam — a documented gap.** The lessor's GUARANTEED teardown
-/// ("release the lease → the peer reaps the launched app") needs the server to
-/// tell the runner when the lease is released or reaped. Today
-/// `StationServer.start` exposes NO on-release/lease-reaped hook, and
-/// `LeaseManager.release`/`_reap` free the slot silently — so this handler can
-/// wire the LAUNCH half only. Until the hook exists in `grid_federation`, the
-/// lessor composition (a serve command / an integration test) must call
-/// [ButaneFollowerRunner.teardown] itself after the release (it is idempotent —
-/// a double reap is a no-op). The offline `burn_test.dart` fake lessor shows the
-/// intended shape: its `release` calls `runner.teardown()`.
+/// **The release seam (gap CLOSED).** The lessor's GUARANTEED teardown rides
+/// `StationServer.start(onLeaseEnded: …)` — fired on explicit release AND
+/// every reap path — which the burn's serve composition (`burn_serve.dart`)
+/// wires to [ButaneFollowerRunner.teardown] (idempotent; a double reap is a
+/// no-op). This handler wires the LAUNCH half; the lease end reaps.
 library;
 
 import 'package:grid_federation/grid_federation.dart';

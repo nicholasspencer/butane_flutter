@@ -22,65 +22,8 @@ import 'package:grid_runtime/grid_runtime.dart'
     show SystemProcessGroupController;
 import 'package:test/test.dart';
 
-/// Nordic UART Service (the bench profile).
-const _nusService = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const _nusTx = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-
-/// The scripted two-endpoint scenario: peripheral GATT+advertise on the
-/// follower, state+perception on the local central. Structured args exercise
-/// the widened Object? seam over the real `leonard_drive --args` wire.
-const _scenario = DriveScenario(
-  name: 'two-drive-live-smoke',
-  steps: [
-    // Gate BOTH adapters first: BLE ops before poweredOn hang in
-    // CoreBluetooth (the exact failure this scenario's first live run hit).
-    DriveStep.invoke(
-      'butane.wait_for_state',
-      expectContains: '"matched":true',
-    ),
-    DriveStep.invoke(
-      'butane.wait_for_state',
-      expectContains: '"matched":true',
-      on: DriveEndpoint.local,
-    ),
-    DriveStep.invoke(
-      'butane.add_service',
-      args: {
-        'uuid': _nusService,
-        'characteristics': [
-          {
-            'uuid': _nusTx,
-            'properties': {'read': true, 'notify': true},
-            'permissions': {'readable': true},
-          },
-        ],
-      },
-      expectContains: 'added',
-    ),
-    DriveStep.invoke(
-      'butane.start_advertising',
-      args: {
-        'localName': 'BURN-LIVE',
-        'serviceUuids': [_nusService],
-      },
-      expectContains: 'advertising',
-    ),
-    DriveStep.observe(
-      'extensions.butane.data',
-      expectContains: 'BURN-LIVE',
-    ),
-    DriveStep.invoke(
-      'butane.check_state',
-      expectContains: 'poweredOn',
-      on: DriveEndpoint.local,
-    ),
-    DriveStep.observe(
-      'extensions.butane.data.role',
-      expectContains: 'central',
-      on: DriveEndpoint.local,
-    ),
-  ],
-);
+// The scenario under test is the pack's NAMED smoke scenario — the same one
+// `butane_station burn --scenario smoke` drives.
 
 void main() {
   test(
@@ -134,7 +77,7 @@ void main() {
 
       final host = BurnHostCapability(
         drive: ProcessLeonardDrive(),
-        scenario: _scenario,
+        scenario: kSmokeScenario,
         localRunner: localRunner,
         localSpec: LaunchSpec(
           app: 'butane_harness',
