@@ -5,12 +5,10 @@ homepage: https://github.com/nicholasspencer/butane
 publish_to: none
 
 environment:
-  # 3.9 is pub's floor for `git: {tag_pattern:}` version solving (ADR-0003),
-  # which the machine-local pubspec_overrides.yaml uses to pull the
-  # unpublished grid_assets from its release tags. The override is declared
-  # against THIS pubspec, so the feature gate is checked here.
-  # Narrows nothing in practice: butane_grid_assets already requires ^3.11.0,
-  # so the workspace's effective floor is higher either way.
+  # 3.9 is pub's floor for the temporary grid_assets `git: {tag_pattern:}`
+  # exception documented in docs/windows-dev-environment.md. The override is
+  # declared against this workspace pubspec. butane_grid_assets already
+  # requires ^3.11.0, so this floor does not narrow the effective constraint.
   sdk: ^3.9.0
 
 workspace:

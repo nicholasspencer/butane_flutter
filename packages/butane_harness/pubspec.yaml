@@ -23,16 +23,15 @@ dependencies:
   butane_platform_interface:
     path: ../butane_platform_interface
   cupertino_icons: ^1.0.8
-  # Node/Field/Seed for the leonard perception fragment (resolved to the
-  # sibling genesis checkout via the root overrides — see that file's note).
-  genesis_perception: ^0.1.2
+  # Hosted 0.1.3 is the compatible perception release: it requires
+  # genesis_tree ^0.1.4, and genesis_tree 0.1.5 is published.
+  genesis_perception: ^0.1.3
   # The extension contract (LeonardTool/ToolResult/BusyState/…) —
   # leonard_flutter re-exports only LeonardExtension.
   leonard_contract: ^0.1.0
-  # The leonard host: claims the WidgetsBinding slot (debug/profile only) and
-  # exposes ext.exploration.* so leonard_drive / the burn can perceive+drive
-  # this harness. Path-linked via the root pubspec_overrides.yaml until the
-  # extensionsReady barrier ships in a hosted release.
+  # Keep the hosted constraint as the declared API range. The root exception
+  # override selects the immutable post-extensionsReady commit until Leonard
+  # publishes that readiness barrier.
   leonard_flutter: ^0.1.7
 dev_dependencies:
   flutter_test:
