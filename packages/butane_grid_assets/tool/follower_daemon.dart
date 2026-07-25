@@ -20,7 +20,7 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 
-import 'package:grid_controller/grid_controller.dart';
+import 'package:beads_dart/beads_dart.dart';
 import 'package:grid_exploration/grid_exploration.dart';
 
 class _FixedReader implements SnapshotReader {

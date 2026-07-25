@@ -41,6 +41,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.0"
+  beads_dart:
+    dependency: "direct overridden"
+    description:
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/beads_dart"
+      relative: false
+    source: path
+    version: "0.1.0"
   bluez:
     dependency: transitive
     description:
@@ -209,6 +216,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  dart_grid_assets:
+    dependency: "direct overridden"
+    description:
+      path: "/Users/nico/development/engineering.memento/power_station/packages/dart_grid_assets"
+      relative: false
+    source: path
+    version: "0.1.0"
   dart_style:
     dependency: transitive
     description:
@@ -257,6 +271,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
+  extension_discovery:
+    dependency: transitive
+    description:
+      name: extension_discovery
+      sha256: de1fce715ab013cdfb00befc3bdf0914bea5e409c3a567b7f8f144bc061611a7
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   fake_async:
     dependency: transitive
     description:
@@ -265,6 +287,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.3"
+  federated_grid_assets:
+    dependency: "direct overridden"
+    description:
+      path: "/Users/nico/development/engineering.memento/power_station/packages/federated_grid_assets"
+      relative: false
+    source: path
+    version: "0.1.0"
   file:
     dependency: transitive
     description:
@@ -336,17 +365,17 @@ packages:
   genesis_perception:
     dependency: "direct overridden"
     description:
-      path: "../../engineering.memento/genesis/packages/perception"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/genesis/packages/perception"
+      relative: false
     source: path
     version: "0.1.3"
   genesis_tree:
     dependency: "direct overridden"
     description:
-      path: "../../engineering.memento/genesis/packages/tree"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/genesis/packages/tree"
+      relative: false
     source: path
-    version: "0.1.4"
+    version: "0.1.5"
   glob:
     dependency: transitive
     description:
@@ -374,59 +403,54 @@ packages:
   grid_assets:
     dependency: "direct overridden"
     description:
-      path: "../../engineering.memento/power_station/packages/grid_assets"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/power_station/packages/grid_assets"
+      relative: false
     source: path
-    version: "0.0.0"
+    version: "0.1.0"
   grid_cli:
     dependency: "direct overridden"
     description:
-      path: "../../engineering.memento/the_grid/packages/grid_cli"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_cli"
+      relative: false
     source: path
-    version: "0.0.0"
-  grid_controller:
-    dependency: "direct overridden"
+    version: "0.2.0"
+  grid_diagnostics_contract:
+    dependency: transitive
     description:
-      path: "../../engineering.memento/the_grid/packages/grid_controller"
-      relative: true
-    source: path
-    version: "0.0.0"
+      name: grid_diagnostics_contract
+      sha256: "021f6d51a5f2aa6f645482bc7309855eaa94c80ead1eb60002519cb9ef7c4af4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   grid_engine:
     dependency: "direct overridden"
     description:
-      path: "../../engineering.memento/the_grid/packages/grid_engine"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_engine"
+      relative: false
     source: path
-    version: "0.0.0"
+    version: "0.1.0"
   grid_exploration:
     dependency: "direct overridden"
     description:
-      path: "../../engineering.memento/the_grid/packages/grid_exploration"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_exploration"
+      relative: false
     source: path
-    version: "0.0.0"
-  grid_federation:
-    dependency: "direct overridden"
-    description:
-      path: "../../engineering.memento/the_grid/packages/grid_federation"
-      relative: true
-    source: path
-    version: "0.0.0"
-  grid_reconciler:
-    dependency: "direct overridden"
-    description:
-      path: "../../engineering.memento/the_grid/packages/grid_reconciler"
-      relative: true
-    source: path
-    version: "0.0.0"
+    version: "0.1.0"
   grid_runtime:
     dependency: "direct overridden"
     description:
-      path: "../../engineering.memento/the_grid/packages/grid_runtime"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/the_grid/packages/grid_runtime"
+      relative: false
     source: path
-    version: "0.0.0"
+    version: "0.1.0"
+  grid_sdk:
+    dependency: transitive
+    description:
+      name: grid_sdk
+      sha256: aba64284ad02ae1ada50f9d448100c3f0044f051ee38d5a43d3ba67eae6a6e4e
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   html:
     dependency: transitive
     description:
@@ -531,22 +555,22 @@ packages:
   leonard_agent:
     dependency: "direct overridden"
     description:
-      path: "../lenny/packages/leonard_agent"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/lenny/packages/leonard_agent"
+      relative: false
     source: path
     version: "0.1.5"
   leonard_contract:
     dependency: "direct overridden"
     description:
-      path: "../lenny/packages/leonard_contract"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/lenny/packages/leonard_contract"
+      relative: false
     source: path
     version: "0.1.0"
   leonard_flutter:
     dependency: "direct overridden"
     description:
-      path: "../lenny/packages/leonard_flutter"
-      relative: true
+      path: "/Users/nico/development/engineering.memento/lenny/packages/leonard_flutter"
+      relative: false
     source: path
     version: "0.1.7"
   lints:
@@ -613,14 +637,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.0"
-  multicast_dns:
-    dependency: transitive
-    description:
-      name: multicast_dns
-      sha256: de72ada5c3db6fdd6ad4ae99452fe05fb403c4bb37c67ceb255ddd37d2b5b1eb
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.3"
   mysql_client:
     dependency: transitive
     description:
@@ -629,14 +645,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.0.27"
-  nested:
-    dependency: transitive
-    description:
-      name: nested
-      sha256: "03bac4c528c64c95c722ec99280375a6f2fc708eec17c7b3f07253b626cd2a20"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
   node_preamble:
     dependency: transitive
     description:
@@ -645,54 +653,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.2"
-  nsd:
-    dependency: transitive
-    description:
-      name: nsd
-      sha256: "1611a5c9f61d56ff2973e1488ae04112103e5203b4a7a1fb594b48cfb366fc14"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.1.0"
-  nsd_android:
-    dependency: transitive
-    description:
-      name: nsd_android
-      sha256: "96d2d451c5db0319c37b1b2a38f2d55eb56ae54c0b0d3144c03c19c97436de4a"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.0"
-  nsd_ios:
-    dependency: transitive
-    description:
-      name: nsd_ios
-      sha256: "562fffe753543a65190344d3acd0ed80d96c571ac1a05bf10780c5584b5055ac"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.1"
-  nsd_macos:
-    dependency: transitive
-    description:
-      name: nsd_macos
-      sha256: "47cd355d84009befe02710c72bf1c1999b24d5f3fb3a3d914f8b77bcaca42542"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.1"
-  nsd_platform_interface:
-    dependency: transitive
-    description:
-      name: nsd_platform_interface
-      sha256: b1a5ace6f01ea2ce37f373e52c3b7af4fd7c11de2582ddcc89f4fc00615d9dff
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.0"
-  nsd_windows:
-    dependency: transitive
-    description:
-      name: nsd_windows
-      sha256: "68b4a256b0be258dbbad0ae789f2e8838d0935a353dac86b17c14c1a05df4ecd"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.1"
   ollama_dart:
     dependency: transitive
     description:
@@ -757,14 +717,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.6"
-  plugin_platform_interface:
-    dependency: transitive
-    description:
-      name: plugin_platform_interface
-      sha256: "4820fbfdb9478b1ebae27888254d445073732dae3d6ea81f0b7e06d5dedc3f02"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.1.8"
   pool:
     dependency: transitive
     description:
@@ -781,14 +733,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.5"
-  provider:
-    dependency: transitive
-    description:
-      name: provider
-      sha256: "4e82183fa20e5ca25703ead7e05de9e4cceed1fbd1eadc1ac3cb6f565a09f272"
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.1.5+1"
   pub_semver:
     dependency: transitive
     description:
@@ -829,14 +773,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.1"
-  riverpod:
-    dependency: transitive
-    description:
-      name: riverpod
-      sha256: "17100416c51db7810c71a7bb2c34d1f881faa0074fd452afb0c4db6f8f126c76"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.3.2"
   rxdart:
     dependency: transitive
     description:
