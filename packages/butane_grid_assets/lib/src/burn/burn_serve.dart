@@ -26,11 +26,6 @@ void configureBurnServeFlags(ArgParser parser) => parser
     'harness-dir',
     help: 'The butane_harness checkout on this box — built (--debug) and '
         'launched as the follower app-under-test.',
-  )
-  ..addOption(
-    'follower-ws-port',
-    defaultsTo: '8971',
-    help: "The launched harness's WS control-plane port.",
   );
 
 /// Builds the burn lessor pieces from the parsed serve flags: the
@@ -48,7 +43,6 @@ void configureBurnServeFlags(ArgParser parser) => parser
   final runner = ButaneFollowerRunner(
     launcher: ButaneFollowerLauncher(
       harnessDirectory: dir,
-      wsPort: int.parse(args.option('follower-ws-port')!),
       onLog: log,
     ),
     processes: const SystemProcessGroupController(),

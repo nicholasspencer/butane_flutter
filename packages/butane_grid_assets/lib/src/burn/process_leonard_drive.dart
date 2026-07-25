@@ -150,7 +150,8 @@ class ProcessLeonardDrive implements LeonardDrive {
     final envelope = await _driveJson(const ['observe']);
     final observation = envelope['observation'];
     if (observation == null) {
-      throw StateError('leonard_drive observe printed no observation: $envelope');
+      throw StateError(
+          'leonard_drive observe printed no observation: $envelope');
     }
     return jsonEncode(_navigate(observation, path));
   }

@@ -1,9 +1,7 @@
-/// The transport-agnostic harness command layer.
+/// The harness command layer exposed through Leonard.
 ///
 /// A role (central/peripheral) registers its command vocabulary here once;
-/// the WebSocket control plane (the coordinator's channel) and the leonard
-/// extension (`ext.exploration.*`, the burn's drive channel) are two
-/// frontends over the same table — one vocabulary, one dispatch, no drift.
+/// the Leonard extension exposes the same table as `ext.exploration.*` tools.
 library;
 
 /// Handles one harness command: the full params map in, a JSON-safe result
@@ -40,7 +38,7 @@ class HarnessCommandRegistry {
   final Map<String, HarnessCommand> _commands = {};
 
   /// The number of dispatches currently executing (the busy-state signal for
-  /// the leonard extension: a drive/coordinator never observes mid-command).
+  /// the Leonard extension: a drive never observes mid-command).
   int _inFlight = 0;
 
   /// Whether any command is currently executing.
@@ -63,9 +61,8 @@ class HarnessCommandRegistry {
   }
 
   /// Dispatches [action] with [params]. An unknown action returns the same
-  /// `{'success': false, 'error': …}` shape the WS switch used to produce;
-  /// handler exceptions propagate to the frontend (the WS server and the
-  /// leonard tool each wrap them in their own error envelope).
+  /// `{'success': false, 'error': …}` shape expected by callers; handler
+  /// exceptions propagate to the Leonard tool, which wraps its error.
   Future<Map<String, dynamic>> dispatch(
     String? action,
     Map<String, dynamic> params,

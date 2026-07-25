@@ -1,12 +1,11 @@
-/// The butane leonard extension — the harness's second frontend.
+/// The butane Leonard extension — the harness command frontend.
 ///
 /// Reflects the [HarnessCommandRegistry] vocabulary as `butane.*` tools
 /// (`ext.exploration.butane.<action>`), serializes the active role's
 /// synchronous state snapshot as the `extensions.butane` perception
 /// fragment, and gates stability on in-flight command dispatches — so a
 /// `leonard_drive` scenario (or, later, the agent loop) never observes
-/// mid-command. One vocabulary, one dispatch: the WebSocket control plane
-/// and this extension front the same table.
+/// mid-command.
 library;
 
 import 'package:genesis_perception/genesis_perception.dart';
@@ -64,7 +63,7 @@ class ButaneLeonardExtension extends LeonardExtension with PerceptionExtension {
 
 /// One harness command surfaced as a leonard tool. Dispatches through the
 /// registry (not the bare handler) so the in-flight busy signal covers tool
-/// calls from every frontend.
+/// calls.
 class _CommandTool extends LeonardTool {
   _CommandTool(this._registry, this._command);
 

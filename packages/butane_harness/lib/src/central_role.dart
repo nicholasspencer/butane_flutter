@@ -3,30 +3,22 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
-import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
+import 'package:butane_platform_interface/butane_platform_interface.dart'
+    as api;
 
 import 'command_registry.dart';
-import 'harness_connection.dart';
 import 'harness_log.dart';
 
 /// Implements the BLE Central role for the harness app.
 ///
 /// Exposes its command vocabulary (scan, connect, discover
 /// services/characteristics, read/write values, subscribe to notifications,
-/// disconnect) as [commands] on the transport-agnostic registry — the
-/// WebSocket control plane and the leonard extension are two frontends over
-/// the same table. [server] remains the unsolicited-event channel
-/// (notifications, errors).
+/// disconnect) as [commands] on the registry used by the Leonard extension.
 class CentralRole {
-  CentralRole({
-    required HarnessConnection server,
-    required HarnessLog log,
-  })  : _server = server,
-        _log = log {
+  CentralRole({required HarnessLog log}) : _log = log {
     _manager = CentralManager();
   }
 
-  final HarnessConnection _server;
   final HarnessLog _log;
   late final CentralManager _manager;
 
@@ -127,7 +119,7 @@ class CentralRole {
           action: 'subscribe',
           description: 'Subscribe to characteristic notifications '
               '(peripheralId, serviceUuid, characteristicUuid); events '
-              'stream to the coordinator.',
+              'are recorded in the perception snapshot.',
           handler: _handleSubscribe,
         ),
         HarnessCommand(
@@ -203,14 +195,15 @@ class CentralRole {
   Future<Map<String, dynamic>> _handleScan(
     Map<String, dynamic> params,
   ) async {
-    final serviceUuidStrings = (params['serviceUuids'] as List<dynamic>?)
-        ?.cast<String>();
+    final serviceUuidStrings =
+        (params['serviceUuids'] as List<dynamic>?)?.cast<String>();
     final serviceUuids =
         serviceUuidStrings?.map((s) => UuidIdentifier(s)).toList();
 
     final timeoutMs = params['timeoutMs'] as int? ?? 15000;
 
-    _log.add('Scanning${serviceUuids != null ? ' for ${serviceUuids.map((u) => u.toString()).join(', ')}' : ''}...');
+    _log.add(
+        'Scanning${serviceUuids != null ? ' for ${serviceUuids.map((u) => u.toString()).join(', ')}' : ''}...');
 
     // Bounded: an empty airspace returns found:false instead of hanging the
     // caller's drive channel (the same-box lesson — a central never sees its
@@ -288,8 +281,8 @@ class CentralRole {
     final peripheralId = _peripheralIdFrom(params);
     final peripheral = _findPeripheral(peripheralId);
 
-    final serviceUuidStrings = (params['serviceUuids'] as List<dynamic>?)
-        ?.cast<String>();
+    final serviceUuidStrings =
+        (params['serviceUuids'] as List<dynamic>?)?.cast<String>();
     final serviceUuids =
         serviceUuidStrings?.map((s) => UuidIdentifier(s)).toList();
 
@@ -318,10 +311,9 @@ class CentralRole {
     final serviceUuid = _requireParam<String>(params, 'serviceUuid');
     final peripheral = _findPeripheral(peripheralId);
 
-    final charUuidStrings = (params['characteristicUuids'] as List<dynamic>?)
-        ?.cast<String>();
-    final charUuids =
-        charUuidStrings?.map((s) => UuidIdentifier(s)).toList();
+    final charUuidStrings =
+        (params['characteristicUuids'] as List<dynamic>?)?.cast<String>();
+    final charUuids = charUuidStrings?.map((s) => UuidIdentifier(s)).toList();
 
     final service = await _findService(peripheral, serviceUuid);
 
@@ -333,9 +325,8 @@ class CentralRole {
     _log.add('Found ${characteristics.length} characteristics');
 
     return {
-      'characteristics': characteristics
-          .map((c) => {'uuid': c.uuid.toString()})
-          .toList(),
+      'characteristics':
+          characteristics.map((c) => {'uuid': c.uuid.toString()}).toList(),
     };
   }
 
@@ -444,10 +435,10 @@ class CentralRole {
     // Listen to the raw characteristic value stream from the platform.
     final subscription = platform
         .characteristicValueStream(
-          session: session,
-          serviceUuid: normalizedServiceUuid,
-          characteristicUuid: normalizedCharUuid,
-        )
+      session: session,
+      serviceUuid: normalizedServiceUuid,
+      characteristicUuid: normalizedCharUuid,
+    )
         .listen((value) {
       if (value.isEmpty) return;
 
@@ -460,15 +451,6 @@ class CentralRole {
       entry['count'] = (entry['count']! as int) + 1;
       entry['last_value'] = encoded;
       _log.add('Notification $characteristicUuid: ${value.length} bytes');
-      _server.sendEvent(
-        event: 'notification',
-        data: {
-          'peripheralId': peripheralId,
-          'serviceUuid': serviceUuid,
-          'characteristicUuid': characteristicUuid,
-          'value': encoded,
-        },
-      );
     });
 
     _notificationSubscriptions[key] = subscription;
@@ -550,8 +532,7 @@ class CentralRole {
     try {
       return characteristics.firstWhere(
         (c) =>
-            c.uuid.toString().toLowerCase() ==
-            characteristicUuid.toLowerCase(),
+            c.uuid.toString().toLowerCase() == characteristicUuid.toLowerCase(),
       );
     } on StateError {
       throw StateError(

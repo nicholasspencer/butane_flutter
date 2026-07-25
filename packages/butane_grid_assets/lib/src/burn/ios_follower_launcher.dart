@@ -71,15 +71,14 @@ asyncio.run(main())
 class IosFollowerLauncher implements FollowerLauncher {
   /// Creates a launcher for [deviceId] (the device UDID), running
   /// `flutter run` from [harnessDirectory] and publishing under [station].
-  /// [bundleId] is the harness app id looked up over mDNS; [wsPort] is the
-  /// harness WS control-plane dart-define; [relayPort] is the loopback port
-  /// the Dart-reachable endpoint binds (distinct per concurrent follower).
+  /// [bundleId] is the harness app id looked up over mDNS; [relayPort] is the
+  /// loopback port the Dart-reachable endpoint binds (distinct per concurrent
+  /// follower).
   IosFollowerLauncher({
     required this.deviceId,
     required this.harnessDirectory,
     this.station = 'butane-ios-follower',
     this.bundleId = 'com.nicospencer.butaneHarness',
-    this.wsPort = 19100,
     this.relayPort = 50999,
     this.flutterExecutable = 'flutter',
     this.python3 = '/usr/bin/python3',
@@ -100,9 +99,6 @@ class IosFollowerLauncher implements FollowerLauncher {
 
   /// The harness app bundle id (mDNS `_dartVmService._tcp` instance name).
   final String bundleId;
-
-  /// The harness WS control-plane port (dart-define).
-  final int wsPort;
 
   /// The loopback port the published (Dart-reachable) endpoint binds.
   final int relayPort;
@@ -149,7 +145,6 @@ class IosFollowerLauncher implements FollowerLauncher {
         '-d',
         deviceId,
         '--dart-define=ROLE=$role',
-        '--dart-define=WS_PORT=$wsPort',
       ],
       workingDirectory: harnessDirectory,
       mode: ProcessStartMode.detachedWithStdio,
@@ -314,14 +309,13 @@ class IosFollowerLauncher implements FollowerLauncher {
         await _devicectlJson(['device', 'info', 'apps']),
         'apps',
       );
-      final url = apps
-          .cast<Map<String, Object?>>()
-          .firstWhere(
+      final url = apps.cast<Map<String, Object?>>().firstWhere(
             (a) => a['bundleIdentifier'] == bundleId,
             orElse: () => const {},
           )['url'] as String?;
-      final uuid =
-          RegExp(r'Application/([0-9A-Fa-f-]+)/').firstMatch(url ?? '')?.group(1);
+      final uuid = RegExp(r'Application/([0-9A-Fa-f-]+)/')
+          .firstMatch(url ?? '')
+          ?.group(1);
       if (uuid == null) return; // not installed / not found — nothing to reap
 
       final procs = _decodeList(
@@ -334,8 +328,14 @@ class IosFollowerLauncher implements FollowerLauncher {
         final pid = p['processIdentifier'];
         _onLog('ios launcher: terminating prior harness pid $pid');
         await Process.run('xcrun', [
-          'devicectl', 'device', 'process', 'terminate',
-          '--device', deviceId, '--pid', '$pid',
+          'devicectl',
+          'device',
+          'process',
+          'terminate',
+          '--device',
+          deviceId,
+          '--pid',
+          '$pid',
         ]).timeout(const Duration(seconds: 15));
       }
     } on Object catch (e) {
@@ -388,7 +388,8 @@ class IosFollowerLauncher implements FollowerLauncher {
 
     // Confirm the Dart-reachable loopback actually serves the exploration
     // host (not just any TCP forward).
-    if (!await _explorationReady('http://127.0.0.1:$relayPort/${device.authCode}')) {
+    if (!await _explorationReady(
+        'http://127.0.0.1:$relayPort/${device.authCode}')) {
       relay.kill(ProcessSignal.sigkill);
       throw StateError('ios launcher: relay loopback not exploration-ready');
     }

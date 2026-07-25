@@ -50,7 +50,6 @@ void main() {
       final log = <String>[];
       final launcher = ButaneFollowerLauncher(
         harnessDirectory: harnessDir.path,
-        wsPort: 8971,
         onLog: log.add,
       );
       final runner = ButaneFollowerRunner(

@@ -35,14 +35,13 @@ class DriveStepResult {
 
   /// JSON form.
   Map<String, dynamic> toJson() => {
-    'description': description,
-    'observed': observed,
-    'passed': passed,
-  };
+        'description': description,
+        'observed': observed,
+        'passed': passed,
+      };
 
   @override
-  String toString() =>
-      'DriveStepResult($description, passed: $passed)';
+  String toString() => 'DriveStepResult($description, passed: $passed)';
 }
 
 /// The burn's collected report (ADR-0011 D9) — the domain result the `burn-host`
@@ -80,13 +79,13 @@ class TestReport {
 
   /// JSON form.
   Map<String, dynamic> toJson() => {
-    'scenario': scenario,
-    'endpoint': endpoint,
-    'passed': passed,
-    'total': total,
-    'failures': failures,
-    'steps': [for (final s in steps) s.toJson()],
-  };
+        'scenario': scenario,
+        'endpoint': endpoint,
+        'passed': passed,
+        'total': total,
+        'failures': failures,
+        'steps': [for (final s in steps) s.toJson()],
+      };
 
   @override
   String toString() =>
