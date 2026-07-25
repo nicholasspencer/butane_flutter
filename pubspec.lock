@@ -209,6 +209,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  dart_grid_assets:
+    dependency: "direct overridden"
+    description:
+      path: "../../engineering.memento/power_station/packages/dart_grid_assets"
+      relative: true
+    source: path
+    version: "0.0.0"
   dart_style:
     dependency: transitive
     description:
@@ -346,7 +353,7 @@ packages:
       path: "../../engineering.memento/genesis/packages/tree"
       relative: true
     source: path
-    version: "0.1.4"
+    version: "0.1.5"
   glob:
     dependency: transitive
     description:

@@ -22,10 +22,13 @@
 ///  2. the DIRECT perception channel = `leonard_drive` ↔ `ext.exploration.*`,
 ///     point-to-point, NEVER tunneled through the bus.
 ///
-/// A capability sees only the sandboxed [CapabilityContext] (no writer/notifier)
-/// — the four derailment-invariants hold at depth by construction.
+/// A capability reads its ambient values (the [SiblingView] rendezvous, the
+/// work bead) with the effect verb (`getInheritedSeedOfExactType`) at entry and
+/// holds no writer/notifier — the four derailment-invariants hold at depth by
+/// layering + the host's single write-locus.
 library;
 
+import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart';
 import 'package:grid_engine/grid_engine.dart';
 import 'package:grid_federation/grid_federation.dart';
@@ -170,12 +173,15 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
 
   /// A stable per-node idempotency key so a retried lease/dispatch dedups at the
   /// owner (never a second grant or a second launch — the lossy-bus hazard).
-  String _idem(CapabilityContext ctx) =>
-      '${lessee.isEmpty ? ctx.beadId : lessee}/${ctx.nodePath}';
+  String _idem(StepArgs args) =>
+      '${lessee.isEmpty ? args.beadId : lessee}/${args.nodePath}';
 
   @override
-  Future<LeaseResolution<BusLease>> acquire(CapabilityContext ctx) async {
-    final who = lessee.isEmpty ? ctx.beadId : lessee;
+  Future<LeaseResolution<BusLease>> acquire(
+    TreeContext context,
+    StepArgs args,
+  ) async {
+    final who = lessee.isEmpty ? args.beadId : lessee;
 
     // MATCH a peer by containment (Track C). Fail-closed: no match → no order.
     final peer = await matchFollower(
@@ -186,13 +192,13 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     if (peer == null) {
       return LeaseUnavailable('no follower peer satisfies $requires');
     }
-    if (ctx.cancel.isCancelled) return const LeaseUnavailable('cancelled');
+    if (args.cancel.isCancelled) return const LeaseUnavailable('cancelled');
 
     // LEASE the matched peer's slot over the bus.
     final LeaseGrant grant;
     try {
       grant = await peer.client.requestLease(
-        LeaseRequest(lessee: who, kind: kBurnKind, idempotencyKey: _idem(ctx)),
+        LeaseRequest(lessee: who, kind: kBurnKind, idempotencyKey: _idem(args)),
       );
     } on LeaseDeniedException catch (e) {
       return LeaseUnavailable('follower lease denied: ${e.message}');
@@ -202,7 +208,11 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
   }
 
   @override
-  Future<StepOutcome> dispatchOn(BusLease handle, CapabilityContext ctx) async {
+  Future<StepOutcome> dispatchOn(
+    BusLease handle,
+    TreeContext context,
+    StepArgs args,
+  ) async {
     // DISPATCH the launch over the bus → the follower publishes its endpoint
     // (the rendezvous handoff rides the dispatch result).
     final Map<String, dynamic> raw;
@@ -210,12 +220,12 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
       raw = await handle.client.dispatch(
         handle.grant,
         launchSpec.toJson(),
-        idempotencyKey: _idem(ctx),
+        idempotencyKey: _idem(args),
       );
     } on LeaseInvalidException catch (e) {
       return Failed('follower launch dispatch failed: ${e.message}');
     }
-    if (ctx.cancel.isCancelled) return const Failed('cancelled');
+    if (args.cancel.isCancelled) return const Failed('cancelled');
 
     final endpoint = FollowerEndpoint.fromJson(raw);
     if (!endpoint.isPublished) {
@@ -234,7 +244,11 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
   }
 
   @override
-  Future<bool> proveFresh(BusLease handle, CapabilityContext ctx) async {
+  Future<bool> proveFresh(
+    BusLease handle,
+    TreeContext context,
+    StepArgs args,
+  ) async {
     // The daemon adopt freshness proof (live-arm): a fenced heartbeat succeeds
     // only for a grant still live AND ours. Offline this is unreached (adoptable
     // defaults null ⇒ no adopt); wired for the cross-machine arm.
@@ -270,8 +284,9 @@ class _HostHold {
 /// convention: the leased follower runs the peripheral) and attach a second
 /// drive to it — then run a SCRIPTED scenario and collect a [TestReport].
 ///
-/// It reads the follower's published endpoint pull-free through the threaded
-/// [SiblingView] (D-5; never a subscription/re-query — invariant 1). The drive is
+/// It reads the follower's published endpoint pull-free through the AMBIENT
+/// [SiblingView] (mounted by `SessionScope`; read with the effect verb — D-5,
+/// never a subscription/re-query — invariant 1). The drive is
 /// the SECOND, orthogonal channel: point-to-point over the follower's VM service,
 /// NOT tunneled through the federation bus. UNMOUNT (`teardown`) closes both
 /// drive channels and reaps the local harness through [localRunner]'s
@@ -329,12 +344,18 @@ class BurnHostCapability extends ServiceCapability {
       Expando<_HostHold>('grid-burn-host-hold');
 
   @override
-  Future<StepOutcome> run(CapabilityContext ctx) async {
-    final hold = _holds[ctx] = _HostHold();
+  Future<StepOutcome> run(TreeContext context, StepArgs args) async {
+    // The per-incarnation hold is keyed by the [StepArgs] identity — the host
+    // hands the SAME instance to run + teardown + reportFor.
+    final hold = _holds[args] = _HostHold();
 
-    // AWAIT the follower endpoint, read pull-free from the sibling cursor (D-5).
-    final followerPath = '${_parentPath(ctx.nodePath)}/$followerStep';
-    final published = ctx.siblings.resultOf(followerPath);
+    // AWAIT the follower endpoint, read pull-free from the AMBIENT sibling
+    // view at ENTRY (the effect verb, D-5).
+    final siblings =
+        context.getInheritedSeedOfExactType<SiblingView>() ??
+        const SiblingView();
+    final followerPath = '${_parentPath(args.nodePath)}/$followerStep';
+    final published = siblings.resultOf(followerPath);
     final uri = published['endpoint'] ?? '';
     if (uri.isEmpty) {
       return const Failed('no follower endpoint (rendezvous failed)');
@@ -344,7 +365,7 @@ class BurnHostCapability extends ServiceCapability {
       station: published['station'] ?? '',
       leaseId: published['lease'] ?? '',
     );
-    if (ctx.cancel.isCancelled) return const Failed('cancelled');
+    if (args.cancel.isCancelled) return const Failed('cancelled');
 
     // ATTACH the DIRECT perception channel (NOT the bus) + run the SCRIPTED
     // scenario. The drive is closed in teardown (the guaranteed channel teardown).
@@ -362,7 +383,7 @@ class BurnHostCapability extends ServiceCapability {
       } on Object catch (e) {
         return Failed('local harness launch failed: $e');
       }
-      if (ctx.cancel.isCancelled) return const Failed('cancelled');
+      if (args.cancel.isCancelled) return const Failed('cancelled');
       await localDrive!.attach(localEndpoint);
       _onLog(
         'host attached local leonard_drive to ${localEndpoint.vmServiceUri}',
@@ -374,10 +395,10 @@ class BurnHostCapability extends ServiceCapability {
       scenario: scenario,
       endpoint: endpoint,
       localDrive: localRunner == null ? null : localDrive,
-      isCancelled: () => ctx.cancel.isCancelled,
+      isCancelled: () => args.cancel.isCancelled,
     );
     hold.report = report;
-    if (ctx.cancel.isCancelled) return const Failed('cancelled');
+    if (args.cancel.isCancelled) return const Failed('cancelled');
 
     _onLog('host collected report: $report');
     return report.passed
@@ -394,11 +415,12 @@ class BurnHostCapability extends ServiceCapability {
           );
   }
 
-  /// The report this mount collected (for tests / introspection), or `null`.
-  TestReport? reportFor(CapabilityContext ctx) => _holds[ctx]?.report;
+  /// The report the mount driven by [args] collected (for tests /
+  /// introspection), or `null`.
+  TestReport? reportFor(StepArgs args) => _holds[args]?.report;
 
   @override
-  Future<void> teardown(CapabilityContext ctx) async {
+  Future<void> teardown(StepArgs args) async {
     // Close the DIRECT perception channels (idempotent) and reap the local
     // harness (once-only runner; even on the failure path). The follower app
     // is reaped by the `burn-follower` order's lease release (the bus

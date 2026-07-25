@@ -18,7 +18,8 @@ import 'dart:io';
 import 'package:butane_grid_assets/butane_grid_assets.dart';
 import 'package:grid_assets/grid_assets.dart' show BusLease;
 import 'package:grid_engine/grid_engine.dart';
-import 'package:grid_engine/testing.dart' show FakeRuntimeProvider, bead;
+import 'package:grid_engine/testing.dart'
+    show FakeRuntimeProvider, FakeTreeContext, stepArgs;
 import 'package:grid_federation/grid_federation.dart';
 import 'package:grid_runtime/grid_runtime.dart'
     show GroupTerminateResult, ProcessGroupController;
@@ -237,20 +238,16 @@ _lessor({
   return (station: s, processes: processes, runner: runner);
 }
 
-CapabilityContext _ctx({
+/// The burn node's (ambient tree, per-step args) pair — the context rip-out
+/// shape: the [SiblingView] rendezvous rides the tree as an ambient value; the
+/// per-step nodePath/cancel ride the args.
+({FakeTreeContext context, StepArgs args}) _ctx({
   required String nodePath,
   CancelToken? cancel,
   SiblingView siblings = const SiblingView(),
-}) => CapabilityContext(
-  params: const {},
-  bead: bead('tg-burn'),
-  workspaceDir: '/w/tg-burn',
-  branch: 'grid/tg-burn',
-  baseBranch: 'main',
-  services: const ServiceBundle(),
-  cancel: cancel ?? CancelToken(),
-  nodePath: nodePath,
-  siblings: siblings,
+}) => (
+  context: FakeTreeContext(values: {SiblingView: siblings}),
+  args: stepArgs(nodePath, cancel: cancel),
 );
 
 const String _followerPath = 'tg-burn/$kBurnFollowerStep';
@@ -265,14 +262,15 @@ const String _hostPath = 'tg-burn/$kBurnHostStep';
 Future<({List<AllocationReport> reports, LeaseAllocation<BusLease> alloc})>
 _driveFollower(
   BurnFollowerCapability follower,
-  CapabilityContext ctx,
+  ({FakeTreeContext context, StepArgs args}) c,
 ) async {
   final reports = <AllocationReport>[];
   final alloc = follower.createAllocation(
     AllocationContext(
-      capContext: ctx,
+      treeContext: c.context,
+      args: c.args,
       transport: FakeRuntimeProvider(),
-      address: AllocationAddress('tgdog-s', ctx.nodePath),
+      address: AllocationAddress('tgdog-s', c.args.nodePath),
       env: const {},
       sink: reports.add,
       kind: StepKind.daemon,
@@ -408,7 +406,7 @@ void main() {
         nodePath: _hostPath,
         siblings: SiblingView(results: {_followerPath: published}),
       );
-      final hOut = await host.run(hCtx);
+      final hOut = await host.run(hCtx.context, hCtx.args);
       expect(hOut, isA<Ok>());
       expect(
         drive.attachedTo,
@@ -417,7 +415,7 @@ void main() {
       );
 
       // The domain TestReport is collected (and passing).
-      final report = host.reportFor(hCtx);
+      final report = host.reportFor(hCtx.args);
       expect(report, isNotNull);
       expect(report!.passed, isTrue);
       expect(report.total, 2);
@@ -426,7 +424,7 @@ void main() {
       // TEARDOWN both orders: host closes the drive; the follower allocation's
       // dispose releases the lease → the lessor reaps the launched app via the M4
       // terminateGroup reaper.
-      await host.teardown(hCtx);
+      await host.teardown(hCtx.args);
       await f.alloc.dispose();
       expect(drive.closed, isTrue, reason: 'the drive channel is closed');
       expect(lessor.station.calls, contains('release'));
@@ -473,16 +471,16 @@ void main() {
         nodePath: _hostPath,
         siblings: SiblingView(results: {_followerPath: published}),
       );
-      final hOut = await host.run(hCtx);
+      final hOut = await host.run(hCtx.context, hCtx.args);
       expect(hOut, isA<Failed>(), reason: 'a failed scenario escalates');
-      final report = host.reportFor(hCtx);
+      final report = host.reportFor(hCtx.args);
       expect(report!.passed, isFalse);
       expect(report.failures, 1);
       expect(report.total, 2, reason: 'every step is recorded, not just the first');
 
       // The GUARANTEED teardown: even though the host escalated, tearing the
       // orders down reaps the follower daemon — no leaked process.
-      await host.teardown(hCtx);
+      await host.teardown(hCtx.args);
       await f.alloc.dispose();
       expect(
         lessor.runner.isRunning,
@@ -513,7 +511,8 @@ void main() {
       final drive = _passingDrive();
       final host = BurnHostCapability(drive: drive, scenario: _passingScenario());
       // No sibling result for the follower step → no endpoint.
-      final out = await host.run(_ctx(nodePath: _hostPath));
+      final c = _ctx(nodePath: _hostPath);
+      final out = await host.run(c.context, c.args);
       expect(out, isA<Failed>());
       expect(drive.attachedTo, isNull, reason: 'never attached without an endpoint');
     });
@@ -641,7 +640,7 @@ void main() {
         nodePath: _hostPath,
         siblings: SiblingView(results: {_followerPath: published}),
       );
-      final out = await host.run(hCtx);
+      final out = await host.run(hCtx.context, hCtx.args);
       expect(out, isA<Ok>());
 
       // Routing: follower steps hit the follower drive, local steps the local.
@@ -654,7 +653,7 @@ void main() {
       expect(localDrive.calls, contains('observe:extensions.butane.data.role'));
 
       // The report records the endpoint prefix in local step descriptions.
-      final report = host.reportFor(hCtx)!;
+      final report = host.reportFor(hCtx.args)!;
       expect(report.passed, isTrue);
       expect(report.total, 3);
       expect(
@@ -663,7 +662,7 @@ void main() {
       );
 
       // Teardown: both channels closed, the local harness reaped ONCE.
-      await host.teardown(hCtx);
+      await host.teardown(hCtx.args);
       expect(followerDrive.closed, isTrue);
       expect(localDrive.closed, isTrue);
       expect(localRunner.isRunning, isFalse,
@@ -690,9 +689,9 @@ void main() {
         nodePath: _hostPath,
         siblings: SiblingView(results: {_followerPath: published}),
       );
-      final out = await host.run(hCtx);
+      final out = await host.run(hCtx.context, hCtx.args);
       expect(out, isA<Failed>());
-      final report = host.reportFor(hCtx)!;
+      final report = host.reportFor(hCtx.args)!;
       expect(report.passed, isFalse);
       expect(report.failures, 1, reason: 'only the local step fails');
       expect(
@@ -734,12 +733,12 @@ void main() {
         nodePath: _hostPath,
         siblings: SiblingView(results: {_followerPath: published}),
       );
-      final out = await host.run(hCtx);
+      final out = await host.run(hCtx.context, hCtx.args);
       expect(out, isA<Failed>());
       expect((out as Failed).reason, contains('local harness launch'));
 
       // Teardown after the failure path is safe (nothing launched → no-op).
-      await host.teardown(hCtx);
+      await host.teardown(hCtx.args);
       expect(await localRunner.teardown(), GroupTerminateResult.alreadyGone);
     });
   });

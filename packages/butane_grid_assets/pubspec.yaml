@@ -18,6 +18,8 @@ environment:
 
 dependencies:
   args: ^2.5.0
+  # TreeContext — the effect-verb ambient reads (the context rip-out).
+  genesis_tree: ^0.1.3
   grid_assets: any
   # grid_cli: the CLI SDK (StationRunCommand/ServeCommand) the pack's
   # BurnRunCommand + bin/butane_station assemble on.

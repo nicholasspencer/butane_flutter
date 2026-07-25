@@ -2,16 +2,21 @@
 /// exports the Command, a runner assembles it — `bin/butane_station.dart`
 /// here, space_station at the studio).
 ///
-/// Directly parallel to the code asset's `CodeRunCommand`: supplies the
-/// asset trio to [StationRunCommand]. The burn's registry depends on its own
-/// flags (peers, scenario, launcher paths), so it builds per-invocation via
-/// [registryFor] rather than at construction.
+/// Directly parallel to the code asset's `CodeRunCommand`: the command body IS
+/// the asset's `main()`, composed over the station-runner library pieces
+/// (ADR-0008 Decision 2, amended 2026-07-02 — consumers compose, never
+/// subclass): `addStationFlags`/`StationArgs` → `validateArming` →
+/// `discoverWorkspaces` → `buildControllers` → `buildLiveWiring` →
+/// `composeStation` → `driveStation`. The burn's registry depends on its own
+/// flags (peers, scenario, launcher paths), so it is built per-invocation
+/// inside [run].
 library;
 
 import 'dart:io';
 
-import 'package:args/args.dart';
-import 'package:grid_cli/grid_cli.dart' show StationRunCommand;
+import 'package:args/args.dart' show ArgResults;
+import 'package:args/command_runner.dart';
+import 'package:grid_cli/grid_cli.dart';
 import 'package:grid_controller/grid_controller.dart' show Bead;
 import 'package:grid_engine/grid_engine.dart';
 import 'package:grid_federation/grid_federation.dart' show HttpStationClient;
@@ -28,14 +33,10 @@ Formula _burnFormula(Bead _) => kBurnFormula;
 
 /// The butane burn run command: lease a follower peer, launch the local
 /// central, drive the scripted scenario over two leonard_drives, report.
-class BurnRunCommand extends StationRunCommand {
-  /// Creates the command. The construction-time registry is a placeholder —
-  /// [registryFor] builds the real one from this invocation's flags.
-  BurnRunCommand()
-      : super(
-          resolver: const FormulaResolver(_burnFormula),
-          registry: _placeholder,
-        ) {
+class BurnRunCommand extends Command<int> {
+  /// Creates the command (the standard station flags + the burn's own).
+  BurnRunCommand() {
+    addStationFlags(argParser);
     argParser
       ..addMultiOption(
         'peer',
@@ -71,13 +72,6 @@ class BurnRunCommand extends StationRunCommand {
       );
   }
 
-  static final DefaultCapabilityRegistry _placeholder = buildBurnRegistry(
-    peers: const [],
-    launchSpec: const LaunchSpec(app: 'butane_harness', target: 'linux'),
-    drive: ProcessLeonardDrive(),
-    scenario: kSmokeScenario,
-  );
-
   @override
   final String name = 'burn';
 
@@ -88,7 +82,71 @@ class BurnRunCommand extends StationRunCommand {
       'leonard_drive, and collect a TestReport.';
 
   @override
-  CapabilityRegistry registryFor(ArgResults args) {
+  Future<int> run() async {
+    final results = argResults!;
+    final args = StationArgs.from(results);
+    final out = _out;
+    final err = _err;
+
+    // --- the burn's per-invocation registry (peers/scenario/launcher flags).
+    final registry = _registryFor(results);
+
+    // Held outside the try so a refusal AFTER the controllers exist still
+    // releases them (the Dolt pool would otherwise keep the process alive —
+    // review finding 2026-07-02).
+    StationSources? sources;
+    try {
+      // --- the station-runner pieces, in order (the inversion) ---
+      validateArming(args);
+      final ws = discoverWorkspaces(
+        workspacePath: args.workspacePath,
+        stateWorkspacePath: args.stateWorkspacePath,
+      );
+      sources = await buildControllers(
+        work: ws.work,
+        state: ws.state,
+        noSql: args.noSql,
+      );
+      final live =
+          await buildLiveWiring(args: args, sources: sources, onRefusal: out);
+
+      // No burn ServiceBundle: the burn asset carries no SourceControl/land
+      // opinion — the follower app's teardown is the lease release, not git.
+      final wiring = composeStation(
+        work: sources.work,
+        state: sources.state,
+        stationServices: live.stationServices,
+        substations: [
+          SubstationConfig(
+            substationId: args.substations.first,
+            ownedSubstations: args.substations,
+            driveList: args.targetBeads,
+          ),
+        ],
+        git: live.git,
+        workRoot: live.workRoot,
+        groups: live.groups,
+        freshnessBarrier: live.freshnessBarrier,
+        resolver: const FormulaResolver(_burnFormula),
+        registry: registry,
+      );
+
+      return await driveStation(
+        wiring: wiring,
+        sources: sources,
+        args: args,
+        out: out,
+      );
+    } on StationRefusal catch (refusal) {
+      await sources?.shutdown();
+      err(refusal.message);
+      return refusal.code;
+    }
+  }
+
+  /// Builds the burn registry from this invocation's flags (the old
+  /// `registryFor` hook, now a plain private step of [run]).
+  CapabilityRegistry _registryFor(ArgResults args) {
     final peers = <FollowerPeer>[
       for (final peer in args.multiOption('peer'))
         FollowerPeer(
@@ -138,4 +196,7 @@ class BurnRunCommand extends StationRunCommand {
       onLog: log,
     );
   }
+
+  void _out(String message) => stdout.writeln(message);
+  void _err(String message) => stderr.writeln(message);
 }

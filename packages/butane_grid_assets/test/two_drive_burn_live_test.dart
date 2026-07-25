@@ -22,7 +22,7 @@ import 'dart:io';
 
 import 'package:butane_grid_assets/butane_grid_assets.dart';
 import 'package:grid_engine/grid_engine.dart';
-import 'package:grid_engine/testing.dart' show bead;
+import 'package:grid_engine/testing.dart' show FakeTreeContext, stepArgs;
 import 'package:grid_runtime/grid_runtime.dart'
     show SystemProcessGroupController;
 import 'package:test/test.dart';
@@ -134,7 +134,7 @@ Future<void> _runLiveScenario(
     onLog: log.add,
   );
 
-  CapabilityContext? ctx;
+  ({FakeTreeContext context, StepArgs args})? ctx;
   try {
     // Launch the "leased" follower (or adopt the remote one) and hand-thread
     // its endpoint as the sibling payload (the bus rendezvous is proven
@@ -149,28 +149,27 @@ Future<void> _runLiveScenario(
           );
     expect(followerEndpoint.isPublished, isTrue);
 
-    ctx = CapabilityContext(
-      params: const {},
-      bead: bead('tg-burn-live'),
-      workspaceDir: harnessDir.path,
-      branch: 'grid/tg-burn-live',
-      baseBranch: 'main',
-      services: const ServiceBundle(),
-      cancel: CancelToken(),
-      nodePath: 'tg-burn-live/$kBurnHostStep',
-      siblings: SiblingView(
-        results: {
-          'tg-burn-live/$kBurnFollowerStep': {
-            'endpoint': followerEndpoint.vmServiceUri,
-            'station': followerEndpoint.station,
-            'lease': 'live-local',
-          },
+    // The rip-out shape: the SiblingView rendezvous is an AMBIENT value on the
+    // (fake) tree; the per-step nodePath/cancel ride the StepArgs.
+    ctx = (
+      context: FakeTreeContext(
+        values: {
+          SiblingView: SiblingView(
+            results: {
+              'tg-burn-live/$kBurnFollowerStep': {
+                'endpoint': followerEndpoint.vmServiceUri,
+                'station': followerEndpoint.station,
+                'lease': 'live-local',
+              },
+            },
+          ),
         },
       ),
+      args: stepArgs('tg-burn-live/$kBurnHostStep'),
     );
 
-    final out = await host.run(ctx);
-    final report = host.reportFor(ctx);
+    final out = await host.run(ctx.context, ctx.args);
+    final report = host.reportFor(ctx.args);
     final rendered = report?.steps
         .map(
           (s) => '${s.passed ? "PASS" : "FAIL"} ${s.description} '
@@ -183,13 +182,13 @@ Future<void> _runLiveScenario(
     expect(report.total, scenario.steps.length);
 
     // The host teardown reaps ITS local central (once-only).
-    await host.teardown(ctx);
+    await host.teardown(ctx.args);
     expect(localRunner.isRunning, isFalse,
         reason: 'the local central is the host teardown\'s reap');
   } finally {
     // Idempotent teardown-of-last-resort for both ends (a remote follower's
     // teardown belongs to whoever launched it).
-    if (ctx != null) await host.teardown(ctx);
+    if (ctx != null) await host.teardown(ctx.args);
     await followerRunner?.teardown();
   }
 }

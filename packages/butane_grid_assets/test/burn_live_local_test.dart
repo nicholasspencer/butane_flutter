@@ -37,7 +37,8 @@ import 'dart:io';
 import 'package:butane_grid_assets/butane_grid_assets.dart';
 import 'package:grid_assets/grid_assets.dart' show BusLease;
 import 'package:grid_engine/grid_engine.dart';
-import 'package:grid_engine/testing.dart' show FakeRuntimeProvider, bead;
+import 'package:grid_engine/testing.dart'
+    show FakeRuntimeProvider, FakeTreeContext, stepArgs;
 import 'package:grid_federation/grid_federation.dart';
 import 'package:grid_runtime/grid_runtime.dart'
     show ProcessGroupController, SystemProcessGroupController;
@@ -82,19 +83,14 @@ const DriveScenario _liveScenario = DriveScenario(
   ],
 );
 
-CapabilityContext _ctx({
+/// The burn node's (ambient tree, per-step args) pair — the context rip-out
+/// shape: the [SiblingView] rendezvous rides the tree as an ambient value.
+({FakeTreeContext context, StepArgs args}) _ctx({
   required String nodePath,
   SiblingView siblings = const SiblingView(),
-}) => CapabilityContext(
-  params: const {},
-  bead: bead('tg-burn'),
-  workspaceDir: '/w/tg-burn',
-  branch: 'grid/tg-burn',
-  baseBranch: 'main',
-  services: const ServiceBundle(),
-  cancel: CancelToken(),
-  nodePath: nodePath,
-  siblings: siblings,
+}) => (
+  context: FakeTreeContext(values: {SiblingView: siblings}),
+  args: stepArgs(nodePath),
 );
 
 /// Polls until [pid] is gone, or fails after [within].
@@ -186,9 +182,10 @@ void main() {
         final fCtx = _ctx(nodePath: _followerPath);
         alloc = follower.createAllocation(
           AllocationContext(
-            capContext: fCtx,
+            treeContext: fCtx.context,
+            args: fCtx.args,
             transport: FakeRuntimeProvider(),
-            address: AllocationAddress('tgdog-s', fCtx.nodePath),
+            address: AllocationAddress('tgdog-s', fCtx.args.nodePath),
             env: const {},
             sink: reports.add,
             kind: StepKind.daemon,
@@ -230,8 +227,8 @@ void main() {
           nodePath: _hostPath,
           siblings: SiblingView(results: {_followerPath: published}),
         );
-        final out = await host.run(hCtx);
-        final report = host.reportFor(hCtx);
+        final out = await host.run(hCtx.context, hCtx.args);
+        final report = host.reportFor(hCtx.args);
         expect(
           out,
           isA<Ok>(),
@@ -248,7 +245,7 @@ void main() {
 
         // TEARDOWN under test — host closes the drive channel; the follower
         // allocation's dispose RELEASES the lease over the REAL bus.
-        await host.teardown(hCtx);
+        await host.teardown(hCtx.args);
         await alloc.dispose();
         expect(server.leases.available, 1,
             reason: 'the released slot is free again on the lessor');
