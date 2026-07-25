@@ -109,6 +109,15 @@ Then `ssh yoga-win` from the Mac.
 - [x] Working copy `C:\Users\nicks\butane_flutter`, on `main`, clean,
       `core.autocrlf=false`
 
+**Deps**
+- [x] Router-side DHCP reservation for `6c:94:66:ae:49:26` (operator) — the
+      pinned `192.168.4.44` in `~/.ssh/config` is now stable
+- [x] `pubspec_overrides.yaml` on ADR-0003 tag_pattern solving; `flutter pub
+      get` resolves the full `grid_*` closure from release tags. See
+      [Dependency resolution](#dependency-resolution--pubspec_overridesyaml)
+- [x] `url.https://github.com/.insteadOf git@github.com:` — anonymous fetch of
+      the public org repos, no credentials on the box
+
 **Toolchain**
 - [x] Git (`C:\Program Files\Git\cmd\git.exe`)
 - [x] **Flutter 3.44.8 / Dart 3.12.2** (was 3.10.5 / Dart 3.0.5) — clears
@@ -123,11 +132,6 @@ Then `ssh yoga-win` from the Mac.
       (`flutter create --platforms=windows .`) — no `windows/` directory exists
       anywhere in this repo yet
 - [ ] Scaffold the `butane_windows` platform package
-- [ ] Resolve dependencies on the box — the workspace declares the private
-      `grid_*` packages, and `grid_assets` is **not** published to pub.dev, so
-      a machine-local `pubspec_overrides.yaml` or a git-tag pin will be needed
-      here exactly as on the Mac. Untested on this box so far.
-- [ ] Router-side DHCP reservation for `6c:94:66:ae:49:26`
 
 ## Gotchas — the things that fail *silently*
 
@@ -402,6 +406,101 @@ To pin an exact version alongside instead of moving `stable` — e.g. to match
 the Linux half — use `fvm install <version>` and `fvm global <version>`. Note
 that an interrupted `fvm install` leaves a partial directory under
 `versions\`; clear it with `fvm remove <version>` before retrying.
+
+## Dependency resolution — `pubspec_overrides.yaml`
+
+The box resolves the private `grid_*` packages via **ADR-0003 tag_pattern
+version solving**: a git dep carries `{url, tag_pattern, path}` *plus* a
+version constraint, and pub solves over the matching release tags. It is not a
+hard `ref:` pin — a bare ref normalizes to a different descriptor and will not
+unify with a tag_pattern dep.
+
+The file is **gitignored**, so it is reproduced in full below. Three
+non-obvious constraints shape it, each of which failed loudly first:
+
+**1. The workspace root needs `sdk: >=3.9`.** pub gates `tag_pattern` behind a
+minimum SDK constraint, checked against the pubspec the dep is *declared* in.
+`pubspec_overrides.yaml` sits at the workspace root, so `butane_workspace`'s
+own constraint is what counts — it was `^3.6.0` and hard-failed with
+`Using \`git: {tagPattern: }\` is only supported with a minimum SDK constraint
+of 3.9`. Raised to `^3.9.0` in `288de43`.
+
+**2. Override the whole closure, not just the unpublished package.** Only
+`grid_assets` is missing from pub.dev, so overriding just it is the obvious
+move. It fails:
+
+```
+Because every version of grid_assets from git depends on grid_runtime from git
+and butane_grid_assets depends on grid_runtime from hosted, grid_assets from
+git is forbidden.
+```
+
+pub will not unify a hosted dep with a git dep for the same package, and
+`grid_assets`' own pubspec pins its siblings as git tag_pattern deps. So every
+package reachable on both routes must come from git too.
+
+**3. Keep the `git@` URL even though the box has no key.** Descriptors unify
+only when identical, and the org's pubspecs all say `git@github.com:`.
+Rewriting to `https` here would create a second, non-unifying descriptor and
+reintroduce the conflict. The org repos are **public**, so redirect the
+transport instead — no credentials, descriptor untouched:
+
+```powershell
+git config --global url."https://github.com/".insteadOf "git@github.com:"
+```
+
+Verified working: all nine packages resolve from git at their tag SHAs
+(`grid_diagnostics_contract` resolves hosted with no conflict).
+
+<details>
+<summary><code>C:\Users\nicks\butane_flutter\pubspec_overrides.yaml</code></summary>
+
+```yaml
+dependency_overrides:
+  # ── the_grid ──
+  beads_dart:
+    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: beads_dart-v{{version}}, path: packages/beads_dart}
+    version: ^0.1.0
+  grid_cli:
+    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: grid_cli-v{{version}}, path: packages/grid_cli}
+    version: ">=0.1.0 <0.3.0"   # 0.1.0 and the breaking 0.2.0 both exist
+  grid_engine:
+    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: grid_engine-v{{version}}, path: packages/grid_engine}
+    version: ^0.1.0
+  grid_exploration:
+    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: grid_exploration-v{{version}}, path: packages/grid_exploration}
+    version: ^0.1.0
+  grid_runtime:
+    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: grid_runtime-v{{version}}, path: packages/grid_runtime}
+    version: ^0.1.0
+  grid_sdk:
+    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: grid_sdk-v{{version}}, path: packages/grid_sdk}
+    version: ^0.1.0
+
+  # ── power_station ──
+  grid_assets:
+    git: {url: git@github.com:memento-engineering/power_station.git, tag_pattern: grid_assets-v{{version}}, path: packages/grid_assets}
+    version: ^0.1.0
+  dart_grid_assets:
+    git: {url: git@github.com:memento-engineering/power_station.git, tag_pattern: dart_grid_assets-v{{version}}, path: packages/dart_grid_assets}
+    version: ^0.1.0
+  federated_grid_assets:
+    git: {url: git@github.com:memento-engineering/power_station.git, tag_pattern: federated_grid_assets-v{{version}}, path: packages/federated_grid_assets}
+    version: ^0.1.0
+```
+
+</details>
+
+> `flutter pub get` also emits several `references … as the default plugin, but
+> the package does not exist, or is not a plugin package` warnings for
+> `butane_core_bluetooth` / `butane_android` on iOS/macOS/Android. These are
+> **warnings, not failures** — resolution completes and
+> `.dart_tool/package_config.json` is written. They are expected on a Windows
+> host, which has no toolchain for those platforms.
+
+Retire all of this when the packages publish to pub.dev — see
+`butane_flutter-5dk`, which now carries these same three constraints for the
+Mac-side conversion.
 
 ## Build Workflow
 
