@@ -94,7 +94,8 @@ remote "cd '$REPO'; & '$FLUTTER' pub get 2>&1 | Select-Object -Last 20"
 step "flutter analyze (packages/butane_windows)"
 # Scoped deliberately: the workspace does not analyze clean as a whole while
 # butane_grid_assets still imports the removed grid_controller/grid_federation
-# (butane_flutter-7ol). Widen this once that lands.
+# (butane_flutter-t9y). Widen this to the workspace once t9y lands — until
+# then a wider scope fails for reasons that have nothing to do with Windows.
 remote "cd '$REPO/packages/butane_windows'; & '$FLUTTER' analyze 2>&1 | Select-Object -Last 20"
 
 step "flutter test (Dart — packages/butane_windows)"
