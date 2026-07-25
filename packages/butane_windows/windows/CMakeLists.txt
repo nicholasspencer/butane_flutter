@@ -18,6 +18,8 @@ set(PLUGIN_NAME "butane_windows_plugin")
 
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
+  "Api.gen.cpp"
+  "Api.gen.h"
   "butane_windows_plugin.cpp"
   "butane_windows_plugin.h"
   "butane_conversions.cpp"

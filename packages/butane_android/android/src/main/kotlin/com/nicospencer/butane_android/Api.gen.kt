@@ -126,6 +126,11 @@ enum class AttResult(val raw: Int) {
 }
 
 /**
+ * Generated class from Pigeon that represents data sent in messages.
+ * This class should not be extended by any user class outside of the generated file.
+ */
+sealed class Session 
+/**
  * A unique identifier for a peripheral coupled with the [adapterIdentifier] and
  * [clientIdentifier] that discovered it.
  *
@@ -138,10 +143,7 @@ enum class AttResult(val raw: Int) {
  * device. If omitted, the default adapter is used.
  *
  * Generated class from Pigeon that represents data sent in messages.
- * This class should not be extended by any user class outside of the generated file.
  */
-sealed class Session 
-/** Generated class from Pigeon that represents data sent in messages. */
 data class ClientSession (
   val peripheralIdentifier: String? = null,
   val clientIdentifier: String? = null,

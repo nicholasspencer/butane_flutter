@@ -1,42 +1,42 @@
-#include <flutter/method_call.h>
-#include <flutter/method_result_functions.h>
-#include <flutter/standard_method_codec.h>
 #include <gtest/gtest.h>
-#include <windows.h>
 
-#include <memory>
+#include <optional>
 #include <string>
-#include <variant>
+#include <type_traits>
 
 #include "butane_windows_plugin.h"
 
 namespace butane_windows {
 namespace test {
 
-namespace {
+static_assert(std::is_base_of_v<ButaneHostApi, ButaneWindowsPlugin>);
+static_assert(std::is_class_v<ButaneFlutterApi>);
 
-using flutter::EncodableMap;
-using flutter::EncodableValue;
-using flutter::MethodCall;
-using flutter::MethodResultFunctions;
-
-}  // namespace
-
-TEST(ButaneWindowsPlugin, GetPlatformVersion) {
+TEST(ButaneWindowsPlugin, ValueMethodReturnsUnimplementedError) {
   ButaneWindowsPlugin plugin;
-  // Save the reply value from the success callback.
-  std::string result_string;
-  plugin.HandleMethodCall(
-      MethodCall("getPlatformVersion", std::make_unique<EncodableValue>()),
-      std::make_unique<MethodResultFunctions<>>(
-          [&result_string](const EncodableValue* result) {
-            result_string = std::get<std::string>(*result);
-          },
-          nullptr, nullptr));
+  bool replied = false;
+  plugin.State(nullptr, [&replied](ErrorOr<ClientState> reply) {
+    replied = true;
+    ASSERT_TRUE(reply.has_error());
+    EXPECT_EQ(reply.error().code(), "unimplemented");
+    EXPECT_EQ(reply.error().message(),
+              "state is not implemented on Windows.");
+  });
+  EXPECT_TRUE(replied);
+}
 
-  // Since the exact string varies by host, just ensure that it's a string
-  // with the expected format.
-  EXPECT_TRUE(result_string.rfind("Windows ", 0) == 0);
+TEST(ButaneWindowsPlugin, VoidMethodReturnsUnimplementedError) {
+  ButaneWindowsPlugin plugin;
+  bool replied = false;
+  plugin.Scan(nullptr, nullptr,
+              [&replied](std::optional<FlutterError> reply) {
+                replied = true;
+                ASSERT_TRUE(reply.has_value());
+                EXPECT_EQ(reply->code(), "unimplemented");
+                EXPECT_EQ(reply->message(),
+                          "scan is not implemented on Windows.");
+              });
+  EXPECT_TRUE(replied);
 }
 
 }  // namespace test

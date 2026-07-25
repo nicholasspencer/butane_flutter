@@ -55,7 +55,7 @@ Cross-device burns use `butane_grid_assets` to lease and launch a `butane_harnes
 
 ## Code Generation
 
-Pigeon generates the method channel layer from `packages/butane_platform_interface/pigeons/api.dart`. Running `./tool/gen_api.sh` updates the generated Dart, Swift, and Kotlin channels. Always regenerate them after changing the Pigeon source.
+Pigeon generates the method channel layer from `packages/butane_platform_interface/pigeons/api.dart`. Running `./tool/gen_api.sh` updates the generated Dart, Swift, Kotlin, and C++ channels. Always regenerate them after changing the Pigeon source.
 
 ## Lint Rules
 

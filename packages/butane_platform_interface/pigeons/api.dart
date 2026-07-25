@@ -1,5 +1,12 @@
 import 'package:pigeon/pigeon.dart';
 
+@ConfigurePigeon(
+  PigeonOptions(
+    cppHeaderOut: '../butane_windows/windows/Api.gen.h',
+    cppSourceOut: '../butane_windows/windows/Api.gen.cpp',
+    cppOptions: CppOptions(namespace: 'butane_windows'),
+  ),
+)
 enum ClientState {
   unknown,
   resetting,
@@ -17,6 +24,8 @@ enum ConnectionState {
   disconnecting,
 }
 
+sealed class Session {}
+
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
 /// [clientIdentifier] that discovered it.
 ///
@@ -27,8 +36,6 @@ enum ConnectionState {
 /// The [adapterIdentifier] is the identifier of the adapter that discovered the
 /// peripheral. This is useful when multiple adapters are available on the same
 /// device. If omitted, the default adapter is used.
-sealed class Session {}
-
 class ClientSession extends Session {
   ClientSession({
     this.peripheralIdentifier,

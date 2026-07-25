@@ -159,6 +159,12 @@ enum AttResult: Int {
   case unlikelyError = 6
 }
 
+/// Generated class from Pigeon that represents data sent in messages.
+/// This protocol should not be extended by any user class outside of the generated file.
+protocol Session {
+
+}
+
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
 /// [clientIdentifier] that discovered it.
 ///
@@ -170,12 +176,6 @@ enum AttResult: Int {
 /// peripheral. This is useful when multiple adapters are available on the same
 /// device. If omitted, the default adapter is used.
 ///
-/// Generated class from Pigeon that represents data sent in messages.
-/// This protocol should not be extended by any user class outside of the generated file.
-protocol Session {
-
-}
-
 /// Generated class from Pigeon that represents data sent in messages.
 struct ClientSession: Session {
   var peripheralIdentifier: String? = nil
