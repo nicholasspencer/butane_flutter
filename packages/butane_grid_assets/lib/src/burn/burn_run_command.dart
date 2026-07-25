@@ -121,7 +121,6 @@ class BurnRunCommand extends StationRunCommand {
           : ButaneFollowerRunner(
               launcher: ButaneFollowerLauncher(
                 harnessDirectory: harnessDir!,
-                wsPort: 8972,
                 onLog: log,
               ),
               processes: const SystemProcessGroupController(),

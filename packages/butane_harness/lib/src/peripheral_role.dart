@@ -3,30 +3,23 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:butane/butane.dart';
-import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
+import 'package:butane_platform_interface/butane_platform_interface.dart'
+    as api;
 
 import 'command_registry.dart';
-import 'harness_connection.dart';
 import 'harness_log.dart';
 
 /// Implements the BLE Peripheral role for the harness app.
 ///
 /// Exposes its command vocabulary (add services, start/stop advertising,
 /// read/write auto-response, characteristic value updates) as [commands] on
-/// the transport-agnostic registry — the WebSocket control plane and the
-/// leonard extension are two frontends over the same table. [server] remains
-/// the unsolicited-event channel (read/write request events, errors).
+/// the registry used by the Leonard extension.
 class PeripheralRole {
-  PeripheralRole({
-    required HarnessConnection server,
-    required HarnessLog log,
-  })  : _server = server,
-        _log = log {
+  PeripheralRole({required HarnessLog log}) : _log = log {
     _manager = PeripheralManager();
     _setupRequestHandlers();
   }
 
-  final HarnessConnection _server;
   final HarnessLog _log;
   late final PeripheralManager _manager;
 
@@ -76,7 +69,7 @@ class PeripheralRole {
   /// Handles an incoming read request from a central.
   void _handleReadRequest(AttRequest request) {
     // Normalize to lowercase — CoreBluetooth returns uppercase UUIDs
-    // but coordinator sends lowercase.
+    // while command parameters use lowercase.
     final key =
         '${request.serviceUuid.toString().toLowerCase()}:${request.characteristicUuid.toString().toLowerCase()}';
     final value = _readResponses[key];
@@ -90,33 +83,12 @@ class PeripheralRole {
       _log.add(
         'Read request for $key → success (${value.length} bytes)',
       );
-      _server.sendEvent(
-        event: 'read_request',
-        data: {
-          'centralIdentifier': request.centralIdentifier,
-          'serviceUuid': request.serviceUuid.toString(),
-          'characteristicUuid': request.characteristicUuid.toString(),
-          'offset': request.offset,
-          'result': 'success',
-          'value': base64Encode(value),
-        },
-      );
     } else {
       _manager.respondToRequest(
         requestId: request.requestId,
         result: AttResult.attributeNotFound,
       );
       _log.add('Read request for $key → attributeNotFound');
-      _server.sendEvent(
-        event: 'read_request',
-        data: {
-          'centralIdentifier': request.centralIdentifier,
-          'serviceUuid': request.serviceUuid.toString(),
-          'characteristicUuid': request.characteristicUuid.toString(),
-          'offset': request.offset,
-          'result': 'attributeNotFound',
-        },
-      );
     }
   }
 
@@ -139,35 +111,12 @@ class PeripheralRole {
           'Write request for $key → accepted'
           '${request.value != null ? ' (${request.value!.length} bytes)' : ''}',
         );
-        _server.sendEvent(
-          event: 'write_request',
-          data: {
-            'centralIdentifier': request.centralIdentifier,
-            'serviceUuid': request.serviceUuid.toString(),
-            'characteristicUuid': request.characteristicUuid.toString(),
-            'offset': request.offset,
-            'accepted': true,
-            'value': request.value != null
-                ? base64Encode(request.value!)
-                : null,
-          },
-        );
       } else {
         _manager.respondToRequest(
           requestId: request.requestId,
           result: AttResult.writeNotPermitted,
         );
         _log.add('Write request for $key → rejected (writeNotPermitted)');
-        _server.sendEvent(
-          event: 'write_request',
-          data: {
-            'centralIdentifier': request.centralIdentifier,
-            'serviceUuid': request.serviceUuid.toString(),
-            'characteristicUuid': request.characteristicUuid.toString(),
-            'offset': request.offset,
-            'accepted': false,
-          },
-        );
       }
     }
   }
@@ -246,8 +195,8 @@ class PeripheralRole {
   Future<Map<String, dynamic>> _handleCheckState(
     Map<String, dynamic> params,
   ) async {
-    final platformState = await api.ButanePlatformInterface.instance
-        .peripheralManagerState(
+    final platformState =
+        await api.ButanePlatformInterface.instance.peripheralManagerState(
       const api.PeripheralManagerSession(),
     );
     final state = PeerManagerState.fromApi(platformState);
@@ -288,17 +237,17 @@ class PeripheralRole {
   ) async {
     final uuid = _requireParam<String>(params, 'uuid');
     final isPrimary = params['isPrimary'] as bool? ?? true;
-    final characteristicsList =
-        (params['characteristics'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
-            <Map<String, dynamic>>[];
+    final characteristicsList = (params['characteristics'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
+        <Map<String, dynamic>>[];
 
     final characteristics = characteristicsList.map((charMap) {
       final charUuid = charMap['uuid'] as String;
       final propsMap = charMap['properties'] as Map<String, dynamic>?;
       final permsMap = charMap['permissions'] as Map<String, dynamic>?;
       final valueStr = charMap['value'] as String?;
-      final descriptorsList =
-          (charMap['descriptors'] as List<dynamic>?)?.cast<Map<String, dynamic>>();
+      final descriptorsList = (charMap['descriptors'] as List<dynamic>?)
+          ?.cast<Map<String, dynamic>>();
 
       CharacteristicProperties? properties;
       if (propsMap != null) {
@@ -312,8 +261,7 @@ class PeripheralRole {
           indicate: propsMap['indicate'] as bool? ?? false,
           authenticatedSignedWrites:
               propsMap['authenticatedSignedWrites'] as bool? ?? false,
-          extendedProperties:
-              propsMap['extendedProperties'] as bool? ?? false,
+          extendedProperties: propsMap['extendedProperties'] as bool? ?? false,
           notifyEncryptionRequired:
               propsMap['notifyEncryptionRequired'] as bool? ?? false,
           indicateEncryptionRequired:
@@ -368,7 +316,8 @@ class PeripheralRole {
 
     await _manager.addService(service);
     _addedServices.add(uuid);
-    _log.add('Added service: $uuid (${characteristics.length} characteristics)');
+    _log.add(
+        'Added service: $uuid (${characteristics.length} characteristics)');
 
     return {'added': true, 'serviceUuid': uuid};
   }
@@ -430,7 +379,8 @@ class PeripheralRole {
         _requireParam<String>(params, 'characteristicUuid');
     final valueStr = _requireParam<String>(params, 'value');
 
-    final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
+    final key =
+        '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
     final value = Uint8List.fromList(base64Decode(valueStr));
     _readResponses[key] = value;
 
@@ -459,7 +409,8 @@ class PeripheralRole {
     final characteristicUuid =
         _requireParam<String>(params, 'characteristicUuid');
 
-    final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
+    final key =
+        '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
     final value = _writtenValues[key];
 
     return {

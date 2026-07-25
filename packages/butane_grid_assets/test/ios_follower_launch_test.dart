@@ -27,7 +27,8 @@ void main() {
     () async {
       final udid = Platform.environment['BURN_IOS_DEVICE'];
       if (udid == null || udid.isEmpty) {
-        markTestSkipped('set BURN_IOS_DEVICE=<udid> to run the iOS launch test');
+        markTestSkipped(
+            'set BURN_IOS_DEVICE=<udid> to run the iOS launch test');
         return;
       }
       final harnessDir = Directory('../butane_harness').absolute;
@@ -64,7 +65,8 @@ void main() {
         expect(endpoint.isPublished, isTrue,
             reason: 'launcher must publish a reachable endpoint');
         expect(endpoint.vmServiceUri, startsWith('ws://127.0.0.1:'),
-            reason: 'the published endpoint is the Dart-reachable loopback relay');
+            reason:
+                'the published endpoint is the Dart-reachable loopback relay');
 
         // --- drive: the REAL leonard_drive over the relayed endpoint ---
         final drive = ProcessLeonardDrive();

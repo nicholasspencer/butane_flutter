@@ -52,20 +52,20 @@ class LaunchSpec {
 
   /// JSON form (the opaque bus dispatch payload).
   Map<String, dynamic> toJson() => {
-    'app': app,
-    'target': target,
-    'role': role,
-    if (scenario.isNotEmpty) 'scenario': scenario,
-  };
+        'app': app,
+        'target': target,
+        'role': role,
+        if (scenario.isNotEmpty) 'scenario': scenario,
+      };
 
   /// Parses [j] (a missing role defaults to `peripheral` — the burn's
   /// follower convention).
   static LaunchSpec fromJson(Map<String, dynamic> j) => LaunchSpec(
-    app: j['app'] as String,
-    target: j['target'] as String,
-    role: (j['role'] as String?) ?? 'peripheral',
-    scenario: (j['scenario'] as String?) ?? '',
-  );
+        app: j['app'] as String,
+        target: j['target'] as String,
+        role: (j['role'] as String?) ?? 'peripheral',
+        scenario: (j['scenario'] as String?) ?? '',
+      );
 }
 
 /// The follower's PUBLISHED endpoint (ADR-0011 D9) — the rendezvous handoff the
@@ -97,17 +97,17 @@ class FollowerEndpoint {
 
   /// JSON form (the opaque bus dispatch result).
   Map<String, dynamic> toJson() => {
-    'vmServiceUri': vmServiceUri,
-    'station': station,
-    if (leaseId.isNotEmpty) 'leaseId': leaseId,
-  };
+        'vmServiceUri': vmServiceUri,
+        'station': station,
+        if (leaseId.isNotEmpty) 'leaseId': leaseId,
+      };
 
   /// Parses [j] (a missing/empty URI yields an unpublished endpoint).
   static FollowerEndpoint fromJson(Map<String, dynamic> j) => FollowerEndpoint(
-    vmServiceUri: (j['vmServiceUri'] as String?) ?? '',
-    station: (j['station'] as String?) ?? '',
-    leaseId: (j['leaseId'] as String?) ?? '',
-  );
+        vmServiceUri: (j['vmServiceUri'] as String?) ?? '',
+        station: (j['station'] as String?) ?? '',
+        leaseId: (j['leaseId'] as String?) ?? '',
+      );
 }
 
 /// A launched follower app — the running daemon's OS handle (pgid/pid, for the
@@ -176,10 +176,10 @@ class ButaneFollowerRunner {
     required ProcessGroupController processes,
     Duration reapGrace = const Duration(seconds: 2),
     void Function(String)? onLog,
-  }) : _launcher = launcher,
-       _processes = processes,
-       _reapGrace = reapGrace,
-       _onLog = onLog ?? _noLog;
+  })  : _launcher = launcher,
+        _processes = processes,
+        _reapGrace = reapGrace,
+        _onLog = onLog ?? _noLog;
 
   final FollowerLauncher _launcher;
   final ProcessGroupController _processes;
@@ -216,7 +216,8 @@ class ButaneFollowerRunner {
   Future<GroupTerminateResult> teardown() async {
     final daemon = _daemon;
     if (daemon == null) return GroupTerminateResult.alreadyGone;
-    _daemon = null; // once-only: a release racing a TTL reap cannot double-signal
+    _daemon =
+        null; // once-only: a release racing a TTL reap cannot double-signal
     final result = await terminateGroup(
       controller: _processes,
       pgid: daemon.pgid,

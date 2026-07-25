@@ -101,7 +101,6 @@ Future<void> _runLiveScenario(
       : ButaneFollowerRunner(
           launcher: ButaneFollowerLauncher(
             harnessDirectory: harnessDir.path,
-            wsPort: 8971,
             onLog: log.add,
           ),
           processes: const SystemProcessGroupController(),
@@ -112,7 +111,6 @@ Future<void> _runLiveScenario(
   final localRunner = ButaneFollowerRunner(
     launcher: ButaneFollowerLauncher(
       harnessDirectory: harnessDir.path,
-      wsPort: 8972,
       // A local follower launch above already built; the remote arm builds.
       rebuild: followerRunner == null,
       onLog: log.add,

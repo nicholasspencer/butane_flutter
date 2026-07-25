@@ -151,8 +151,8 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     CapabilityFacts? requires,
     this.lessee = '',
     void Function(String)? onLog,
-  }) : requires = requires ?? kDefaultFollowerRequires,
-       _onLog = onLog ?? _noLog;
+  })  : requires = requires ?? kDefaultFollowerRequires,
+        _onLog = onLog ?? _noLog;
 
   /// The candidate follower peers (matched by containment at mount).
   final List<FollowerPeer> peers;
@@ -437,23 +437,24 @@ DefaultCapabilityRegistry buildBurnRegistry({
   LeonardDrive? localDrive,
   void Function(String)? onLog,
   DateTime Function()? clock,
-}) => DefaultCapabilityRegistry(
-  capabilities: {
-    kBurnFollowerStep: BurnFollowerCapability(
-      peers: peers,
-      launchSpec: launchSpec,
-      requires: requires,
-      onLog: onLog,
-    ),
-    kBurnHostStep: BurnHostCapability(
-      drive: drive,
-      scenario: scenario,
-      localRunner: localRunner,
-      localSpec: localSpec,
-      localDrive: localDrive,
-      onLog: onLog,
-    ),
-  },
-  formulas: const {'burn': kBurnFormula},
-  clock: clock,
-);
+}) =>
+    DefaultCapabilityRegistry(
+      capabilities: {
+        kBurnFollowerStep: BurnFollowerCapability(
+          peers: peers,
+          launchSpec: launchSpec,
+          requires: requires,
+          onLog: onLog,
+        ),
+        kBurnHostStep: BurnHostCapability(
+          drive: drive,
+          scenario: scenario,
+          localRunner: localRunner,
+          localSpec: localSpec,
+          localDrive: localDrive,
+          onLog: onLog,
+        ),
+      },
+      formulas: const {'burn': kBurnFormula},
+      clock: clock,
+    );

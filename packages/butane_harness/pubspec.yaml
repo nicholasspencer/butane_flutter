@@ -34,8 +34,6 @@ dependencies:
   # this harness. Path-linked via the root pubspec_overrides.yaml until the
   # extensionsReady barrier ships in a hosted release.
   leonard_flutter: ^0.1.7
-  nsd: ^4.1.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

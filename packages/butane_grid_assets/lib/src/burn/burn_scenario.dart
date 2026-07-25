@@ -54,9 +54,9 @@ class DriveStep {
     this.expectContains = '',
     this.on = DriveEndpoint.follower,
     this.caseInsensitive = false,
-  }) : action = DriveAction.observe,
-       tool = '',
-       args = const {};
+  })  : action = DriveAction.observe,
+        tool = '',
+        args = const {};
 
   /// An `invoke <tool>` step (with [args]) asserting the result contains
   /// [expectContains], driven [on] an endpoint (default: the follower). See
@@ -67,8 +67,8 @@ class DriveStep {
     this.expectContains = '',
     this.on = DriveEndpoint.follower,
     this.caseInsensitive = false,
-  }) : action = DriveAction.invoke,
-       path = '';
+  })  : action = DriveAction.invoke,
+        path = '';
 
   /// Whether this step observes a path or invokes a tool.
   final DriveAction action;

@@ -9,8 +9,7 @@ library;
 
 import 'burn_scenario.dart';
 
-/// Nordic UART Service (the bench profile carried over from the
-/// butane_coordinator NUS suite).
+/// Nordic UART Service used by the bench profile.
 const String kNusServiceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 
 /// NUS RX (central → peripheral write) characteristic.

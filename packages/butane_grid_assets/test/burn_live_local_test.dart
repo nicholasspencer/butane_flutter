@@ -77,7 +77,8 @@ const DriveScenario _liveScenario = DriveScenario(
   name: 'live-local-smoke',
   steps: [
     DriveStep.observe('extensions.grid.data', expectContains: '"readyCount":2'),
-    DriveStep.observe('extensions.grid.data', expectContains: '"readPath":"cli"'),
+    DriveStep.observe('extensions.grid.data',
+        expectContains: '"readPath":"cli"'),
     DriveStep.invoke('grid.ready', expectContains: '"tg-2"'),
   ],
 );
@@ -85,17 +86,18 @@ const DriveScenario _liveScenario = DriveScenario(
 CapabilityContext _ctx({
   required String nodePath,
   SiblingView siblings = const SiblingView(),
-}) => CapabilityContext(
-  params: const {},
-  bead: bead('tg-burn'),
-  workspaceDir: '/w/tg-burn',
-  branch: 'grid/tg-burn',
-  baseBranch: 'main',
-  services: const ServiceBundle(),
-  cancel: CancelToken(),
-  nodePath: nodePath,
-  siblings: siblings,
-);
+}) =>
+    CapabilityContext(
+      params: const {},
+      bead: bead('tg-burn'),
+      workspaceDir: '/w/tg-burn',
+      branch: 'grid/tg-burn',
+      baseBranch: 'main',
+      services: const ServiceBundle(),
+      cancel: CancelToken(),
+      nodePath: nodePath,
+      siblings: siblings,
+    );
 
 /// Polls until [pid] is gone, or fails after [within].
 Future<void> _expectDead(
@@ -131,8 +133,7 @@ void main() {
 
       const processes = SystemProcessGroupController();
       final launcher = LocalDartFollowerLauncher(
-        daemonEntrypoint:
-            '${Directory.current.path}/tool/follower_daemon.dart',
+        daemonEntrypoint: '${Directory.current.path}/tool/follower_daemon.dart',
         station: _station,
         onLog: log,
       );

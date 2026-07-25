@@ -1,22 +1,17 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'config.dart';
-import 'harness_connection.dart';
 import 'harness_log.dart';
 
 class HarnessApp extends StatelessWidget {
   const HarnessApp({
     super.key,
     required this.config,
-    required this.connection,
     required this.log,
     this.onDispose,
   });
 
   final HarnessConfig config;
-  final HarnessConnection connection;
   final HarnessLog log;
   final VoidCallback? onDispose;
 
@@ -33,7 +28,6 @@ class HarnessApp extends StatelessWidget {
       ),
       home: _HarnessHome(
         config: config,
-        connection: connection,
         log: log,
         onDispose: onDispose,
       ),
@@ -44,13 +38,11 @@ class HarnessApp extends StatelessWidget {
 class _HarnessHome extends StatefulWidget {
   const _HarnessHome({
     required this.config,
-    required this.connection,
     required this.log,
     this.onDispose,
   });
 
   final HarnessConfig config;
-  final HarnessConnection connection;
   final HarnessLog log;
   final VoidCallback? onDispose;
 
@@ -59,23 +51,16 @@ class _HarnessHome extends StatefulWidget {
 }
 
 class _HarnessHomeState extends State<_HarnessHome> {
-  String _wsStatus = 'Starting...';
   final List<String> _logEntries = [];
   final _scrollController = ScrollController();
 
-  late final StreamSubscription<String> _wsStatusSub;
-  late final StreamSubscription<String> _logSub;
+  late final Future<void> Function() _cancelLog;
 
   @override
   void initState() {
     super.initState();
 
-    _wsStatusSub = widget.connection.statusStream.listen((status) {
-      setState(() => _wsStatus = status);
-      widget.log.add('WS: $status');
-    });
-
-    _logSub = widget.log.entries.listen((entry) {
+    _cancelLog = widget.log.entries.listen((entry) {
       setState(() {
         _logEntries.add(entry);
       });
@@ -88,25 +73,12 @@ class _HarnessHomeState extends State<_HarnessHome> {
           );
         }
       });
-    });
-
-    _startConnection();
-  }
-
-  Future<void> _startConnection() async {
-    try {
-      await widget.connection.start();
-    } catch (e) {
-      widget.log.add('Connection start failed: $e');
-      setState(() => _wsStatus = 'Failed: $e');
-    }
+    }).cancel;
   }
 
   @override
   void dispose() {
-    _wsStatusSub.cancel();
-    _logSub.cancel();
-    widget.connection.stop();
+    _cancelLog();
     widget.onDispose?.call();
     _scrollController.dispose();
     super.dispose();
@@ -114,53 +86,23 @@ class _HarnessHomeState extends State<_HarnessHome> {
 
   @override
   Widget build(BuildContext context) {
-    final modeLabel = widget.config.useRelay ? 'relay' : ':${widget.config.wsPort}';
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          '${widget.config.role.displayName} · $modeLabel',
-        ),
+        title: Text(widget.config.role.displayName),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Row(
-              children: [
-                Icon(
-                  widget.connection.isConnected ? Icons.link : Icons.link_off,
-                  size: 16,
-                  color: widget.connection.isConnected
-                      ? Colors.greenAccent
-                      : Colors.grey,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _wsStatus,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
+      body: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.all(8),
+        itemCount: _logEntries.length,
+        itemBuilder: (context, index) {
+          return Text(
+            _logEntries[index],
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 12,
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(8),
-              itemCount: _logEntries.length,
-              itemBuilder: (context, index) {
-                return Text(
-                  _logEntries[index],
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

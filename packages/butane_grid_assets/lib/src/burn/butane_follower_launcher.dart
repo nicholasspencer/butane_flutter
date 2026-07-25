@@ -3,8 +3,7 @@
 ///
 /// `flutter build <target> --debug` in the harness directory, then a DIRECT
 /// launch of the built binary (never `flutter run` — no tool attach on a
-/// follower box) with the harness role/port as runtime env (`ROLE`,
-/// `WS_PORT` — `HarnessConfig.fromEnvironment`'s direct-binary path).
+/// follower box) with the harness role as the `ROLE` runtime environment.
 /// **Debug builds are load-bearing**: release builds install no
 /// `LeonardBinding` and expose no VM service, so there is nothing to drive —
 /// unlike the old gc deploy.sh, a burn follower must never build `--release`.
@@ -32,15 +31,12 @@ void _noLog(String _) {}
 class ButaneFollowerLauncher implements FollowerLauncher {
   /// Creates a launcher over the harness app at [harnessDirectory] (the
   /// `packages/butane_harness` checkout on this box), publishing under
-  /// [station]. [wsPort] is handed to the harness's WebSocket control plane
-  /// (the leonard channel doesn't use it, but the harness requires one; two
-  /// harnesses on one box need distinct ports). [rebuild] runs
-  /// `flutter build` before every launch — the follower's provision step;
-  /// pass `false` to reuse an existing debug build (iteration/tests).
+  /// [station]. [rebuild] runs `flutter build` before every launch — the
+  /// follower's provision step; pass `false` to reuse an existing debug
+  /// build (iteration/tests).
   ButaneFollowerLauncher({
     required this.harnessDirectory,
     this.station = 'butane-follower',
-    this.wsPort = 8899,
     this.rebuild = true,
     this.flutterExecutable = 'flutter',
     this.buildTimeout = const Duration(minutes: 10),
@@ -56,9 +52,6 @@ class ButaneFollowerLauncher implements FollowerLauncher {
 
   /// The station id stamped on the published [FollowerEndpoint].
   final String station;
-
-  /// The WS control-plane port passed to the harness as runtime env.
-  final int wsPort;
 
   /// Whether to `flutter build` before launching.
   final bool rebuild;
@@ -90,12 +83,12 @@ class ButaneFollowerLauncher implements FollowerLauncher {
     final role = spec.role.isEmpty ? 'peripheral' : spec.role;
     _onLog(
       'butane launcher: launching ${executable.path} '
-      '(ROLE=$role WS_PORT=$wsPort)',
+      '(ROLE=$role)',
     );
     final process = await Process.start(
       executable.path,
       const <String>[],
-      environment: <String, String>{'ROLE': role, 'WS_PORT': '$wsPort'},
+      environment: <String, String>{'ROLE': role},
       // detachedWithStdio: setsid()s the child into a NEW session + process
       // group (reapable pgid) while keeping stdio pipes for the sentinel
       // scrape — the LocalDartFollowerLauncher posture, verbatim.
