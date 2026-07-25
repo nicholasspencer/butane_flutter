@@ -35,3 +35,5 @@ flutter:
         default_package: butane_core_bluetooth
       linux:
         default_package: butane_bluez
+      windows:
+        default_package: butane_windows
