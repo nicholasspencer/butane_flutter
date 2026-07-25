@@ -5,9 +5,12 @@ dual-booted Lenovo from the Mac Studio. Sibling to
 [`linux-dev-environment.md`](linux-dev-environment.md) — same topology, same
 machine, different OS.
 
-> **Read this first if you live in POSIX.** Windows OpenSSH has three traps
-> that fail *silently*. They are called out in [Gotchas](#gotchas-the-things-that-fail-silently)
-> below. Skim that section before debugging anything.
+> **Read this first if you live in POSIX.** Windows OpenSSH has a handful of
+> traps that fail *silently* — wrong key file, unstripped quotes, firewall
+> rules that are present but inert. All seven are in
+> [Gotchas](#gotchas-the-things-that-fail-silently) below. Skim that section
+> before debugging anything; the box is fully set up, so most of what you hit
+> from here will be one of them.
 
 ## Architecture
 
@@ -88,38 +91,43 @@ Then `ssh yoga-win` from the Mac.
 ## Setup Checklist
 
 ### Completed (2026-07-25)
+
+**Access**
 - [x] OpenSSH Server capability installed; `sshd` **Running / Automatic**
 - [x] Firewall rule `OpenSSH-Server-In-TCP` — enabled, profile `Any`
-- [x] Network profile set to `Private`
+- [x] Network profile `Private`; power/sleep timeouts handled
 - [x] SSH public-key auth from the Mac (key in `administrators_authorized_keys`)
 - [x] `Host yoga-win` entry in the Mac's `~/.ssh/config`
-- [x] Git installed (`C:\Program Files\Git\cmd\git.exe`)
-- [x] Visual Studio Community 2022 **17.2.1** with the Desktop C++ workload —
-      `flutter doctor` reports `[√] Visual Studio - develop for Windows`
-- [x] Windows 10 SDK `10.0.19041.0`
-- [x] PowerShell 7 (`pwsh`) present
+- [x] `DefaultShell` set to PowerShell 7 (`pwsh` 7.4.17)
 
-- [x] Bare repo `C:\Users\nicks\butane_flutter.git` (`core.autocrlf=false`)
-- [x] `windows` remote on the Mac, with the `uploadpack`/`receivepack` config
+**Git**
+- [x] Bare repo `C:\Users\nicks\butane_flutter.git`, `HEAD` repointed to `main`
+- [x] `windows` remote on the Mac with the `uploadpack`/`receivepack` config
       from [gotcha 6](#6-gits-helper-binaries-are-not-on-the-non-interactive-path)
+- [x] `git push windows main` verified end to end — box tip matched the Mac,
+      `git fsck` clean
+- [x] Working copy `C:\Users\nicks\butane_flutter`, on `main`, clean,
+      `core.autocrlf=false`
 
-- [x] `git push windows main` verified end to end — box tip matches the Mac,
-      `git fsck` clean, bare repo `HEAD` repointed to `main`
-- [x] **Flutter upgraded to 3.44.8 / Dart 3.12.2** (was 3.10.5 / Dart 3.0.5).
-      Clears butane's `sdk: ^3.11.0` and `flutter: ">=3.27.0"` floors. See
+**Toolchain**
+- [x] Git (`C:\Program Files\Git\cmd\git.exe`)
+- [x] **Flutter 3.44.8 / Dart 3.12.2** (was 3.10.5 / Dart 3.0.5) — clears
+      butane's `sdk: ^3.11.0` and `flutter: ">=3.27.0"` floors. See
       [Upgrading Flutter](#upgrading-flutter).
+- [x] Visual Studio Community 2022 **17.2.1**, Desktop C++ workload, Windows
+      10 SDK `10.0.19041.0` — `flutter doctor` on 3.44.8 reports
+      `[√] Visual Studio - develop Windows apps`; windows-x64 artifacts present
 
 ### Remaining
-- [ ] Set `DefaultShell` to `pwsh` (see [Gotchas](#2-the-default-shell-is-cmdexe)).
-      Would also make gotcha 6's per-remote config unnecessary.
-- [ ] Working copy cloned from the bare repo on the box
-- [ ] `flutter doctor` re-run on 3.44.8 to confirm the VS toolchain still
-      registers (it was green on 3.10.5 with VS 17.2.1)
-- [ ] Router-side DHCP reservation for `6c:94:66:ae:49:26`
 - [ ] `flutter config --enable-windows-desktop`; add Windows runners
       (`flutter create --platforms=windows .`) — no `windows/` directory exists
       anywhere in this repo yet
 - [ ] Scaffold the `butane_windows` platform package
+- [ ] Resolve dependencies on the box — the workspace declares the private
+      `grid_*` packages, and `grid_assets` is **not** published to pub.dev, so
+      a machine-local `pubspec_overrides.yaml` or a git-tag pin will be needed
+      here exactly as on the Mac. Untested on this box so far.
+- [ ] Router-side DHCP reservation for `6c:94:66:ae:49:26`
 
 ## Gotchas — the things that fail *silently*
 
@@ -160,12 +168,23 @@ Place the key manually while physically at the machine.
 ssh yoga-win "powershell -NoProfile -Command \"Get-Service sshd\""
 ```
 
-To make remote invocation sane, point it at PowerShell 7:
+**This has been done** — `DefaultShell` is set to PowerShell 7, so remote
+commands are invoked directly:
+
+```bash
+ssh yoga-win '$PSVersionTable.PSVersion.ToString()'   # 7.4.17
+```
+
+The registry change, for reference or rebuild:
 
 ```powershell
 New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
   -Value 'C:\Program Files\PowerShell\7\pwsh.exe' -PropertyType String -Force
 ```
+
+Beyond ergonomics this also fixes the git-over-SSH quoting failure in
+[gotcha 6](#6-gits-helper-binaries-are-not-on-the-non-interactive-path).
+Existing SSH sessions keep their old shell; only new ones pick it up.
 
 ### 3. The network profile silently voids firewall rules
 
@@ -218,8 +237,8 @@ fatal: Could not read from remote repository.
 This is **not** a URL-syntax problem — the scp-style form, the `ssh://` form,
 and a home-relative path all fail identically.
 
-**There are actually two failures stacked here, and fixing only the first is
-not enough.** Routing through `git.exe` (which *is* on `PATH`) clears the
+**There are two independent failures stacked here**, and they have different
+fixes. Routing through `git.exe` (which *is* on `PATH`) clears the
 missing-binary error, and then you hit the second one:
 
 ```
@@ -239,20 +258,35 @@ $ ssh yoga-win "git upload-pack C:/Users/nicks/butane_flutter.git"
 ```
 
 So the remote command must run under a shell that *does* parse single quotes.
-Fix from the Mac, per-remote (nothing changes on the box):
+**`DefaultShell` is now set to PowerShell 7** (see
+[gotcha 2](#2-the-default-shell-is-cmdexe)), which handles the quoting — so
+only the PATH half needs a Mac-side fix:
 
 ```bash
-git config remote.windows.uploadpack  "powershell -NoProfile -Command git upload-pack"
-git config remote.windows.receivepack "powershell -NoProfile -Command git receive-pack"
+git config remote.windows.uploadpack  "git upload-pack"
+git config remote.windows.receivepack "git receive-pack"
 ```
 
-`cmd.exe` hands the line to PowerShell, which strips the quotes correctly, and
-`git` resolves from PATH so no space-laden absolute path is hardcoded.
+Verified under `DefaultShell = pwsh`: `git upload-pack 'C:/…'` returns a
+normal capability advertisement, i.e. the quotes are stripped correctly.
 
-> **The binary pack stream survives the PowerShell hop** — worth stating,
-> because it is the obvious thing to worry about. Verified 2026-07-25: a full
-> `git push windows main` completed, the box's tip matched the Mac's
-> `ed23fcc` exactly, and `git fsck` on the bare repo came back clean.
+> **If `DefaultShell` is ever reverted to `cmd.exe`**, the quoting breaks again
+> and the config must absorb both problems:
+>
+> ```bash
+> git config remote.windows.uploadpack  "powershell -NoProfile -Command git upload-pack"
+> git config remote.windows.receivepack "powershell -NoProfile -Command git receive-pack"
+> ```
+>
+> That form was verified working too, binary pack stream included — a full
+> `git push windows main` landed with the box's tip matching the Mac's and
+> `git fsck` clean on the bare repo.
+
+> The remaining PATH half could be retired entirely by appending Git's
+> `mingw64\bin` to the machine `PATH`, which would fix it for every future
+> clone rather than just this one. Deliberately not done — it is a
+> system-wide change, and anyone else cloning this repo will need the two
+> config lines above until it is.
 
 > The durable alternative is to append Git's `mingw64\bin` to the machine
 > `PATH` on the box, which fixes it for every tool and every future clone. That
