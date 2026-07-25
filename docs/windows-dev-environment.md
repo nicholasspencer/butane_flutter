@@ -103,14 +103,18 @@ Then `ssh yoga-win` from the Mac.
 - [x] `windows` remote on the Mac, with the `uploadpack`/`receivepack` config
       from [gotcha 6](#6-gits-helper-binaries-are-not-on-the-non-interactive-path)
 
+- [x] `git push windows main` verified end to end — box tip matches the Mac,
+      `git fsck` clean, bare repo `HEAD` repointed to `main`
+- [x] **Flutter upgraded to 3.44.8 / Dart 3.12.2** (was 3.10.5 / Dart 3.0.5).
+      Clears butane's `sdk: ^3.11.0` and `flutter: ">=3.27.0"` floors. See
+      [Upgrading Flutter](#upgrading-flutter).
+
 ### Remaining
-- [ ] **Upgrade Flutter — blocking.** The box shipped Flutter **3.10.5 /
-      Dart 3.0.5** (fvm, at `C:\Users\nicks\fvm\default` → `versions\stable`).
-      butane needs Dart `^3.11.0` and `flutter: ">=3.27.0"`, and
-      `butane_grid_assets` pins `sdk: ^3.11.0`. Nothing here resolves until
-      this lands. See [Upgrading Flutter](#upgrading-flutter).
-- [ ] Set `DefaultShell` to `pwsh` (see [Gotchas](#2-the-default-shell-is-cmdexe))
+- [ ] Set `DefaultShell` to `pwsh` (see [Gotchas](#2-the-default-shell-is-cmdexe)).
+      Would also make gotcha 6's per-remote config unnecessary.
 - [ ] Working copy cloned from the bare repo on the box
+- [ ] `flutter doctor` re-run on 3.44.8 to confirm the VS toolchain still
+      registers (it was green on 3.10.5 with VS 17.2.1)
 - [ ] Router-side DHCP reservation for `6c:94:66:ae:49:26`
 - [ ] `flutter config --enable-windows-desktop`; add Windows runners
       (`flutter create --platforms=windows .`) — no `windows/` directory exists
@@ -214,15 +218,41 @@ fatal: Could not read from remote repository.
 This is **not** a URL-syntax problem — the scp-style form, the `ssh://` form,
 and a home-relative path all fail identically.
 
+**There are actually two failures stacked here, and fixing only the first is
+not enough.** Routing through `git.exe` (which *is* on `PATH`) clears the
+missing-binary error, and then you hit the second one:
+
+```
+fatal: ''C:/Users/nicks/butane_flutter.git'' does not appear to be a git repository
+```
+
+Note the doubled quotes. Git always wraps the repository path in single quotes
+for the SSH transport, and **`cmd.exe` does not strip them** — so the path
+arrives with literal `'` characters in it. Proof:
+
+```console
+$ ssh yoga-win "git upload-pack 'C:/Users/nicks/butane_flutter.git'"
+fatal: ''C:/Users/nicks/butane_flutter.git'' does not appear to be a git repository
+
+$ ssh yoga-win "git upload-pack C:/Users/nicks/butane_flutter.git"
+0000fatal: the remote end hung up unexpectedly     # 0000 = valid empty-repo handshake
+```
+
+So the remote command must run under a shell that *does* parse single quotes.
 Fix from the Mac, per-remote (nothing changes on the box):
 
 ```bash
-git config remote.windows.uploadpack  "git upload-pack"
-git config remote.windows.receivepack "git receive-pack"
+git config remote.windows.uploadpack  "powershell -NoProfile -Command git upload-pack"
+git config remote.windows.receivepack "powershell -NoProfile -Command git receive-pack"
 ```
 
-Invoking the subcommand through `git` avoids hardcoding an absolute path
-containing spaces, which `cmd.exe` quotes badly.
+`cmd.exe` hands the line to PowerShell, which strips the quotes correctly, and
+`git` resolves from PATH so no space-laden absolute path is hardcoded.
+
+> **The binary pack stream survives the PowerShell hop** — worth stating,
+> because it is the obvious thing to worry about. Verified 2026-07-25: a full
+> `git push windows main` completed, the box's tip matched the Mac's
+> `ed23fcc` exactly, and `git fsck` on the bare repo came back clean.
 
 > The durable alternative is to append Git's `mingw64\bin` to the machine
 > `PATH` on the box, which fixes it for every tool and every future clone. That
@@ -278,12 +308,19 @@ Lenovo/Windows repo: C:\Users\nicks\butane_flutter
 # From the Mac, once the bare repo exists on the box
 git remote add windows yoga-win:C:/Users/nicks/butane_flutter.git
 
-# REQUIRED — see gotcha 6. Without these, every push/fetch fails with
-# "'git-upload-pack' is not recognized as an internal or external command".
-git config remote.windows.uploadpack  "git upload-pack"
-git config remote.windows.receivepack "git receive-pack"
+# REQUIRED — see gotcha 6. Without these, every push/fetch fails, first with
+# "'git-upload-pack' is not recognized", then on literal quotes in the path.
+git config remote.windows.uploadpack  "powershell -NoProfile -Command git upload-pack"
+git config remote.windows.receivepack "powershell -NoProfile -Command git receive-pack"
 
 git push windows main
+```
+
+The bare repo is created by `git init --bare`, which leaves `HEAD` pointing at
+`master`. Repoint it so clones check out `main`:
+
+```powershell
+git -C C:\Users\nicks\butane_flutter.git symbolic-ref HEAD refs/heads/main
 ```
 
 ```powershell
@@ -348,8 +385,8 @@ copies bundled inside the Visual Studio installation for Windows desktop builds.
 | Tool | State |
 |------|-------|
 | Git | `C:\Program Files\Git\cmd\git.exe` |
-| Flutter | `C:\Users\nicks\fvm\default\bin\flutter.bat` — **3.10.5, too old** |
-| Dart | `C:\tools\dart-sdk\bin\dart.exe` (3.0.5 via Flutter) |
+| Flutter | `C:\Users\nicks\fvm\default\bin\flutter.bat` — **3.44.8** (stable) |
+| Dart | 3.12.2 (via Flutter) |
 | Visual Studio | Community 2022 17.2.1, Desktop C++ workload ✓ |
 | Windows SDK | `10.0.19041.0` |
 | PowerShell 7 | `C:\Program Files\PowerShell\7\pwsh.exe` |
