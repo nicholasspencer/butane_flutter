@@ -5,14 +5,17 @@ import 'dart:typed_data';
 import 'package:butane/butane.dart';
 import 'package:butane_platform_interface/butane_platform_interface.dart' as api;
 
+import 'command_registry.dart';
 import 'harness_connection.dart';
 import 'harness_log.dart';
 
 /// Implements the BLE Peripheral role for the harness app.
 ///
-/// Handles WebSocket commands from the coordinator to add services,
-/// start/stop advertising, auto-respond to read/write requests,
-/// and update characteristic values.
+/// Exposes its command vocabulary (add services, start/stop advertising,
+/// read/write auto-response, characteristic value updates) as [commands] on
+/// the transport-agnostic registry — the WebSocket control plane and the
+/// leonard extension are two frontends over the same table. [server] remains
+/// the unsolicited-event channel (read/write request events, errors).
 class PeripheralRole {
   PeripheralRole({
     required HarnessConnection server,
@@ -20,7 +23,6 @@ class PeripheralRole {
   })  : _server = server,
         _log = log {
     _manager = PeripheralManager();
-    server.onCommand(_handleCommand);
     _setupRequestHandlers();
   }
 
@@ -37,8 +39,33 @@ class PeripheralRole {
   /// Whether to auto-accept write requests from centrals.
   bool _autoAcceptWrites = true;
 
+  /// Perception caches (the leonard fragment is a synchronous snapshot):
+  /// last `check_state` result, advertising status/name, added service uuids.
+  String? _lastKnownState;
+  bool _advertising = false;
+  String? _advertisedName;
+  final List<String> _addedServices = [];
+
   StreamSubscription<AttRequest>? _readRequestSub;
   StreamSubscription<List<AttRequest>>? _writeRequestsSub;
+
+  /// A synchronous snapshot of peripheral-side state, serialized into the
+  /// leonard extension's `extensions.butane` perception fragment. Written
+  /// values report byte lengths — exact bytes are the `get_written_value`
+  /// tool's job.
+  Map<String, Object?> perceptionSnapshot() => {
+        'role': 'peripheral',
+        'manager_state': _lastKnownState,
+        'advertising': _advertising,
+        'local_name': _advertisedName,
+        'services': List.of(_addedServices),
+        'read_responses': _readResponses.keys.toList(),
+        'written_values': {
+          for (final entry in _writtenValues.entries)
+            entry.key: entry.value.length,
+        },
+        'auto_accept_writes': _autoAcceptWrites,
+      };
 
   /// Sets up listeners for incoming read and write requests from centrals.
   void _setupRequestHandlers() {
@@ -145,36 +172,71 @@ class PeripheralRole {
     }
   }
 
-  /// Routes incoming commands to the appropriate handler.
-  Future<Map<String, dynamic>> _handleCommand(
-    Map<String, dynamic> command,
-  ) async {
-    final action = command['action'] as String?;
-    final params = command;
-
-    switch (action) {
-      case 'check_state':
-        return _handleCheckState(params);
-      case 'add_service':
-        return _handleAddService(params);
-      case 'remove_service':
-        return _handleRemoveService(params);
-      case 'start_advertising':
-        return _handleStartAdvertising(params);
-      case 'stop_advertising':
-        return _handleStopAdvertising(params);
-      case 'set_read_response':
-        return _handleSetReadResponse(params);
-      case 'set_write_handler':
-        return _handleSetWriteHandler(params);
-      case 'get_written_value':
-        return _handleGetWrittenValue(params);
-      case 'update_value':
-        return _handleUpdateValue(params);
-      default:
-        return {'success': false, 'error': 'Unknown action: $action'};
-    }
-  }
+  /// The peripheral command vocabulary, in wire order.
+  List<HarnessCommand> get commands => [
+        HarnessCommand(
+          action: 'check_state',
+          description:
+              'Return the BLE peripheral manager state (e.g. poweredOn).',
+          handler: _handleCheckState,
+        ),
+        HarnessCommand(
+          action: 'wait_for_state',
+          description: 'Poll the peripheral manager until it reaches a state '
+              '(default poweredOn; optional state, timeoutMs). add_service/'
+              'advertise before poweredOn hang in CoreBluetooth — call this '
+              'first.',
+          handler: _handleWaitForState,
+        ),
+        HarnessCommand(
+          action: 'add_service',
+          description: 'Add a GATT service (uuid, optional isPrimary, '
+              'characteristics list with properties/permissions/value/'
+              'descriptors) to the local database.',
+          handler: _handleAddService,
+        ),
+        HarnessCommand(
+          action: 'remove_service',
+          description: 'Remove a service (uuid) from the local GATT database.',
+          handler: _handleRemoveService,
+        ),
+        HarnessCommand(
+          action: 'start_advertising',
+          description: 'Start advertising (optional localName, optional '
+              'serviceUuids list).',
+          handler: _handleStartAdvertising,
+        ),
+        HarnessCommand(
+          action: 'stop_advertising',
+          description: 'Stop advertising.',
+          handler: _handleStopAdvertising,
+        ),
+        HarnessCommand(
+          action: 'set_read_response',
+          description: 'Preconfigure the base64 value served to central read '
+              'requests (serviceUuid, characteristicUuid, value).',
+          handler: _handleSetReadResponse,
+        ),
+        HarnessCommand(
+          action: 'set_write_handler',
+          description:
+              'Toggle auto-accept for incoming writes (autoAccept bool).',
+          handler: _handleSetWriteHandler,
+        ),
+        HarnessCommand(
+          action: 'get_written_value',
+          description: 'Return the last value a central wrote (serviceUuid, '
+              'characteristicUuid) → base64 or null.',
+          handler: _handleGetWrittenValue,
+        ),
+        HarnessCommand(
+          action: 'update_value',
+          description: 'Update a characteristic value (serviceUuid, '
+              'characteristicUuid, base64 value) and notify subscribed '
+              'centrals.',
+          handler: _handleUpdateValue,
+        ),
+      ];
 
   /// Returns the BLE peripheral manager state.
   ///
@@ -189,8 +251,35 @@ class PeripheralRole {
       const api.PeripheralManagerSession(),
     );
     final state = PeerManagerState.fromApi(platformState);
+    _lastKnownState = state.name;
     _log.add('BLE state: ${state.name}');
     return {'state': state.name};
+  }
+
+  /// Polls the peripheral manager until it reaches the wanted state (default
+  /// `poweredOn`) or the timeout elapses. Returns the final state either way
+  /// — the caller asserts. GATT mutations issued before `poweredOn` hang in
+  /// CoreBluetooth (no delegate callback), so scripted scenarios gate on
+  /// this first.
+  Future<Map<String, dynamic>> _handleWaitForState(
+    Map<String, dynamic> params,
+  ) async {
+    final want = params['state'] as String? ?? 'poweredOn';
+    final timeoutMs = params['timeoutMs'] as int? ?? 10000;
+    final deadline = DateTime.now().add(Duration(milliseconds: timeoutMs));
+    Future<String> current() async => PeerManagerState.fromApi(
+          await api.ButanePlatformInterface.instance.peripheralManagerState(
+            const api.PeripheralManagerSession(),
+          ),
+        ).name;
+    var state = await current();
+    while (state != want && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      state = await current();
+    }
+    _lastKnownState = state;
+    _log.add('Waited for $want → $state');
+    return {'state': state, 'matched': state == want};
   }
 
   /// Adds a GATT service with characteristics to the local database.
@@ -278,6 +367,7 @@ class PeripheralRole {
     );
 
     await _manager.addService(service);
+    _addedServices.add(uuid);
     _log.add('Added service: $uuid (${characteristics.length} characteristics)');
 
     return {'added': true, 'serviceUuid': uuid};
@@ -289,6 +379,7 @@ class PeripheralRole {
   ) async {
     final uuid = _requireParam<String>(params, 'uuid');
     await _manager.removeService(UuidIdentifier(uuid));
+    _addedServices.remove(uuid);
     _log.add('Removed service: $uuid');
     return {'removed': true};
   }
@@ -307,6 +398,8 @@ class PeripheralRole {
       localName: localName,
       serviceUuids: serviceUuids,
     );
+    _advertising = true;
+    _advertisedName = localName;
 
     _log.add(
       'Advertising started'
@@ -322,6 +415,8 @@ class PeripheralRole {
     Map<String, dynamic> params,
   ) async {
     await _manager.stopAdvertising();
+    _advertising = false;
+    _advertisedName = null;
     _log.add('Advertising stopped');
     return {'stopped': true};
   }

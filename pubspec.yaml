@@ -17,6 +17,7 @@ workspace:
   - packages/butane_bluez
   - packages/butane_bluez/example
   - packages/butane_android
+  - packages/butane_grid_assets
   - packages/butane_harness
   - packages/butane/example
   - packages/butane_core_bluetooth/example

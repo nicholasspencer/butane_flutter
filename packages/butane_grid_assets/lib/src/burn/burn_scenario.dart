@@ -1,0 +1,205 @@
+/// The SCRIPTED drive scenario + the DIRECT perception channel (ADR-0011 D9).
+///
+/// The burn's second channel is `leonard_drive` ↔ the follower app's
+/// `ext.exploration.*`, point-to-point over the follower's VM service — **NOT
+/// tunneled through the federation bus** (perception ⊥ observability, ADR-0012).
+/// This pass it is **SCRIPTED**: zero inference on either box (a real
+/// regression), driven by a [DriveScenario] of `observe`/`invoke` steps each with
+/// a substring expectation.
+///
+/// [LeonardDrive] is the seam: the REAL impl is lenny's credential-free,
+/// zero-model `leonard_drive` (proven A40/tg-e28); offline tests inject a scripted
+/// fake. `runDriveScenario` is pure orchestration over the seam — the I/O is the
+/// injected drive.
+library;
+
+import 'burn_report.dart';
+import 'follower.dart';
+
+/// The kind of one scripted drive step over the perception channel.
+enum DriveAction {
+  /// Read a perceived path (`leonard_drive` `observe`).
+  observe,
+
+  /// Invoke a tool (`leonard_drive` `invoke`).
+  invoke,
+}
+
+/// Which end of the burn a scripted step drives (the two-drive host).
+///
+/// The burn's convention: the leased [follower] runs the PERIPHERAL harness
+/// on the remote box; the host's [local] harness runs the CENTRAL on its own
+/// box (macos+ble per ADR-0011 D9's host requirements) — so a real BLE
+/// round-trip scripts both ends from one scenario.
+enum DriveEndpoint {
+  /// The leased follower app (the rendezvous endpoint) — the default.
+  follower,
+
+  /// The host's own locally-launched harness.
+  local,
+}
+
+/// One SCRIPTED step of a drive scenario (ADR-0011 D9) — an `observe`/`invoke`
+/// over the direct perception channel plus the substring the result must contain
+/// (zero inference: an exact, scripted assertion). An empty [expectContains]
+/// asserts only that the step ran without error.
+class DriveStep {
+  /// An `observe <path>` step asserting the observed value contains
+  /// [expectContains], driven [on] an endpoint (default: the follower). Set
+  /// [caseInsensitive] for platform-cased tokens like GATT UUIDs (uppercase
+  /// on CoreBluetooth, lowercase on BlueZ) — leave it off for base64
+  /// payloads, whose casing is load-bearing.
+  const DriveStep.observe(
+    this.path, {
+    this.expectContains = '',
+    this.on = DriveEndpoint.follower,
+    this.caseInsensitive = false,
+  }) : action = DriveAction.observe,
+       tool = '',
+       args = const {};
+
+  /// An `invoke <tool>` step (with [args]) asserting the result contains
+  /// [expectContains], driven [on] an endpoint (default: the follower). See
+  /// [caseInsensitive] re: UUID casing across BLE stacks.
+  const DriveStep.invoke(
+    this.tool, {
+    this.args = const {},
+    this.expectContains = '',
+    this.on = DriveEndpoint.follower,
+    this.caseInsensitive = false,
+  }) : action = DriveAction.invoke,
+       path = '';
+
+  /// Whether this step observes a path or invokes a tool.
+  final DriveAction action;
+
+  /// Which end of the burn this step drives.
+  final DriveEndpoint on;
+
+  /// The path to observe (for [DriveAction.observe]).
+  final String path;
+
+  /// The tool to invoke (for [DriveAction.invoke]).
+  final String tool;
+
+  /// The invoke arguments (for [DriveAction.invoke]). JSON-safe values,
+  /// carried verbatim through `leonard_drive --args` — butane tools take
+  /// structured params (serviceUuids lists, add_service characteristic maps,
+  /// bools); a String-only map was an accidental narrowing.
+  final Map<String, Object?> args;
+
+  /// The substring the step's result must contain to pass (empty = ran-ok only).
+  final String expectContains;
+
+  /// Whether the [expectContains] match ignores case (for platform-cased
+  /// tokens like GATT UUIDs; NOT for base64 payloads).
+  final bool caseInsensitive;
+
+  /// A human-readable description of the step (its endpoint + action +
+  /// target).
+  String get description {
+    final prefix = on == DriveEndpoint.local ? '[local] ' : '';
+    return switch (action) {
+      DriveAction.observe => '${prefix}observe $path',
+      DriveAction.invoke => '${prefix}invoke $tool',
+    };
+  }
+}
+
+/// A named, SCRIPTED drive scenario (ADR-0011 D9) — the ordered steps the
+/// `burn-host` order runs against the leased follower app over the direct
+/// perception channel.
+class DriveScenario {
+  /// Creates a scenario [name]d over its ordered [steps].
+  const DriveScenario({required this.name, required this.steps});
+
+  /// The scenario name (recorded on the [TestReport]).
+  final String name;
+
+  /// The ordered scripted steps.
+  final List<DriveStep> steps;
+}
+
+/// The DIRECT perception channel (ADR-0011 D9) — `leonard_drive` ↔ the follower
+/// app's `ext.exploration.*` over its VM service, point-to-point on the LAN, NOT
+/// tunneled through the federation bus. Credential-free + zero-model (A40/tg-e28).
+///
+/// The REAL impl is lenny's `leonard_drive`; offline tests inject a scripted fake.
+/// Acts return [Future]s.
+abstract interface class LeonardDrive {
+  /// Attaches to the follower app at [endpoint]'s VM service. (An act.)
+  Future<void> attach(FollowerEndpoint endpoint);
+
+  /// Reads the perceived value at [path]. (An observation, point-read.)
+  Future<String> observe(String path);
+
+  /// Invokes [tool] with JSON-safe [args] and returns the result. (An act.)
+  Future<String> invoke(String tool, Map<String, Object?> args);
+
+  /// Detaches + releases the perception channel. (An act; idempotent.)
+  Future<void> close();
+}
+
+/// Runs a SCRIPTED [scenario] against an already-attached [drive] (the
+/// follower channel) — and, for two-drive scenarios, [localDrive] (the
+/// host's own locally-launched harness) — and collects a [TestReport] for
+/// [endpoint] (ADR-0011 D9).
+///
+/// Each step routes by its [DriveStep.on] selector; a step targeting
+/// [DriveEndpoint.local] when no [localDrive] was provided is recorded as a
+/// failed step (fail-closed, report-collecting). Each step's result is
+/// checked against its substring expectation (zero inference); EVERY step is
+/// recorded even after the first failure, and the aggregate verdict is
+/// "every step passed AND at least one ran". A step's I/O error is recorded
+/// as a failed step (the drive channel hiccuped) rather than thrown — the
+/// burn collects a report either way. [isCancelled] (when given) is polled
+/// between steps so a host unmount stops the drive politely.
+Future<TestReport> runDriveScenario({
+  required LeonardDrive drive,
+  required DriveScenario scenario,
+  required FollowerEndpoint endpoint,
+  LeonardDrive? localDrive,
+  bool Function()? isCancelled,
+}) async {
+  final results = <DriveStepResult>[];
+  for (final step in scenario.steps) {
+    if (isCancelled?.call() ?? false) break;
+    String observed;
+    bool passed;
+    final target = step.on == DriveEndpoint.local ? localDrive : drive;
+    if (target == null) {
+      observed = 'no local drive: scenario step targets the local endpoint '
+          'but the host launched no local harness';
+      passed = false;
+    } else {
+      try {
+        observed = switch (step.action) {
+          DriveAction.observe => await target.observe(step.path),
+          DriveAction.invoke => await target.invoke(step.tool, step.args),
+        };
+        final haystack =
+            step.caseInsensitive ? observed.toLowerCase() : observed;
+        final needle = step.caseInsensitive
+            ? step.expectContains.toLowerCase()
+            : step.expectContains;
+        passed = needle.isEmpty || haystack.contains(needle);
+      } on Object catch (e) {
+        observed = 'drive error: $e';
+        passed = false;
+      }
+    }
+    results.add(
+      DriveStepResult(
+        description: step.description,
+        observed: observed,
+        passed: passed,
+      ),
+    );
+  }
+  return TestReport(
+    scenario: scenario.name,
+    endpoint: endpoint.vmServiceUri,
+    steps: results,
+    passed: results.isNotEmpty && results.every((r) => r.passed),
+  );
+}
