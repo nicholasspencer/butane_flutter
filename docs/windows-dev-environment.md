@@ -99,14 +99,18 @@ Then `ssh yoga-win` from the Mac.
 - [x] Windows 10 SDK `10.0.19041.0`
 - [x] PowerShell 7 (`pwsh`) present
 
+- [x] Bare repo `C:\Users\nicks\butane_flutter.git` (`core.autocrlf=false`)
+- [x] `windows` remote on the Mac, with the `uploadpack`/`receivepack` config
+      from [gotcha 6](#6-gits-helper-binaries-are-not-on-the-non-interactive-path)
+
 ### Remaining
-- [ ] **Upgrade Flutter — currently blocking.** The box has Flutter **3.10.5 /
-      Dart 3.0.5** (via fvm at `C:\Users\nicks\fvm\default`). butane needs
-      Dart `^3.11.0` and `flutter: ">=3.27.0"`; `butane_grid_assets` pins
-      `sdk: ^3.11.0`. Nothing in this repo will resolve until this is fixed.
-      The Linux half runs 3.41.6 — match it.
+- [ ] **Upgrade Flutter — blocking.** The box shipped Flutter **3.10.5 /
+      Dart 3.0.5** (fvm, at `C:\Users\nicks\fvm\default` → `versions\stable`).
+      butane needs Dart `^3.11.0` and `flutter: ">=3.27.0"`, and
+      `butane_grid_assets` pins `sdk: ^3.11.0`. Nothing here resolves until
+      this lands. See [Upgrading Flutter](#upgrading-flutter).
 - [ ] Set `DefaultShell` to `pwsh` (see [Gotchas](#2-the-default-shell-is-cmdexe))
-- [ ] Bare repo + working copy on the box; `windows` git remote on the Mac
+- [ ] Working copy cloned from the bare repo on the box
 - [ ] Router-side DHCP reservation for `6c:94:66:ae:49:26`
 - [ ] `flutter config --enable-windows-desktop`; add Windows runners
       (`flutter create --platforms=windows .`) — no `windows/` directory exists
@@ -195,6 +199,55 @@ Microsoft account, that is the MSA password — the PIN will never authenticate.
 Public-key auth sidesteps this entirely, which is why the key is installed
 locally rather than pushed with `ssh-copy-id`.
 
+### 6. Git's helper binaries are not on the non-interactive PATH
+
+`git.exe` lives in `C:\Program Files\Git\cmd` and **is** on `PATH`, but
+`git-upload-pack.exe` / `git-receive-pack.exe` live in Git's `mingw64\bin`,
+which non-interactive SSH sessions do not get. So an interactive login looks
+fine while every `git push`/`git fetch` from the Mac dies with:
+
+```
+'git-upload-pack' is not recognized as an internal or external command
+fatal: Could not read from remote repository.
+```
+
+This is **not** a URL-syntax problem — the scp-style form, the `ssh://` form,
+and a home-relative path all fail identically.
+
+Fix from the Mac, per-remote (nothing changes on the box):
+
+```bash
+git config remote.windows.uploadpack  "git upload-pack"
+git config remote.windows.receivepack "git receive-pack"
+```
+
+Invoking the subcommand through `git` avoids hardcoding an absolute path
+containing spaces, which `cmd.exe` quotes badly.
+
+> The durable alternative is to append Git's `mingw64\bin` to the machine
+> `PATH` on the box, which fixes it for every tool and every future clone. That
+> is a system-wide change, so it is deliberately *not* the default here — the
+> per-remote config lives only in your local clone, and anyone else cloning
+> this repo will hit the same wall until they set it too.
+
+### 7. The laptop sleeps, and SSH dies with it
+
+Windows 11 will sleep the machine on idle/battery and drop the network with
+it. Symptoms escalate as it goes: `Operation timed out` while it is busy or
+dozing, then `Host is down` once it is gone. Observed mid-SDK-download on
+2026-07-25.
+
+Before a long remote build, keep it awake — either adjust the power plan, or
+hold it open for the session:
+
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+```
+
+Treat a dropped SSH connection during a long operation as "check whether it
+slept" before assuming the command failed.
+
 ## Firewall reference
 
 ```powershell
@@ -224,6 +277,12 @@ Lenovo/Windows repo: C:\Users\nicks\butane_flutter
 ```bash
 # From the Mac, once the bare repo exists on the box
 git remote add windows yoga-win:C:/Users/nicks/butane_flutter.git
+
+# REQUIRED — see gotcha 6. Without these, every push/fetch fails with
+# "'git-upload-pack' is not recognized as an internal or external command".
+git config remote.windows.uploadpack  "git upload-pack"
+git config remote.windows.receivepack "git receive-pack"
+
 git push windows main
 ```
 
@@ -235,6 +294,43 @@ git clone C:\Users\nicks\butane_flutter.git C:\Users\nicks\butane_flutter
 
 > Use forward slashes in the git remote path. Set `core.autocrlf=false` on the
 > box — this repo is LF and CRLF translation will produce spurious diffs.
+
+## Upgrading Flutter
+
+fvm's `default` is a symlink to `versions\stable`, which is an ordinary Flutter
+**git checkout on the `stable` branch** — so it upgrades with git, not with an
+installer.
+
+The obvious command does not work:
+
+```
+git pull --ff-only
+fatal: Not possible to fast-forward, aborting.
+```
+
+That is expected, not damage. Flutter cuts stable *releases* as cherry-pick
+branches, so a release tag is not an ancestor of the moving `stable` branch —
+this checkout measured **31 ahead / 54,868 behind** `origin/stable` while
+sitting on tag `3.10.5`. There is nothing to preserve in an SDK cache, so reset
+onto the branch:
+
+```powershell
+cd C:\Users\nicks\fvm\versions\stable
+git status --porcelain          # confirm clean first
+git fetch origin --tags
+git reset --hard origin/stable
+.\bin\flutter.bat --version     # triggers the engine + Dart SDK download
+```
+
+The artifact download is ~1–2 GB and saturates the machine; SSH may time out
+while it runs, and the laptop may sleep partway through
+([gotcha 7](#7-the-laptop-sleeps-and-ssh-dies-with-it)). Run it detached and
+re-probe rather than assuming failure.
+
+To pin an exact version alongside instead of moving `stable` — e.g. to match
+the Linux half — use `fvm install <version>` and `fvm global <version>`. Note
+that an interrupted `fvm install` leaves a partial directory under
+`versions\`; clear it with `fvm remove <version>` before retrying.
 
 ## Build Workflow
 
