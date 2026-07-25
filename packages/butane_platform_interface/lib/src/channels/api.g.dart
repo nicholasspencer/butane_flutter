@@ -1547,14 +1547,14 @@ class ButaneHostApi {
     ;
   }
 
-  Future<void> respondToRequest({required PeripheralManagerSession session, required int requestId, required AttResult requestResult, Uint8List? value, }) async {
+  Future<void> respondToRequest({required PeripheralManagerSession session, required int requestId, required AttResult result, Uint8List? value, }) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.respondToRequest$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, requestId, requestResult, value]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, requestId, result, value]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

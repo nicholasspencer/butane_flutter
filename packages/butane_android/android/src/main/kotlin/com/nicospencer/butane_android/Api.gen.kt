@@ -918,7 +918,7 @@ interface ButaneHostApi {
   fun addService(session: PeripheralManagerSession, service: MutableService, callback: (Result<Unit>) -> Unit)
   fun removeService(session: PeripheralManagerSession, serviceUuid: String, callback: (Result<Unit>) -> Unit)
   fun removeAllServices(session: PeripheralManagerSession, callback: (Result<Unit>) -> Unit)
-  fun respondToRequest(session: PeripheralManagerSession, requestId: Long, requestResult: AttResult, value: ByteArray?, callback: (Result<Unit>) -> Unit)
+  fun respondToRequest(session: PeripheralManagerSession, requestId: Long, result: AttResult, value: ByteArray?, callback: (Result<Unit>) -> Unit)
   fun updateValue(session: PeripheralManagerSession, serviceUuid: String, characteristicUuid: String, value: ByteArray, callback: (Result<Boolean>) -> Unit)
 
   companion object {
@@ -1451,9 +1451,9 @@ interface ButaneHostApi {
             val args = message as List<Any?>
             val sessionArg = args[0] as PeripheralManagerSession
             val requestIdArg = args[1] as Long
-            val requestResultArg = args[2] as AttResult
+            val resultArg = args[2] as AttResult
             val valueArg = args[3] as ByteArray?
-            api.respondToRequest(sessionArg, requestIdArg, requestResultArg, valueArg) { result: Result<Unit> ->
+            api.respondToRequest(sessionArg, requestIdArg, resultArg, valueArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(ApiPigeonUtils.wrapError(error))

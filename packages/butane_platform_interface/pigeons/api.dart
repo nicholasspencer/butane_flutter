@@ -480,7 +480,7 @@ abstract class ButaneHostApi {
   void respondToRequest({
     required PeripheralManagerSession session,
     required int requestId,
-    required AttResult requestResult,
+    required AttResult result,
     Uint8List? value,
   });
 

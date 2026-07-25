@@ -908,7 +908,7 @@ protocol ButaneHostApi {
   func addService(session: PeripheralManagerSession, service: MutableService, completion: @escaping (Result<Void, Error>) -> Void)
   func removeService(session: PeripheralManagerSession, serviceUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
   func removeAllServices(session: PeripheralManagerSession, completion: @escaping (Result<Void, Error>) -> Void)
-  func respondToRequest(session: PeripheralManagerSession, requestId: Int64, requestResult: AttResult, value: FlutterStandardTypedData?, completion: @escaping (Result<Void, Error>) -> Void)
+  func respondToRequest(session: PeripheralManagerSession, requestId: Int64, result: AttResult, value: FlutterStandardTypedData?, completion: @escaping (Result<Void, Error>) -> Void)
   func updateValue(session: PeripheralManagerSession, serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Bool, Error>) -> Void)
 }
 
@@ -1392,9 +1392,9 @@ class ButaneHostApiSetup {
         let args = message as! [Any?]
         let sessionArg = args[0] as! PeripheralManagerSession
         let requestIdArg = args[1] as! Int64
-        let requestResultArg = args[2] as! AttResult
+        let resultArg = args[2] as! AttResult
         let valueArg: FlutterStandardTypedData? = nilOrValue(args[3])
-        api.respondToRequest(session: sessionArg, requestId: requestIdArg, requestResult: requestResultArg, value: valueArg) { result in
+        api.respondToRequest(session: sessionArg, requestId: requestIdArg, result: resultArg, value: valueArg) { result in
           switch result {
           case .success:
             reply(wrapResult(nil))

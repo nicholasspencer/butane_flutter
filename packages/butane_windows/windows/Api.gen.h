@@ -864,7 +864,7 @@ class ButaneHostApi {
   virtual void RespondToRequest(
     const PeripheralManagerSession& session,
     int64_t request_id,
-    const AttResult& request_result,
+    const AttResult& result,
     const std::vector<uint8_t>* value,
     std::function<void(std::optional<FlutterError> reply)> result) = 0;
   virtual void UpdateValue(
