@@ -23,16 +23,17 @@ dependencies:
   # BurnRunCommand + bin/butane_station assemble on.
   grid_cli: any
   # Bead (the FormulaResolver policy input) — grid_engine's typedef names it.
-  grid_controller: any
+  beads_dart: any
   grid_engine: any
-  grid_federation: any
+  # Federation transport implementations used by the burn; contracts are in
+  # grid_engine and symbol imports migrate under butane_flutter-7ol.
+  federated_grid_assets: any
   grid_runtime: any
   meta: ^1.16.0
 
 dev_dependencies:
   # grid_exploration backs the pipeline-proof live-local follower daemon
-  # (tool/follower_daemon.dart); grid_controller graduated to a lib dep
-  # (Bead — the FormulaResolver policy input).
+  # (tool/follower_daemon.dart); beads_dart is a lib dependency.
   grid_exploration: any
 # Wide: co-resolves with the butane workspace's flutter_lints-era pin (^3.0.0).
   lints: ">=3.0.0 <6.0.0"

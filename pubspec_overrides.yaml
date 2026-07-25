@@ -1,0 +1,31 @@
+# Dev-time linkage (machine-local; gitignored). Generated shape = what
+# `grid dart link` produces; see the_grid docs/SCRATCH-pub-capability-and-repo-split.md
+# 2026-07-24 operator refresh: grid_controller -> beads_dart;
+# grid_reconciler deleted; grid_federation dissolved into current SDK/assets.
+dependency_overrides:
+  genesis_perception:
+    path: ../../../../../../engineering.memento/genesis/packages/perception
+  genesis_tree:
+    path: ../../../../../../engineering.memento/genesis/packages/tree
+  leonard_agent:
+    path: ../../../../../../engineering.memento/lenny/packages/leonard_agent
+  leonard_contract:
+    path: ../../../../../../engineering.memento/lenny/packages/leonard_contract
+  leonard_flutter:
+    path: ../../../../../../engineering.memento/lenny/packages/leonard_flutter
+  dart_grid_assets:
+    path: ../../../../../../engineering.memento/power_station/packages/dart_grid_assets
+  federated_grid_assets:
+    path: ../../../../../../engineering.memento/power_station/packages/federated_grid_assets
+  grid_assets:
+    path: ../../../../../../engineering.memento/power_station/packages/grid_assets
+  beads_dart:
+    path: ../../../../../../engineering.memento/the_grid/packages/beads_dart
+  grid_cli:
+    path: ../../../../../../engineering.memento/the_grid/packages/grid_cli
+  grid_engine:
+    path: ../../../../../../engineering.memento/the_grid/packages/grid_engine
+  grid_exploration:
+    path: ../../../../../../engineering.memento/the_grid/packages/grid_exploration
+  grid_runtime:
+    path: ../../../../../../engineering.memento/the_grid/packages/grid_runtime
