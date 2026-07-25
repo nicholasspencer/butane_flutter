@@ -1,56 +1,49 @@
-# Burn Workflow — grid-driven cross-device BLE integration
+# Cross-device burn workflow
 
-A burn uses `butane_grid_assets` to lease a follower station, launch one `butane_harness` in the peripheral role and one in the central role, drive the named scripted scenario through Leonard, and return a `TestReport`. The standalone coordinator and its custom WebSocket/mDNS control transport were retired by `butane_flutter-75t`.
-
-## Topology
+The burn is resident work. Its operator wrapper files a bead, the resident
+station mounts the burn circuit, and the circuit records its result and
+teardown receipts on the bead/session.
 
 ```mermaid
 flowchart LR
-    host["Grid burn host\nBurnRunCommand"]
-    bus["Federation bus\nmatch + lease + dispatch"]
-    follower["Follower station\nbutane_harness peripheral"]
-    local["Local\nbutane_harness central"]
-    host --> bus --> follower
-    host --> local
-    host -->|"leonard_drive over Dart VM service"| follower
-    host -->|"leonard_drive over Dart VM service"| local
-    local <==>|"BLE radio"| follower
+  operator["operator skill"] --> store["butane bead store"]
+  store --> station["resident station"]
+  station --> circuit["burn circuit"]
+  circuit -->|federation bus: lease + rendezvous| follower["follower lessor + harness"]
+  circuit --> host["host capability"]
+  host -->|direct Leonard channel| follower
+  host -->|direct Leonard channel| local["local central harness"]
 ```
 
-The federation bus carries lease, launch, and endpoint-rendezvous data. BLE commands and perception travel directly between `leonard_drive` and each harness's `ext.exploration.*` extension through the published Dart VM-service URI.
+The two channels are orthogonal: the federation bus owns rendezvous and
+lifecycle, while Leonard drives each harness directly. Perception is never
+tunnelled through the bus.
 
-## Harness configuration
+## File a burn
 
-`ROLE` is the only harness configuration value. It must be `central` or `peripheral`; pass it as a Dart define on iOS and as an environment variable on desktop platforms. Launch debug or profile builds because release builds do not expose the Dart VM service Leonard needs.
+Invoke `/burn` with the follower peer, scenario, harness directory, target, and
+local-central choice. The skill files or refines a deferred task in butane's
+store. After you approve and bless that bead, the one resident station mounts
+`kBurnCircuit`; no per-burn process boots a station.
 
-## Run the follower station
+## Read the result
+
+Invoke `/burn <bead-id>` or run `bd show <bead-id>`. Report the recorded
+follower endpoint/lease rendezvous, host `TestReport`, circuit state, artifacts,
+and teardown receipt. A missing receipt means the work has not completed; it is
+not success.
+
+## Run the follower lessor
 
     dart run butane_grid_assets:butane_station serve --kind burn \
       --harness-dir packages/butane_harness
 
-## Run a burn from the host
+The lessor owns the follower lease server and dispatched follower process. It
+does not mount work; the resident station drives the burn bead.
 
-    dart run butane_grid_assets:butane_station burn \
-      --peer follower-host:port \
-      --harness-dir packages/butane_harness \
-      --scenario nus_round_trip \
-      --bead butane_flutter-<id> \
-      --no-dry-run
-
-`--peer` is repeatable, `--peer-token` supplies the optional federation secret, `--follower-target` defaults to Linux, and `--no-local` suppresses the local central harness. Supported scenario names come from `kButaneScenarios` in `packages/butane_grid_assets/lib/src/burn/scenarios.dart`.
-
-## Lifecycle and failure behavior
-
-The follower order capability-matches a peer, leases it, dispatches a `LaunchSpec`, and publishes the follower VM-service endpoint. The host order launches the local harness, attaches one Leonard drive to each endpoint, executes the scripted steps, and collects the report. Disposal closes both drives and reaps launched process groups on success, scenario failure, denial, or cancellation.
-
-## Validation
-
-Use offline tests for the formula, routing, reporting, and teardown:
+## Offline validation
 
     cd packages/butane_grid_assets
-    dart test test/burn_test.dart
-
-The live two-radio proof is opt-in and self-skips unless its external prerequisites are present:
-
-    cd packages/butane_grid_assets
-    dart test test/two_drive_burn_live_test.dart
+    dart pub get
+    dart analyze
+    dart test
