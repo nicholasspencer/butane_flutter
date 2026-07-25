@@ -1,5 +1,8 @@
 # BLE Test Harness — Design Document
 
+> [!WARNING]
+> **Superseded historical plan.** This document records the March 2026 coordinator/WebSocket design and is not current implementation guidance. `butane_flutter-75t` retired that transport. See [`docs/burn-workflow.md`](../burn-workflow.md) for the surviving grid/Leonard architecture and commands.
+
 > **Approach:** macOS-First Bootstrap (Approach C)
 
 ## Problem

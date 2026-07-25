@@ -1,5 +1,8 @@
 # BLE Test Harness — Implementation Plan
 
+> [!WARNING]
+> **Superseded historical plan.** This document records the March 2026 coordinator/WebSocket design and is not current implementation guidance. `butane_flutter-75t` retired that transport. See [`docs/burn-workflow.md`](../burn-workflow.md) for the surviving grid/Leonard architecture and commands.
+
 > **REQUIRED:** Follow the executing-plans skill to implement this plan task-by-task.
 
 **Goal:** Build a macOS-first BLE integration test harness for butane_flutter, including Peripheral Manager APIs and a coordinator-driven two-app test system.
