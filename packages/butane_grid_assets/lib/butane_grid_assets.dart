@@ -4,10 +4,10 @@
 /// The burn is two capability-scoped orders + two orthogonal channels:
 ///  - **orders** — `burn-follower` ([BurnFollowerCapability]) leased to a
 ///    capability match + `burn-host` ([BurnHostCapability]) local, composed into
-///    [kBurnFormula] at the engine Capability seam (mirroring
+///    [kBurnCircuit] at the engine Capability seam (mirroring
 ///    `grid_assets/src/code`);
 ///  - **channels** — the federation BUS (lease + endpoint rendezvous, via
-///    `grid_federation`'s `StationClient`) and the DIRECT `leonard_drive` ↔
+///    the federation bus) and the DIRECT `leonard_drive` ↔
 ///    `ext.exploration.*` perception channel ([LeonardDrive]), kept orthogonal.
 ///
 /// The follower side ([ButaneFollowerRunner]) provisions/builds/launches the
@@ -30,7 +30,6 @@ library;
 export 'src/burn/burn_capabilities.dart';
 export 'src/burn/burn_dispatch_handler.dart';
 export 'src/burn/burn_report.dart';
-export 'src/burn/burn_run_command.dart';
 export 'src/burn/burn_scenario.dart';
 export 'src/burn/burn_serve.dart';
 export 'src/burn/butane_follower_launcher.dart';
