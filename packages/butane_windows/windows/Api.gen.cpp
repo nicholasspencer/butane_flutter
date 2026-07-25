@@ -1731,7 +1731,7 @@ void ButaneHostApi::SetUp(
             return;
           }
           const auto& session_arg = std::any_cast<const PeripheralSession&>(std::get<CustomEncodableValue>(encodable_session_arg));
-          api->ConnectionState(session_arg, [reply](ErrorOr<ConnectionState>&& output) {
+          api->ConnectionState(session_arg, [reply](ErrorOr<::butane_windows::ConnectionState>&& output) {
             if (output.has_error()) {
               reply(WrapError(output.error()));
               return;
@@ -2393,15 +2393,15 @@ void ButaneHostApi::SetUp(
             return;
           }
           const int64_t request_id_arg = encodable_request_id_arg.LongValue();
-          const auto& encodable_result_arg = args.at(2);
-          if (encodable_result_arg.IsNull()) {
-            reply(WrapError("result_arg unexpectedly null."));
+          const auto& encodable_request_result_arg = args.at(2);
+          if (encodable_request_result_arg.IsNull()) {
+            reply(WrapError("request_result_arg unexpectedly null."));
             return;
           }
-          const auto& result_arg = std::any_cast<const AttResult&>(std::get<CustomEncodableValue>(encodable_result_arg));
+          const auto& request_result_arg = std::any_cast<const AttResult&>(std::get<CustomEncodableValue>(encodable_request_result_arg));
           const auto& encodable_value_arg = args.at(3);
           const auto* value_arg = std::get_if<std::vector<uint8_t>>(&encodable_value_arg);
-          api->RespondToRequest(session_arg, request_id_arg, result_arg, value_arg, [reply](std::optional<FlutterError>&& output) {
+          api->RespondToRequest(session_arg, request_id_arg, request_result_arg, value_arg, [reply](std::optional<FlutterError>&& output) {
             if (output.has_value()) {
               reply(WrapError(output.value()));
               return;

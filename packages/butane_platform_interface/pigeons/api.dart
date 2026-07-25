@@ -24,6 +24,8 @@ enum ConnectionState {
   disconnecting,
 }
 
+sealed class Session {}
+
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
 /// [clientIdentifier] that discovered it.
 ///
@@ -34,7 +36,7 @@ enum ConnectionState {
 /// The [adapterIdentifier] is the identifier of the adapter that discovered the
 /// peripheral. This is useful when multiple adapters are available on the same
 /// device. If omitted, the default adapter is used.
-class ClientSession {
+class ClientSession extends Session {
   ClientSession({
     this.peripheralIdentifier,
     this.clientIdentifier,
@@ -51,7 +53,7 @@ class ClientSession {
   final String? restorationIdentifier;
 }
 
-class PeripheralSession {
+class PeripheralSession extends Session {
   PeripheralSession({
     required this.peripheralIdentifier,
     this.clientIdentifier,
@@ -68,7 +70,7 @@ class PeripheralSession {
   final String? restorationIdentifier;
 }
 
-class PeripheralManagerSession {
+class PeripheralManagerSession extends Session {
   PeripheralManagerSession({
     this.clientIdentifier,
     this.adapterIdentifier,
@@ -133,7 +135,9 @@ class ScanResult {
   final AdvertisementData advertisementData;
 }
 
-class Service {
+sealed class AttributeData {}
+
+class Service extends AttributeData {
   Service({
     required this.uuid,
     this.isPrimary = false,
@@ -144,7 +148,7 @@ class Service {
   final bool isPrimary;
 }
 
-class Characteristic {
+class Characteristic extends AttributeData {
   Characteristic({
     required this.uuid,
     this.value,
@@ -161,7 +165,7 @@ class Characteristic {
   final CharacteristicProperty? properties;
 }
 
-class Descriptor {
+class Descriptor extends AttributeData {
   Descriptor({
     required this.uuid,
     this.value,

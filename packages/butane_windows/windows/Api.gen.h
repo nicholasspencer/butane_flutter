@@ -375,6 +375,8 @@ class Service {
 
 
 // Generated class from Pigeon that represents data sent in messages.
+class CharacteristicProperty;
+
 class Characteristic {
  public:
   // Constructs an object setting all non-nullable fields.
@@ -775,7 +777,7 @@ class ButaneHostApi {
     std::function<void(std::optional<FlutterError> reply)> result) = 0;
   virtual void ConnectionState(
     const PeripheralSession& session,
-    std::function<void(ErrorOr<ConnectionState> reply)> result) = 0;
+    std::function<void(ErrorOr<::butane_windows::ConnectionState> reply)> result) = 0;
   // Discovers services offered by the peripheral.
   virtual void DiscoverServices(
     const PeripheralSession& session,
@@ -864,7 +866,7 @@ class ButaneHostApi {
   virtual void RespondToRequest(
     const PeripheralManagerSession& session,
     int64_t request_id,
-    const AttResult& result,
+    const AttResult& request_result,
     const std::vector<uint8_t>* value,
     std::function<void(std::optional<FlutterError> reply)> result) = 0;
   virtual void UpdateValue(

@@ -159,6 +159,12 @@ enum AttResult: Int {
   case unlikelyError = 6
 }
 
+/// Generated class from Pigeon that represents data sent in messages.
+/// This protocol should not be extended by any user class outside of the generated file.
+protocol Session {
+
+}
+
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
 /// [clientIdentifier] that discovered it.
 ///
@@ -171,7 +177,7 @@ enum AttResult: Int {
 /// device. If omitted, the default adapter is used.
 ///
 /// Generated class from Pigeon that represents data sent in messages.
-struct ClientSession: Hashable {
+struct ClientSession: Session {
   var peripheralIdentifier: String? = nil
   var clientIdentifier: String? = nil
   var adapterIdentifier: String? = nil
@@ -208,7 +214,7 @@ struct ClientSession: Hashable {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct PeripheralSession: Hashable {
+struct PeripheralSession: Session {
   var peripheralIdentifier: String
   var clientIdentifier: String? = nil
   var adapterIdentifier: String? = nil
@@ -245,7 +251,7 @@ struct PeripheralSession: Hashable {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct PeripheralManagerSession: Hashable {
+struct PeripheralManagerSession: Session {
   var clientIdentifier: String? = nil
   var adapterIdentifier: String? = nil
   var restorationIdentifier: String? = nil
@@ -389,7 +395,13 @@ struct ScanResult: Hashable {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct Service: Hashable {
+/// This protocol should not be extended by any user class outside of the generated file.
+protocol AttributeData {
+
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct Service: AttributeData {
   var uuid: String
   var isPrimary: Bool
 
@@ -418,7 +430,7 @@ struct Service: Hashable {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct Characteristic: Hashable {
+struct Characteristic: AttributeData {
   var uuid: String
   var value: FlutterStandardTypedData? = nil
   var descriptors: [Descriptor?]? = nil
@@ -455,7 +467,7 @@ struct Characteristic: Hashable {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct Descriptor: Hashable {
+struct Descriptor: AttributeData {
   var uuid: String
   var value: FlutterStandardTypedData? = nil
 
