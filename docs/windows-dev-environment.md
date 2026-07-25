@@ -1,0 +1,271 @@
+# Windows Development Environment
+
+Guide for developing and testing `butane_flutter` on the Windows half of the
+dual-booted Lenovo from the Mac Studio. Sibling to
+[`linux-dev-environment.md`](linux-dev-environment.md) — same topology, same
+machine, different OS.
+
+> **Read this first if you live in POSIX.** Windows OpenSSH has three traps
+> that fail *silently*. They are called out in [Gotchas](#gotchas-the-things-that-fail-silently)
+> below. Skim that section before debugging anything.
+
+## Architecture
+
+```
+┌─────────────────────┐         SSH          ┌─────────────────────┐
+│     Mac Studio      │ ──────────────────── │   Lenovo (Windows)  │
+│                     │                      │                     │
+│  • Agent            │   git push / pull    │  • Flutter SDK      │
+│  • Source of truth  │ ──────────────────── │  • VS 2022 + MSVC   │
+│  • GitHub origin    │                      │  • BLE hardware     │
+│                     │   ssh build/test     │  • WinRT / C++      │
+└─────────────────────┘                      └─────────────────────┘
+```
+
+All development happens on the Mac Studio. The Lenovo is a **build and test
+target only** — no agent, no GitHub access, no independent development.
+
+## ⚠️ Dual-boot: one machine, two mutually exclusive states
+
+This is the **same physical laptop** as the Linux target. Ubuntu and Windows
+are never up at the same time, so:
+
+- The `linux` and `windows` git remotes address one box in mutually exclusive
+  states. Whichever OS is not booted is simply unreachable.
+- A Linux burn and a Windows validation **cannot run in the same session**.
+- Any automated validation must **preflight which OS is booted** and fail with
+  an explicit message, never a confusing MSVC or SSH error. Tracked in the
+  Windows epic's validation child.
+
+The box answers ARP while in Windows even when ICMP and TCP are filtered, so
+"pings but nothing listens" is not proof it is off — see [Gotchas](#4-icmp-is-dropped-by-default).
+
+## Hardware
+
+| Component | Detail |
+|-----------|--------|
+| Machine | Lenovo Yoga 7 14ITL5 (model `82BH`) |
+| OS | Windows 11 Home, build 22635 (Insider Beta), 64-bit |
+| RAM | 11.8 GB |
+| Bluetooth | Intel(R) Wireless Bluetooth + Microsoft Bluetooth LE Enumerator |
+| Computer name | `nicospencer` |
+| Account | `nicospencer\nicks` (local admin) |
+
+Verified 2026-07-25 over SSH.
+
+## Network
+
+- **Address:** `192.168.4.44/22` on `Wi-Fi`
+- **Mac Studio:** `192.168.7.223` on `en1`
+- **Same subnet:** the mask is a `/22` (`192.168.4.0`–`192.168.7.255`), so
+  `.4.44` and `.7.223` are on one L2 network despite the different third octet.
+  Do not "fix" this — nothing is misrouted.
+- **Gateway / DHCP server:** `192.168.4.1`
+- **NIC MAC:** `6c:94:66:ae:49:26`
+- **Network profile:** `Private` (required — see [Gotchas](#3-the-network-profile-silently-voids-firewall-rules))
+
+**There is no mDNS.** Windows does not run avahi, and Bonjour only arrives
+bundled with Apple software. The Linux half's `nico-yoga-7-14itl5.local` will
+**not** resolve while the box is in Windows. Use a pinned address instead.
+
+`~/.ssh/config` on the Mac:
+
+```
+Host yoga-win
+    HostName 192.168.4.44
+    User nicospencer/nicks
+```
+
+Then `ssh yoga-win` from the Mac.
+
+> The DHCP lease drifts (`.44` → `.167` → `.168` observed in one week on the
+> Linux side). Pin it with a **router-side DHCP reservation** on MAC
+> `6c:94:66:ae:49:26` — that is configured on the router at `192.168.4.1`, not
+> on Windows. A static IP set on Windows also works, but only if the address
+> sits *outside* the router's DHCP pool, or the router will eventually lease it
+> to something else and cause an address conflict.
+
+## Setup Checklist
+
+### Completed (2026-07-25)
+- [x] OpenSSH Server capability installed; `sshd` **Running / Automatic**
+- [x] Firewall rule `OpenSSH-Server-In-TCP` — enabled, profile `Any`
+- [x] Network profile set to `Private`
+- [x] SSH public-key auth from the Mac (key in `administrators_authorized_keys`)
+- [x] `Host yoga-win` entry in the Mac's `~/.ssh/config`
+- [x] Git installed (`C:\Program Files\Git\cmd\git.exe`)
+- [x] Visual Studio Community 2022 **17.2.1** with the Desktop C++ workload —
+      `flutter doctor` reports `[√] Visual Studio - develop for Windows`
+- [x] Windows 10 SDK `10.0.19041.0`
+- [x] PowerShell 7 (`pwsh`) present
+
+### Remaining
+- [ ] **Upgrade Flutter — currently blocking.** The box has Flutter **3.10.5 /
+      Dart 3.0.5** (via fvm at `C:\Users\nicks\fvm\default`). butane needs
+      Dart `^3.11.0` and `flutter: ">=3.27.0"`; `butane_grid_assets` pins
+      `sdk: ^3.11.0`. Nothing in this repo will resolve until this is fixed.
+      The Linux half runs 3.41.6 — match it.
+- [ ] Set `DefaultShell` to `pwsh` (see [Gotchas](#2-the-default-shell-is-cmdexe))
+- [ ] Bare repo + working copy on the box; `windows` git remote on the Mac
+- [ ] Router-side DHCP reservation for `6c:94:66:ae:49:26`
+- [ ] `flutter config --enable-windows-desktop`; add Windows runners
+      (`flutter create --platforms=windows .`) — no `windows/` directory exists
+      anywhere in this repo yet
+- [ ] Scaffold the `butane_windows` platform package
+
+## Gotchas — the things that fail *silently*
+
+### 1. Admin accounts ignore `~/.ssh/authorized_keys`
+
+`nicospencer\nicks` is a local **administrator**, and Windows OpenSSH
+deliberately routes admins to a different file. `C:\ProgramData\ssh\sshd_config`
+ends with:
+
+```
+Match Group administrators
+       AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
+```
+
+So the key must live in `C:\ProgramData\ssh\administrators_authorized_keys`,
+**and that file's ACLs must be locked down** or `sshd` refuses it without
+logging anything by default.
+
+```powershell
+# Elevated PowerShell, at the machine
+$k = 'ssh-ed25519 AAAAC3Nza... nico@mac'   # contents of the Mac's ~/.ssh/id_ed25519.pub
+Add-Content -Path C:\ProgramData\ssh\administrators_authorized_keys -Value $k
+icacls C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r `
+  /grant 'Administrators:F' /grant 'SYSTEM:F'
+Restart-Service sshd
+```
+
+**`ssh-copy-id` does not work here** — it pipes a `sh -c` script over SSH, which
+`cmd.exe` cannot run, and even on success it would write to the wrong file.
+Place the key manually while physically at the machine.
+
+### 2. The default shell is `cmd.exe`
+
+`HKLM:\SOFTWARE\OpenSSH\DefaultShell` is unset, so every remote command lands in
+`cmd.exe`. From the Mac that means wrapping everything:
+
+```bash
+ssh yoga-win "powershell -NoProfile -Command \"Get-Service sshd\""
+```
+
+To make remote invocation sane, point it at PowerShell 7:
+
+```powershell
+New-ItemProperty -Path 'HKLM:\SOFTWARE\OpenSSH' -Name DefaultShell `
+  -Value 'C:\Program Files\PowerShell\7\pwsh.exe' -PropertyType String -Force
+```
+
+### 3. The network profile silently voids firewall rules
+
+If Windows classifies the wifi as `Public`, rules scoped to `Private` simply do
+not apply — with no error anywhere. Check before debugging anything else:
+
+```powershell
+Get-NetConnectionProfile
+Set-NetConnectionProfile -InterfaceAlias 'Wi-Fi' -NetworkCategory Private
+```
+
+Current state is `Private`, and the SSH rule is scoped `Any`, so this is
+already safe here.
+
+### 4. ICMP is dropped by default
+
+Windows Firewall blocks echo requests, so `ping` failing proves nothing. Allow
+it so the box is diagnosable from the Mac:
+
+```powershell
+New-NetFirewallRule -DisplayName 'ICMPv4 Echo Request' -Protocol ICMPv4 `
+  -IcmpType 8 -Enabled True -Direction Inbound -Action Allow -Profile Any
+```
+
+Until then, the reliable liveness check from the Mac is ARP:
+
+```bash
+arp -n 192.168.4.44     # a MAC address means it is up, even if nothing answers
+```
+
+### 5. A Windows Hello PIN is not a password
+
+SSH password auth uses the **account** password. If the account is tied to a
+Microsoft account, that is the MSA password — the PIN will never authenticate.
+Public-key auth sidesteps this entirely, which is why the key is installed
+locally rather than pushed with `ssh-copy-id`.
+
+## Firewall reference
+
+```powershell
+Get-NetFirewallRule -Name *OpenSSH* | Select Name,DisplayName,Enabled,Profile
+Enable-NetFirewallRule -Name 'OpenSSH-Server-In-TCP'
+
+# only if the rule is absent (the capability normally creates it):
+New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' `
+  -Enabled True -Direction Inbound -Protocol TCP -Action Allow `
+  -LocalPort 22 -Profile Any
+```
+
+## Git Topology
+
+```
+GitHub (origin)
+    ↑
+Mac Studio repo: ~/development/com.nicospencer/butane_flutter
+    ↓ (SSH remote)
+Lenovo/Windows repo: C:\Users\nicks\butane_flutter
+```
+
+- **Mac** is the source of truth and pushes to GitHub, `linux`, and `windows`
+- **Lenovo** is a read-only build target from git's perspective
+- No GitHub credentials on the box
+
+```bash
+# From the Mac, once the bare repo exists on the box
+git remote add windows yoga-win:C:/Users/nicks/butane_flutter.git
+git push windows main
+```
+
+```powershell
+# On the box, initial setup
+git init --bare C:\Users\nicks\butane_flutter.git
+git clone C:\Users\nicks\butane_flutter.git C:\Users\nicks\butane_flutter
+```
+
+> Use forward slashes in the git remote path. Set `core.autocrlf=false` on the
+> box — this repo is LF and CRLF translation will produce spurious diffs.
+
+## Build Workflow
+
+```bash
+# From the Mac — push, then build remotely
+git push windows main
+ssh yoga-win "powershell -NoProfile -Command \"cd C:\Users\nicks\butane_flutter; flutter build windows\""
+```
+
+`cmake` and `ninja` are **not** on `PATH`, and that is fine — Flutter uses the
+copies bundled inside the Visual Studio installation for Windows desktop builds.
+
+## Toolchain
+
+| Tool | State |
+|------|-------|
+| Git | `C:\Program Files\Git\cmd\git.exe` |
+| Flutter | `C:\Users\nicks\fvm\default\bin\flutter.bat` — **3.10.5, too old** |
+| Dart | `C:\tools\dart-sdk\bin\dart.exe` (3.0.5 via Flutter) |
+| Visual Studio | Community 2022 17.2.1, Desktop C++ workload ✓ |
+| Windows SDK | `10.0.19041.0` |
+| PowerShell 7 | `C:\Program Files\PowerShell\7\pwsh.exe` |
+| cmake / ninja | Not on `PATH` — supplied by VS |
+
+## Why Windows needs a native C++ plugin
+
+Unlike Linux — where `butane_bluez` is a 16-line Dart-only shim over the pure
+Dart `butane_dart_bluez` — Windows requires a real C++/WinRT plugin. D-Bus is a
+*wire protocol* Dart speaks over a socket; WinRT is an *in-process COM ABI*.
+The Dart WinRT projection stack (`windows_devices` / `windows_foundation`) was
+archived in September 2024, and `ffigen` parses C, not C++.
+
+Full reasoning, the interface mismatches, and the decomposition live on the
+Windows epic in the bead store.
