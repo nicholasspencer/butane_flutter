@@ -1,0 +1,40 @@
+name: butane_windows
+description: >-
+  The Windows platform implementation of butane — BLE central role over
+  C++/WinRT. Unlike Linux (butane_bluez, a Dart-only shim over the pure-Dart
+  butane_dart_bluez), Windows needs a native plugin: D-Bus is a wire protocol
+  Dart speaks over a socket, while WinRT is an in-process COM ABI whose GATT
+  events must be marshalled off arbitrary MTA thread-pool threads.
+version: 0.0.1
+homepage: https://github.com/nicholasspencer/butane
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  butane_platform_interface:
+    path: ../butane_platform_interface
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  plugin:
+    implements: butane_platform_interface
+    platforms:
+      windows:
+        # The C API shim, NOT the internal C++ class. Flutter derives the
+        # generated registrant's #include path and RegisterWithRegistrar symbol
+        # from this name, and only `windows/include/butane_windows/
+        # butane_windows_plugin_c_api.h` is public — `butane_windows_plugin.h`
+        # is an internal header. Naming the C++ class here fails the example
+        # build with C1083 (cannot open include file).
+        pluginClass: ButaneWindowsPluginCApi
+        dartPluginClass: ButaneWindows

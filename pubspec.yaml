@@ -25,6 +25,8 @@ workspace:
   - packages/butane_android
   - packages/butane_harness
   - packages/butane_grid_assets
+  - packages/butane_windows
+  - packages/butane_windows/example
   - packages/butane/example
   - packages/butane_core_bluetooth/example
   - packages/butane_android/example
