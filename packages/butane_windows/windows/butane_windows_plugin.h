@@ -1,29 +1,126 @@
 #ifndef FLUTTER_PLUGIN_BUTANE_WINDOWS_PLUGIN_H_
 #define FLUTTER_PLUGIN_BUTANE_WINDOWS_PLUGIN_H_
 
-#include <flutter/method_channel.h>
+#include "Api.gen.h"
+
 #include <flutter/plugin_registrar_windows.h>
 
 #include <memory>
 
 namespace butane_windows {
 
-class ButaneWindowsPlugin : public flutter::Plugin {
+class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
  public:
-  static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
-
+  static void RegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar);
   ButaneWindowsPlugin();
+  ~ButaneWindowsPlugin() override;
 
-  virtual ~ButaneWindowsPlugin();
-
-  // Disallow copy and assign.
   ButaneWindowsPlugin(const ButaneWindowsPlugin&) = delete;
   ButaneWindowsPlugin& operator=(const ButaneWindowsPlugin&) = delete;
 
-  // Called when a method is called on this plugin's channel from Dart.
-  void HandleMethodCall(
-      const flutter::MethodCall<flutter::EncodableValue> &method_call,
-      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void State(const ClientSession* session,
+             std::function<void(ErrorOr<ClientState> reply)> result) override;
+  void Scan(const ClientSession* session,
+            const flutter::EncodableList* for_services,
+            std::function<void(std::optional<FlutterError> reply)> result)
+      override;
+  void CancelScan(
+      const ClientSession* session,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void Peripherals(
+      const ClientSession* session,
+      const flutter::EncodableList& peripheral_identifiers,
+      std::function<void(ErrorOr<flutter::EncodableList> reply)> result)
+      override;
+  void ConnectedPeripherals(
+      const ClientSession* session,
+      const flutter::EncodableList& service_uuids,
+      std::function<void(ErrorOr<flutter::EncodableList> reply)> result)
+      override;
+  void Connect(
+      const PeripheralSession& session,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void CancelConnection(
+      const PeripheralSession& session,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void ConnectionState(
+      const PeripheralSession& session,
+      std::function<void(ErrorOr<butane_windows::ConnectionState> reply)> result)
+      override;
+  void DiscoverServices(
+      const PeripheralSession& session,
+      const flutter::EncodableList* service_uuids,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void Services(
+      const PeripheralSession& session,
+      std::function<void(ErrorOr<flutter::EncodableList> reply)> result)
+      override;
+  void DiscoverCharacteristics(
+      const PeripheralSession& session, const std::string& service_uuid,
+      const flutter::EncodableList* characteristic_uuids,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void Characteristics(
+      const PeripheralSession& session, const std::string& service_uuid,
+      std::function<void(ErrorOr<flutter::EncodableList> reply)> result)
+      override;
+  void ReadCharacteristic(
+      const PeripheralSession& session, const std::string& service_uuid,
+      const std::string& characteristic_uuid,
+      std::function<void(ErrorOr<std::vector<uint8_t>> reply)> result) override;
+  void WriteCharacteristic(
+      const PeripheralSession& session, const std::string& service_uuid,
+      const std::string& characteristic_uuid,
+      const std::vector<uint8_t>& value, bool without_response,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void ObserveCharacteristic(
+      bool observe, const PeripheralSession& session,
+      const std::string& service_uuid,
+      const std::string& characteristic_uuid,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void ReadDescriptor(
+      const PeripheralSession& session, const std::string& service_uuid,
+      const std::string& characteristic_uuid,
+      const std::string& descriptor_uuid,
+      std::function<void(ErrorOr<std::vector<uint8_t>> reply)> result) override;
+  void WriteDescriptor(
+      const PeripheralSession& session, const std::string& service_uuid,
+      const std::string& characteristic_uuid,
+      const std::string& descriptor_uuid, const std::vector<uint8_t>& value,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void ReadRssi(const PeripheralSession& session,
+                std::function<void(ErrorOr<int64_t> reply)> result) override;
+  void RequestMtu(const PeripheralSession& session, int64_t mtu,
+                  std::function<void(ErrorOr<int64_t> reply)> result) override;
+  void PeripheralManagerState(
+      const PeripheralManagerSession& session,
+      std::function<void(ErrorOr<ClientState> reply)> result) override;
+  void StartAdvertising(
+      const PeripheralManagerSession& session, const std::string* local_name,
+      const flutter::EncodableList* service_uuids,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void StopAdvertising(
+      const PeripheralManagerSession& session,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void AddService(
+      const PeripheralManagerSession& session, const MutableService& service,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void RemoveService(
+      const PeripheralManagerSession& session,
+      const std::string& service_uuid,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void RemoveAllServices(
+      const PeripheralManagerSession& session,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void RespondToRequest(
+      const PeripheralManagerSession& session, int64_t request_id,
+      const AttResult& request_result, const std::vector<uint8_t>* value,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void UpdateValue(
+      const PeripheralManagerSession& session,
+      const std::string& service_uuid,
+      const std::string& characteristic_uuid,
+      const std::vector<uint8_t>& value,
+      std::function<void(ErrorOr<bool> reply)> result) override;
 };
 
 }  // namespace butane_windows

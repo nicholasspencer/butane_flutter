@@ -138,16 +138,13 @@ enum class AttResult(val raw: Int) {
  * device. If omitted, the default adapter is used.
  *
  * Generated class from Pigeon that represents data sent in messages.
- * This class should not be extended by any user class outside of the generated file.
  */
-sealed class Session 
-/** Generated class from Pigeon that represents data sent in messages. */
 data class ClientSession (
   val peripheralIdentifier: String? = null,
   val clientIdentifier: String? = null,
   val adapterIdentifier: String? = null,
   val restorationIdentifier: String? = null
-) : Session()
+)
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): ClientSession {
@@ -184,7 +181,7 @@ data class PeripheralSession (
   val clientIdentifier: String? = null,
   val adapterIdentifier: String? = null,
   val restorationIdentifier: String? = null
-) : Session()
+)
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): PeripheralSession {
@@ -220,7 +217,7 @@ data class PeripheralManagerSession (
   val clientIdentifier: String? = null,
   val adapterIdentifier: String? = null,
   val restorationIdentifier: String? = null
-) : Session()
+)
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): PeripheralManagerSession {
@@ -360,16 +357,11 @@ data class ScanResult (
   override fun hashCode(): Int = toList().hashCode()
 }
 
-/**
- * Generated class from Pigeon that represents data sent in messages.
- * This class should not be extended by any user class outside of the generated file.
- */
-sealed class AttributeData 
 /** Generated class from Pigeon that represents data sent in messages. */
 data class Service (
   val uuid: String,
   val isPrimary: Boolean
-) : AttributeData()
+)
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): Service {
@@ -402,7 +394,7 @@ data class Characteristic (
   val value: ByteArray? = null,
   val descriptors: List<Descriptor?>? = null,
   val properties: CharacteristicProperty? = null
-) : AttributeData()
+)
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): Characteristic {
@@ -437,7 +429,7 @@ data class Characteristic (
 data class Descriptor (
   val uuid: String,
   val value: ByteArray? = null
-) : AttributeData()
+)
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): Descriptor {
@@ -926,7 +918,7 @@ interface ButaneHostApi {
   fun addService(session: PeripheralManagerSession, service: MutableService, callback: (Result<Unit>) -> Unit)
   fun removeService(session: PeripheralManagerSession, serviceUuid: String, callback: (Result<Unit>) -> Unit)
   fun removeAllServices(session: PeripheralManagerSession, callback: (Result<Unit>) -> Unit)
-  fun respondToRequest(session: PeripheralManagerSession, requestId: Long, result: AttResult, value: ByteArray?, callback: (Result<Unit>) -> Unit)
+  fun respondToRequest(session: PeripheralManagerSession, requestId: Long, requestResult: AttResult, value: ByteArray?, callback: (Result<Unit>) -> Unit)
   fun updateValue(session: PeripheralManagerSession, serviceUuid: String, characteristicUuid: String, value: ByteArray, callback: (Result<Boolean>) -> Unit)
 
   companion object {
@@ -1459,9 +1451,9 @@ interface ButaneHostApi {
             val args = message as List<Any?>
             val sessionArg = args[0] as PeripheralManagerSession
             val requestIdArg = args[1] as Long
-            val resultArg = args[2] as AttResult
+            val requestResultArg = args[2] as AttResult
             val valueArg = args[3] as ByteArray?
-            api.respondToRequest(sessionArg, requestIdArg, resultArg, valueArg) { result: Result<Unit> ->
+            api.respondToRequest(sessionArg, requestIdArg, requestResultArg, valueArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(ApiPigeonUtils.wrapError(error))

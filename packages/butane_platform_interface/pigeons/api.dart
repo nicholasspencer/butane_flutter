@@ -1,5 +1,12 @@
 import 'package:pigeon/pigeon.dart';
 
+@ConfigurePigeon(
+  PigeonOptions(
+    cppHeaderOut: '../butane_windows/windows/Api.gen.h',
+    cppSourceOut: '../butane_windows/windows/Api.gen.cpp',
+    cppOptions: CppOptions(namespace: 'butane_windows'),
+  ),
+)
 enum ClientState {
   unknown,
   resetting,
@@ -27,9 +34,7 @@ enum ConnectionState {
 /// The [adapterIdentifier] is the identifier of the adapter that discovered the
 /// peripheral. This is useful when multiple adapters are available on the same
 /// device. If omitted, the default adapter is used.
-sealed class Session {}
-
-class ClientSession extends Session {
+class ClientSession {
   ClientSession({
     this.peripheralIdentifier,
     this.clientIdentifier,
@@ -46,7 +51,7 @@ class ClientSession extends Session {
   final String? restorationIdentifier;
 }
 
-class PeripheralSession extends Session {
+class PeripheralSession {
   PeripheralSession({
     required this.peripheralIdentifier,
     this.clientIdentifier,
@@ -63,7 +68,7 @@ class PeripheralSession extends Session {
   final String? restorationIdentifier;
 }
 
-class PeripheralManagerSession extends Session {
+class PeripheralManagerSession {
   PeripheralManagerSession({
     this.clientIdentifier,
     this.adapterIdentifier,
@@ -128,9 +133,7 @@ class ScanResult {
   final AdvertisementData advertisementData;
 }
 
-sealed class AttributeData {}
-
-class Service extends AttributeData {
+class Service {
   Service({
     required this.uuid,
     this.isPrimary = false,
@@ -141,7 +144,7 @@ class Service extends AttributeData {
   final bool isPrimary;
 }
 
-class Characteristic extends AttributeData {
+class Characteristic {
   Characteristic({
     required this.uuid,
     this.value,
@@ -158,7 +161,7 @@ class Characteristic extends AttributeData {
   final CharacteristicProperty? properties;
 }
 
-class Descriptor extends AttributeData {
+class Descriptor {
   Descriptor({
     required this.uuid,
     this.value,
@@ -477,7 +480,7 @@ abstract class ButaneHostApi {
   void respondToRequest({
     required PeripheralManagerSession session,
     required int requestId,
-    required AttResult result,
+    required AttResult requestResult,
     Uint8List? value,
   });
 

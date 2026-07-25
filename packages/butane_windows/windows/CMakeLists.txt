@@ -18,6 +18,8 @@ set(PLUGIN_NAME "butane_windows_plugin")
 
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
+  "Api.gen.cpp"
+  "Api.gen.h"
   "butane_windows_plugin.cpp"
   "butane_windows_plugin.h"
   "butane_conversions.cpp"
@@ -83,7 +85,6 @@ FetchContent_MakeAvailable(googletest)
 # The plugin's C API is not very useful for unit testing, so build the sources
 # directly into the test binary rather than using the DLL.
 add_executable(${TEST_RUNNER}
-  test/butane_windows_plugin_test.cpp
   test/butane_conversions_test.cpp
   ${PLUGIN_SOURCES}
 )

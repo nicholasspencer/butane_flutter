@@ -171,13 +171,7 @@ enum AttResult: Int {
 /// device. If omitted, the default adapter is used.
 ///
 /// Generated class from Pigeon that represents data sent in messages.
-/// This protocol should not be extended by any user class outside of the generated file.
-protocol Session {
-
-}
-
-/// Generated class from Pigeon that represents data sent in messages.
-struct ClientSession: Session {
+struct ClientSession: Hashable {
   var peripheralIdentifier: String? = nil
   var clientIdentifier: String? = nil
   var adapterIdentifier: String? = nil
@@ -214,7 +208,7 @@ struct ClientSession: Session {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct PeripheralSession: Session {
+struct PeripheralSession: Hashable {
   var peripheralIdentifier: String
   var clientIdentifier: String? = nil
   var adapterIdentifier: String? = nil
@@ -251,7 +245,7 @@ struct PeripheralSession: Session {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct PeripheralManagerSession: Session {
+struct PeripheralManagerSession: Hashable {
   var clientIdentifier: String? = nil
   var adapterIdentifier: String? = nil
   var restorationIdentifier: String? = nil
@@ -395,13 +389,7 @@ struct ScanResult: Hashable {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-/// This protocol should not be extended by any user class outside of the generated file.
-protocol AttributeData {
-
-}
-
-/// Generated class from Pigeon that represents data sent in messages.
-struct Service: AttributeData {
+struct Service: Hashable {
   var uuid: String
   var isPrimary: Bool
 
@@ -430,7 +418,7 @@ struct Service: AttributeData {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct Characteristic: AttributeData {
+struct Characteristic: Hashable {
   var uuid: String
   var value: FlutterStandardTypedData? = nil
   var descriptors: [Descriptor?]? = nil
@@ -467,7 +455,7 @@ struct Characteristic: AttributeData {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
-struct Descriptor: AttributeData {
+struct Descriptor: Hashable {
   var uuid: String
   var value: FlutterStandardTypedData? = nil
 
@@ -920,7 +908,7 @@ protocol ButaneHostApi {
   func addService(session: PeripheralManagerSession, service: MutableService, completion: @escaping (Result<Void, Error>) -> Void)
   func removeService(session: PeripheralManagerSession, serviceUuid: String, completion: @escaping (Result<Void, Error>) -> Void)
   func removeAllServices(session: PeripheralManagerSession, completion: @escaping (Result<Void, Error>) -> Void)
-  func respondToRequest(session: PeripheralManagerSession, requestId: Int64, result: AttResult, value: FlutterStandardTypedData?, completion: @escaping (Result<Void, Error>) -> Void)
+  func respondToRequest(session: PeripheralManagerSession, requestId: Int64, requestResult: AttResult, value: FlutterStandardTypedData?, completion: @escaping (Result<Void, Error>) -> Void)
   func updateValue(session: PeripheralManagerSession, serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Bool, Error>) -> Void)
 }
 
@@ -1404,9 +1392,9 @@ class ButaneHostApiSetup {
         let args = message as! [Any?]
         let sessionArg = args[0] as! PeripheralManagerSession
         let requestIdArg = args[1] as! Int64
-        let resultArg = args[2] as! AttResult
+        let requestResultArg = args[2] as! AttResult
         let valueArg: FlutterStandardTypedData? = nilOrValue(args[3])
-        api.respondToRequest(session: sessionArg, requestId: requestIdArg, result: resultArg, value: valueArg) { result in
+        api.respondToRequest(session: sessionArg, requestId: requestIdArg, requestResult: requestResultArg, value: valueArg) { result in
           switch result {
           case .success:
             reply(wrapResult(nil))
