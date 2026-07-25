@@ -1,52 +1,63 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to agents working in this repository.
 
 ## What This Is
 
-Butane is a Flutter BLE (Bluetooth Low Energy) plugin implementing the Central role. It supports iOS, macOS, and Android (Android is a stub). It uses a federated plugin architecture with Pigeon for Dart↔native communication.
+Butane is a Flutter BLE (Bluetooth Low Energy) library supporting central and peripheral roles on iOS, macOS, Linux, and Android. It uses federated platform implementations and Pigeon for Flutter-to-native communication.
+
+The Android implementation covers permissions, scanning, advertising, adapter state, connection management, GATT service and characteristic discovery, GATT reads and writes, notifications, and GATT server behavior.
 
 ## Monorepo Structure
 
-Uses **Dart pub workspaces** to manage four packages under `packages/`:
+The Dart pub workspace contains nine packages under `packages/`:
 
-- **butane** — Public API ("porcelain" layer). Entry point: `lib/butane.dart`
-- **butane_platform_interface** — Abstract interface + Pigeon-generated channels. Pigeon source of truth: `pigeons/api.dart`
-- **butane_core_bluetooth** — iOS/macOS native implementation (Swift, wraps CoreBluetooth)
-- **butane_android** — Android native implementation (Kotlin, currently stub)
+- `butane` — Flutter-facing porcelain API.
+- `butane_platform_interface` — abstract platform interface and Pigeon channels.
+- `butane_core_bluetooth` — iOS/macOS CoreBluetooth implementation.
+- `butane_android` — complete Android Kotlin implementation for central and peripheral BLE roles.
+- `butane_bluez` — Flutter Linux implementation through BlueZ.
+- `butane_dart` — Flutter-free reactive BLE API.
+- `butane_dart_bluez` — Flutter-free BlueZ backend.
+- `butane_harness` — dual-role Flutter integration harness exposed through Leonard.
+- `butane_grid_assets` — grid burn asset, follower launchers, scripted scenarios, and reports.
 
 ## Build Commands
 
-```bash
-dart pub get                       # Install deps (single resolution at root)
-./tool/gen_api.sh                  # Regenerate Pigeon channels (Dart, Swift, Kotlin)
-flutter analyze                    # Lint (in any package or example dir)
-flutter test                       # Run tests (in a package dir)
-flutter test path/to/test.dart     # Run a single test
-```
+The grid packages use private workspace dependencies. On a provisioned Gas City machine, generate the gitignored machine-local overrides before resolving:
 
-## Code Generation
+    grid dart link
+    dart pub get
 
-Pigeon generates the method channel layer from `packages/butane_platform_interface/pigeons/api.dart`. Running `./tool/gen_api.sh` outputs:
-- Dart: `packages/butane_platform_interface/lib/src/channels/api.g.dart`
-- Swift: `packages/butane_core_bluetooth/darwin/Classes/Api.gen.swift`
-- Kotlin: `packages/butane_android/android/src/main/kotlin/com/nicospencer/butane_android/Api.gen.kt`
+Run Flutter package checks from the package being changed:
 
-After modifying `pigeons/api.dart`, always regenerate.
+    cd packages/butane
+    flutter analyze
+    flutter test
+
+Run the pure-Dart burn asset checks with the Dart runner:
+
+    cd packages/butane_grid_assets
+    dart analyze
+    dart test
+
+Regenerate Pigeon channels after changing `packages/butane_platform_interface/pigeons/api.dart`:
+
+    ./tool/gen_api.sh
 
 ## Architecture
 
-```
-App → butane (Porcelain) → butane_platform_interface → Method Channels (Pigeon) → Native (Swift/Kotlin)
-```
+Flutter applications use `butane` → `butane_platform_interface` → Pigeon method channels → `butane_core_bluetooth`, `butane_android`, or `butane_bluez`.
 
-**Dart porcelain layer** (`packages/butane/lib/src/porcelain/`): `CentralManager` is the main entry point. It manages scanning, peripheral discovery, and exposes `Peripheral` objects with `Service`/`Characteristic` trees. Uses `PlatformStreamController` for bidirectional stream communication with the platform.
+Flutter-free applications use `butane_dart` → a backend such as `butane_dart_bluez`; this path does not depend on Flutter or Pigeon.
 
-**Native layer** (Swift): `ButaneCoreBluetoothPlugin` implements `ButaneHostApi`. `CentralManager` wraps `CBCentralManager`. `PeripheralActor` is a Swift actor managing per-peripheral state with continuations for async callbacks.
+Cross-device burns use `butane_grid_assets` to lease and launch a `butane_harness` follower, launch the local harness role, and drive both harnesses through Leonard over their Dart VM-service endpoints. See `docs/burn-workflow.md`.
 
-**Session model**: Uses `Session`/`PeripheralSession` with identifiers (client, peripheral, adapter, restoration) to support multiple clients on the same adapter.
+## Code Generation
+
+Pigeon generates the method channel layer from `packages/butane_platform_interface/pigeons/api.dart`. Running `./tool/gen_api.sh` updates the generated Dart, Swift, and Kotlin channels. Always regenerate them after changing the Pigeon source.
 
 ## Lint Rules
 
-- Trailing commas are **required** (enforced as error)
-- Strict casts, inference, and raw types are all enabled
+- Trailing commas are required and enforced as errors.
+- Strict casts, inference, and raw types are enabled.

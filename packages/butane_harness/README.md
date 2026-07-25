@@ -1,45 +1,20 @@
 # butane_harness
 
-Flutter app that hosts a Butane BLE role (central **or** peripheral)
-behind a WebSocket control plane, so that
-[`butane_coordinator`](../butane_coordinator) can drive it through
-scripted integration scenarios. This is **integration-test
-scaffolding**, not a product.
+A dual-role Flutter integration app for exercising Butane over real BLE radios. `ROLE=central` exposes the central command registry; `ROLE=peripheral` exposes the peripheral registry. `ButaneLeonardExtension` publishes that registry as `ext.exploration.butane.*` tools and publishes role state through perception on the Dart VM service.
 
-The harness imports `butane` directly but also pins direct deps on
-`butane_core_bluetooth` and `butane_platform_interface` — Flutter's
-Dart plugin registrant only walks direct dependencies when wiring up
-`dartPluginClass`, so the indirect path through `butane`'s
-`default_package` isn't enough.
-
-## Two transport modes
-
-- **Server mode** — harness listens on a local port; the coordinator
-  connects in. Uses `nsd` for mDNS advertisement on the LAN.
-- **Client-bridge mode** — harness dials out to a relay (see
-  [`tool/ws_relay.dart`](../../tool/ws_relay.dart)), useful when
-  harness and coordinator can't reach each other directly.
+This package is integration scaffolding, not a product. It directly depends on the platform packages needed by Flutter plugin registration.
 
 ## Configuration
 
-`HarnessConfig.fromEnvironment()` reads three flags (dart-defines first,
-runtime env as fallback):
+`HarnessConfig.fromEnvironment()` reads one required value:
 
-| Flag           | Required | Meaning |
-|----------------|----------|---------|
-| `ROLE`         | yes      | `central` or `peripheral` |
-| `WS_PORT`      | yes      | Port the harness listens on (server mode) |
-| `WS_RELAY_URL` | no       | If set, dial this relay instead of listening (used with [`tool/ws_relay.dart`](../../tool/ws_relay.dart) when the device can't accept inbound connections) |
+| Value | Meaning |
+|---|---|
+| `ROLE=central` | Scan, connect, discover, read, write, subscribe, and disconnect. |
+| `ROLE=peripheral` | Configure services, advertise, answer ATT requests, and publish notifications. |
 
-iOS must pass these as `--dart-define` at build time (no runtime env).
-macOS accepts them via `open -n ... --env`. Linux accepts them via
-`env FLAG=VALUE ./butane_harness`.
+Use `--dart-define=ROLE=<role>` on iOS. Desktop launchers may set `ROLE` in the process environment. Use debug or profile mode so the app exposes the Dart VM service.
 
-## Running a burn
+## Burn integration
 
-Harnesses are usually launched by the `/burn` skill, which handles
-selector-addressed device launching, coordinator dispatch, and report
-collection in `.burns/`. See
-[`docs/burn-workflow.md`](../../docs/burn-workflow.md) for the full
-operational walkthrough — git remote setup, SSH orchestration,
-per-platform launch commands, and report artifacts.
+`butane_grid_assets` launches the harness, scrapes its `GRID_VM_URI=` readiness sentinel, and drives its Leonard extension. See `docs/burn-workflow.md` for the current host/follower workflow.

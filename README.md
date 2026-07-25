@@ -23,18 +23,21 @@ This repo is a Dart pub workspace. Packages live under `packages/`:
 
 | Package | Role |
 |---------|------|
-| [`butane`](packages/butane) | Public API ("porcelain"). Apps depend on this. |
-| [`butane_platform_interface`](packages/butane_platform_interface) | Abstract platform interface + Pigeon-generated channels. |
-| [`butane_core_bluetooth`](packages/butane_core_bluetooth) | iOS / macOS implementation via CoreBluetooth. |
-| [`butane_bluez`](packages/butane_bluez) | Linux implementation via BlueZ. |
-| [`butane_android`](packages/butane_android) | Android implementation (Kotlin). |
-| [`butane_harness`](packages/butane_harness) | Integration-test harness app (central or peripheral role, WebSocket-controlled). |
-| [`butane_coordinator`](packages/butane_coordinator) | CLI that drives two harness instances through scripted scenarios. |
+| [`butane`](packages/butane) | Flutter-facing porcelain API. |
+| [`butane_platform_interface`](packages/butane_platform_interface) | Abstract platform interface and Pigeon channels. |
+| [`butane_core_bluetooth`](packages/butane_core_bluetooth) | iOS/macOS CoreBluetooth implementation. |
+| [`butane_android`](packages/butane_android) | Complete Android Kotlin implementation for central and peripheral BLE roles. |
+| [`butane_bluez`](packages/butane_bluez) | Flutter Linux implementation through BlueZ. |
+| [`butane_dart`](packages/butane_dart) | Flutter-free reactive BLE API. |
+| [`butane_dart_bluez`](packages/butane_dart_bluez) | Flutter-free BlueZ backend. |
+| [`butane_harness`](packages/butane_harness) | Dual-role Flutter integration harness driven through Leonard. |
+| [`butane_grid_assets`](packages/butane_grid_assets) | Grid burn domain: follower launchers, scripted scenarios, and reports. |
 
 ## Getting started
 
 ```bash
-dart pub get                        # single resolution across the workspace
+grid dart link                     # generate machine-local workspace overrides
+dart pub get                       # resolve the workspace
 ```
 
 Start with `packages/butane/example/` for a runnable demo, and see
@@ -43,9 +46,16 @@ Start with `packages/butane/example/` for a runnable demo, and see
 ## Developing
 
 ```bash
-./tool/gen_api.sh            # regenerate Pigeon channels (Dart, Swift, Kotlin)
-flutter analyze              # run from any package or example dir
-flutter test                 # run from a package dir
+./tool/gen_api.sh                   # regenerate Pigeon channels
+
+cd packages/butane
+flutter analyze
+flutter test
+
+cd ../..
+cd packages/butane_grid_assets
+dart analyze
+dart test
 ```
 
 After editing
@@ -69,9 +79,9 @@ Additional notes live under [`docs/`](docs):
   acting as central against dual-mode peers (Apple devices). Without this,
   bluetoothd will try BR/EDR and GATT will never resolve.
 - [`docs/burn-workflow.md`](docs/burn-workflow.md) — end-to-end
-  operational walkthrough for cross-device BLE integration runs: git
-  remote setup, SSH orchestration, harness launch on each platform,
-  coordinator invocation, and report artifacts.
+  operational walkthrough for cross-device BLE integration runs: grid
+  station setup, follower leasing, Leonard/Dart VM-service driving, and
+  teardown.
 - [`docs/harness-verification.md`](docs/harness-verification.md) —
   architecture diagrams and the 15-step verification report.
 - [`docs/bluetoothctl.md`](docs/bluetoothctl.md) — `bluetoothctl` cheat
