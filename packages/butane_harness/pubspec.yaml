@@ -29,10 +29,9 @@ dependencies:
   # The extension contract (LeonardTool/ToolResult/BusyState/…) —
   # leonard_flutter re-exports only LeonardExtension.
   leonard_contract: ^0.1.0
-  # Keep the hosted constraint as the declared API range. The root exception
-  # override selects the immutable post-extensionsReady commit until Leonard
-  # publishes that readiness barrier.
-  leonard_flutter: ^0.1.7
+  # Hosted leonard_flutter 0.1.8 includes the extensionsReady barrier used by
+  # the harness before it publishes its VM-service endpoint.
+  leonard_flutter: ^0.1.8
 dev_dependencies:
   flutter_test:
     sdk: flutter
