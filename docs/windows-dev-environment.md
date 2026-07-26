@@ -112,9 +112,6 @@ Then `ssh yoga-win` from the Mac.
 **Deps**
 - [x] Router-side DHCP reservation for `6c:94:66:ae:49:26` (operator) — the
       pinned `192.168.4.44` in `~/.ssh/config` is now stable
-- [x] `pubspec_overrides.yaml` on ADR-0003 tag_pattern solving; `flutter pub
-      get` resolves the full `grid_*` closure from release tags. See
-      [Dependency resolution](#dependency-resolution--pubspec_overridesyaml)
 - [x] `url.https://github.com/.insteadOf git@github.com:` — anonymous fetch of
       the public org repos, no credentials on the box
 
@@ -407,16 +404,13 @@ the Linux half — use `fvm install <version>` and `fvm global <version>`. Note
 that an interrupted `fvm install` leaves a partial directory under
 `versions\`; clear it with `fvm remove <version>` before retrying.
 
-## Dependency resolution — hosted first, two temporary exceptions
+## Dependency resolution — fully hosted
 
 Published org dependencies are ordinary hosted constraints in package
-pubspecs. Do not run `grid dart link` and do not restore sibling-checkout paths.
-
-Two exceptions remain. `grid_assets` is not published (pow-e70); its v0.1.0 tag
-requires the identical seven-entry Grid override closure. Hosted
-`leonard_flutter 0.1.7` predates `extensionsReady`, so its override selects
-immutable commit `22d11c4fb01d`. Remove each exception at its named hosted
-release boundary.
+pubspecs, and the Windows environment resolves fully from hosted releases.
+`grid_assets 0.1.0` and `leonard_flutter 0.1.8` have crossed the release
+boundaries that previously required local overrides. Do not run `grid dart link`
+and do not restore sibling-checkout paths.
 
 `genesis_perception 0.1.3` and `genesis_tree 0.1.5` are published and
 compatible. `grid_cli` resolves hosted at ^0.2.0; other directly imported
@@ -429,45 +423,6 @@ anonymously on a machine without an org SSH key:
 ```powershell
 git config --global url."https://github.com/".insteadOf "git@github.com:"
 ```
-
-<details>
-<summary><code>C:\Users\nicks\butane_flutter\pubspec_overrides.yaml</code></summary>
-
-```yaml
-dependency_overrides:
-  # TODO(pow-e70): delete this closure when grid_assets is hosted at ^0.1.0.
-  grid_assets:
-    git: {url: git@github.com:memento-engineering/power_station.git, tag_pattern: "grid_assets-v{{version}}", path: packages/grid_assets}
-    version: ^0.1.0
-  dart_grid_assets:
-    git: {url: git@github.com:memento-engineering/power_station.git, tag_pattern: "dart_grid_assets-v{{version}}", path: packages/dart_grid_assets}
-    version: ^0.1.0
-  federated_grid_assets:
-    git: {url: git@github.com:memento-engineering/power_station.git, tag_pattern: "federated_grid_assets-v{{version}}", path: packages/federated_grid_assets}
-    version: ^0.1.0
-  beads_dart:
-    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: "beads_dart-v{{version}}", path: packages/beads_dart}
-    version: ^0.1.0
-  grid_engine:
-    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: "grid_engine-v{{version}}", path: packages/grid_engine}
-    version: ^0.1.0
-  grid_runtime:
-    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: "grid_runtime-v{{version}}", path: packages/grid_runtime}
-    version: ^0.1.0
-  grid_sdk:
-    git: {url: git@github.com:memento-engineering/the_grid.git, tag_pattern: "grid_sdk-v{{version}}", path: packages/grid_sdk}
-    version: ^0.1.0
-
-  # Hosted leonard_flutter 0.1.7 predates the extensionsReady barrier.
-  # Retire this override when a hosted Leonard release includes that API.
-  leonard_flutter:
-    git:
-      url: https://github.com/memento-engineering/lenny.git
-      ref: 22d11c4fb01d
-      path: packages/leonard_flutter
-```
-
-</details>
 
 ## Build Workflow
 
