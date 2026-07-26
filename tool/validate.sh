@@ -46,8 +46,8 @@ validate_repo() {
     echo 'validate.sh: expected tracked dependency declaration: genesis_perception: ^0.1.3' >&2
     return 1
   fi
-  if ! grep -Eq '^  leonard_flutter: \^0\.1\.7$' packages/butane_harness/pubspec.yaml; then
-    echo 'validate.sh: expected tracked dependency declaration: leonard_flutter: ^0.1.7' >&2
+  if ! grep -Eq '^  leonard_flutter: \^0\.1\.8$' packages/butane_harness/pubspec.yaml; then
+    echo 'validate.sh: expected tracked dependency declaration: leonard_flutter: ^0.1.8' >&2
     return 1
   fi
 }
