@@ -1,0 +1,26 @@
+import 'dart:io';
+
+import 'package:test/test.dart';
+
+void main() {
+  test('burn is vended as an operator skill', () {
+    final manifest = File('extension/mcp/config.yaml').readAsStringSync();
+    final skill = File(
+      'extension/station_overlay/.claude/skills/burn/SKILL.md',
+    ).readAsStringSync();
+    expect(manifest, contains('id: burn'));
+    expect(manifest, contains('audience: operator'));
+    expect(skill, contains('name: burn'));
+    expect(skill, contains('bd create'));
+    expect(skill, contains('bd update'));
+    expect(skill, contains('bd show'));
+    for (final forbidden in [
+      'runGrid',
+      'GridDelegate',
+      'butane_station burn',
+      'dart run',
+    ]) {
+      expect(skill, isNot(contains(forbidden)));
+    }
+  });
+}

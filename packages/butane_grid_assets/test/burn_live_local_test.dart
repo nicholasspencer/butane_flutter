@@ -4,7 +4,7 @@ library;
 // The BURN end-to-end LIVE-LOCAL (the away-run M-C milestone): every seam that
 // burn_test.dart drives with a fake is REAL here, on one box —
 //
-//   * a REAL loopback grid_federation `StationServer` (the lessor bus),
+//   * a REAL loopback `StationServer` from `federated_grid_assets`,
 //     handler = `burnDispatchHandler` over a real `ButaneFollowerRunner`;
 //   * a REAL spawned follower daemon (`tool/follower_daemon.dart` under its own
 //     VM service, in its OWN process group — the pipeline-proof app-under-test;
@@ -37,8 +37,9 @@ import 'dart:io';
 import 'package:butane_grid_assets/butane_grid_assets.dart';
 import 'package:grid_assets/grid_assets.dart' show BusLease;
 import 'package:grid_engine/grid_engine.dart';
-import 'package:grid_engine/testing.dart' show FakeRuntimeProvider, bead;
-import 'package:grid_federation/grid_federation.dart';
+import 'package:grid_engine/testing.dart'
+    show FakeRuntimeProvider, FakeTreeContext, stepArgs;
+import 'package:federated_grid_assets/federated_grid_assets.dart';
 import 'package:grid_runtime/grid_runtime.dart'
     show ProcessGroupController, SystemProcessGroupController;
 import 'package:test/test.dart';
@@ -77,27 +78,20 @@ const DriveScenario _liveScenario = DriveScenario(
   name: 'live-local-smoke',
   steps: [
     DriveStep.observe('extensions.grid.data', expectContains: '"readyCount":2'),
-    DriveStep.observe('extensions.grid.data',
-        expectContains: '"readPath":"cli"'),
+    DriveStep.observe('extensions.grid.data', expectContains: '"readPath":"cli"'),
     DriveStep.invoke('grid.ready', expectContains: '"tg-2"'),
   ],
 );
 
-CapabilityContext _ctx({
+/// The burn node's (ambient tree, per-step args) pair — the context rip-out
+/// shape: the [SiblingView] rendezvous rides the tree as an ambient value.
+({FakeTreeContext context, StepArgs args}) _ctx({
   required String nodePath,
   SiblingView siblings = const SiblingView(),
-}) =>
-    CapabilityContext(
-      params: const {},
-      bead: bead('tg-burn'),
-      workspaceDir: '/w/tg-burn',
-      branch: 'grid/tg-burn',
-      baseBranch: 'main',
-      services: const ServiceBundle(),
-      cancel: CancelToken(),
-      nodePath: nodePath,
-      siblings: siblings,
-    );
+}) => (
+  context: FakeTreeContext(values: {SiblingView: siblings}),
+  args: stepArgs(nodePath),
+);
 
 /// Polls until [pid] is gone, or fails after [within].
 Future<void> _expectDead(
@@ -133,7 +127,8 @@ void main() {
 
       const processes = SystemProcessGroupController();
       final launcher = LocalDartFollowerLauncher(
-        daemonEntrypoint: '${Directory.current.path}/tool/follower_daemon.dart',
+        daemonEntrypoint:
+            '${Directory.current.path}/tool/follower_daemon.dart',
         station: _station,
         onLog: log,
       );
@@ -171,7 +166,7 @@ void main() {
           requires: _macRequires,
           onLog: log,
         );
-        expect(registry.formula('burn'), kBurnFormula);
+        expect(registry.circuit('burn'), kBurnCircuit);
 
         // ORDER 1 — burn-follower as a daemon LeaseAllocation over the REAL
         // bus: containment-match this box → lease the slot → dispatch → the
@@ -187,9 +182,10 @@ void main() {
         final fCtx = _ctx(nodePath: _followerPath);
         alloc = follower.createAllocation(
           AllocationContext(
-            capContext: fCtx,
+            treeContext: fCtx.context,
+            args: fCtx.args,
             transport: FakeRuntimeProvider(),
-            address: AllocationAddress('tgdog-s', fCtx.nodePath),
+            address: AllocationAddress('tgdog-s', fCtx.args.nodePath),
             env: const {},
             sink: reports.add,
             kind: StepKind.daemon,
@@ -231,8 +227,8 @@ void main() {
           nodePath: _hostPath,
           siblings: SiblingView(results: {_followerPath: published}),
         );
-        final out = await host.run(hCtx);
-        final report = host.reportFor(hCtx);
+        final out = await host.run(hCtx.context, hCtx.args);
+        final report = host.reportFor(hCtx.args);
         expect(
           out,
           isA<Ok>(),
@@ -249,7 +245,7 @@ void main() {
 
         // TEARDOWN under test — host closes the drive channel; the follower
         // allocation's dispose RELEASES the lease over the REAL bus.
-        await host.teardown(hCtx);
+        await host.teardown(hCtx.args);
         await alloc.dispose();
         expect(server.leases.available, 1,
             reason: 'the released slot is free again on the lessor');

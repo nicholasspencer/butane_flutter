@@ -1,0 +1,9 @@
+name: butane_grid_assets
+version: 1
+skills:
+  - id: burn
+    description: File, refine, and inspect a resident-station cross-device burn.
+    path: station_overlay/.claude/skills/burn/SKILL.md
+    visibility: public
+    audience: operator
+    args: []

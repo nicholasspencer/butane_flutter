@@ -1,5 +1,5 @@
 /// The SERVER-side burn dispatch handler — what a lessor station plugs into
-/// `grid_federation`'s [StationServer] to OWN the `burn` kind (ADR-0011 D3):
+/// the federation bus's station server to OWN the `burn` kind (ADR-0011 D3):
 /// decode the opaque bus payload as a [LaunchSpec], launch the follower app via
 /// the [ButaneFollowerRunner], and return the published [FollowerEndpoint] as
 /// the opaque dispatch result (the rendezvous handoff).
@@ -11,7 +11,8 @@
 /// no-op). This handler wires the LAUNCH half; the lease end reaps.
 library;
 
-import 'package:grid_federation/grid_federation.dart';
+import 'package:federated_grid_assets/federated_grid_assets.dart'
+    show DispatchHandler;
 
 import 'follower.dart';
 
