@@ -23,9 +23,10 @@ validate_repo() {
     return 1
   fi
 
+  # grid_cli left this list when butane_flutter-t9y deleted the ServeCommand
+  # composition (the burn drives through the resident station; no CLI SDK dep).
   for dependency in \
     grid_assets \
-    grid_cli \
     beads_dart \
     grid_engine \
     federated_grid_assets \
