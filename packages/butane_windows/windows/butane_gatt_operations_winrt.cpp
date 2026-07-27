@@ -198,45 +198,44 @@ class WinrtNativeGattOperations final
     }
   }
 
-  static winrt::Windows::Foundation::IAsyncOperation<Resolved>
+  static winrt::Windows::Foundation::IAsyncAction
   Resolve(std::shared_ptr<WinrtNativeGattOperations> owner, uint64_t address,
           const std::string& service_uuid,
-          const std::string& characteristic_uuid) {
-    Resolved resolved;
+          const std::string& characteristic_uuid, Resolved& resolved) {
     resolved.device =
         co_await BluetoothLEDevice::FromBluetoothAddressAsync(address);
-    if (owner->IsClosed() || !resolved.device) co_return resolved;
+    if (owner->IsClosed() || !resolved.device) co_return;
     auto services = co_await resolved.device.GetGattServicesForUuidAsync(
-        winrt::guid(winrt::to_hstring(service_uuid)),
+        winrt::guid(service_uuid),
         BluetoothCacheMode::Uncached);
     if (owner->IsClosed() ||
         services.Status() != GattCommunicationStatus::Success) {
       resolved.status = ConvertStatus(services.Status());
       resolved.protocol = ProtocolError(services);
-      co_return resolved;
+      co_return;
     }
     if (services.Services().Size() != 1) {
-      co_return resolved;
+      co_return;
     }
     resolved.service = services.Services().GetAt(0);
     auto characteristics =
         co_await resolved.service.GetCharacteristicsForUuidAsync(
-            winrt::guid(winrt::to_hstring(characteristic_uuid)),
+            winrt::guid(characteristic_uuid),
             BluetoothCacheMode::Uncached);
     if (owner->IsClosed() ||
         characteristics.Status() != GattCommunicationStatus::Success) {
       resolved.status = ConvertStatus(characteristics.Status());
       resolved.protocol = ProtocolError(characteristics);
       resolved.service = nullptr;
-      co_return resolved;
+      co_return;
     }
     if (characteristics.Characteristics().Size() != 1) {
       resolved.service = nullptr;
-      co_return resolved;
+      co_return;
     }
     resolved.characteristic = characteristics.Characteristics().GetAt(0);
     resolved.status = GattOperationStatus::kSuccess;
-    co_return resolved;
+    co_return;
   }
 
   static winrt::fire_and_forget RunCharacteristicWrite(
@@ -246,8 +245,8 @@ class WinrtNativeGattOperations final
       Completion completion) {
     Resolved resolved;
     try {
-      resolved = co_await Resolve(owner, address, service_uuid,
-                                  characteristic_uuid);
+      co_await Resolve(owner, address, service_uuid,
+                       characteristic_uuid, resolved);
       if (owner->IsClosed()) co_return;
       if (!resolved.characteristic) {
         CloseResolved(resolved);
@@ -279,8 +278,8 @@ class WinrtNativeGattOperations final
       Completion completion) {
     Resolved resolved;
     try {
-      resolved = co_await Resolve(owner, address, service_uuid,
-                                  characteristic_uuid);
+      co_await Resolve(owner, address, service_uuid,
+                       characteristic_uuid, resolved);
       if (owner->IsClosed()) co_return;
       if (!resolved.characteristic) {
         CloseResolved(resolved);
@@ -289,7 +288,7 @@ class WinrtNativeGattOperations final
       }
       auto descriptors =
           co_await resolved.characteristic.GetDescriptorsForUuidAsync(
-              winrt::guid(winrt::to_hstring(descriptor_uuid)),
+              winrt::guid(descriptor_uuid),
               BluetoothCacheMode::Uncached);
       if (owner->IsClosed()) {
         CloseResolved(resolved);
@@ -328,8 +327,8 @@ class WinrtNativeGattOperations final
       ValueCallback on_value, Completion completion) {
     Resolved resolved;
     try {
-      resolved = co_await Resolve(owner, std::get<0>(key), std::get<1>(key),
-                                  std::get<2>(key));
+      co_await Resolve(owner, std::get<0>(key), std::get<1>(key),
+                       std::get<2>(key), resolved);
       if (owner->IsClosed()) co_return;
       if (!resolved.characteristic) {
         CloseResolved(resolved);

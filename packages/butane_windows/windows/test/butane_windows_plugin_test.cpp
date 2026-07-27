@@ -625,8 +625,8 @@ TEST(ButaneWindowsPlugin, ObservePostsValueBeforeFlutterApi) {
   f.runner->RunAll();
   ASSERT_EQ(f.sink->characteristic_values.size(), 1u);
   EXPECT_EQ(f.sink->characteristic_values[0], (std::vector<uint8_t>{4, 5}));
-  EXPECT_EQ(f.sink->characteristics[0].service_uuid(),
-      "0000180d-0000-1000-8000-00805f9b34fb");
+  EXPECT_EQ(f.sink->characteristics[0].uuid(),
+      "00002a37-0000-1000-8000-00805f9b34fb");
 }
 TEST(ButaneWindowsPlugin, UnobserveForwardsDisable) {
   Fixture f;

@@ -465,8 +465,7 @@ void ButaneWindowsPlugin::ObserveCharacteristic(
              value = std::move(event.value)] {
               const Peripheral peripheral(
                   session_copy, ConnectionState::kConnected);
-              const Characteristic attribute(
-                  characteristic, &service, nullptr, nullptr);
+              const Characteristic attribute(characteristic);
               sink->OnCharacteristicValue(peripheral, attribute, value);
             });
       },
