@@ -151,6 +151,7 @@ bool UuidEquals(std::string_view a, std::string_view b) {
 }
 
 void RssiCache::Observe(uint64_t address, int16_t rssi, Clock::time_point at) {
+  const std::scoped_lock lock(mutex_);
   entries_[address] = Entry{rssi, at};
 }
 
@@ -158,6 +159,7 @@ std::optional<int16_t> RssiCache::Get(
     uint64_t address,
     Clock::time_point now,
     std::chrono::milliseconds max_age) const {
+  const std::scoped_lock lock(mutex_);
   const auto it = entries_.find(address);
   if (it == entries_.end()) return std::nullopt;
   const auto age =
@@ -166,10 +168,19 @@ std::optional<int16_t> RssiCache::Get(
   return it->second.rssi;
 }
 
-void RssiCache::Forget(uint64_t address) { entries_.erase(address); }
+void RssiCache::Forget(uint64_t address) {
+  const std::scoped_lock lock(mutex_);
+  entries_.erase(address);
+}
 
-void RssiCache::Clear() { entries_.clear(); }
+void RssiCache::Clear() {
+  const std::scoped_lock lock(mutex_);
+  entries_.clear();
+}
 
-size_t RssiCache::Size() const { return entries_.size(); }
+size_t RssiCache::Size() const {
+  const std::scoped_lock lock(mutex_);
+  return entries_.size();
+}
 
 }  // namespace butane_windows
