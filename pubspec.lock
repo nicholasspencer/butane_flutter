@@ -406,11 +406,12 @@ packages:
     source: hosted
     version: "2.3.2"
   grid_assets:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "/Users/nico/development/engineering.memento/power_station/packages/grid_assets"
-      relative: false
-    source: path
+      name: grid_assets
+      sha256: "18e22c154cff686f25c2396590c8af03ba16c008dbe3f94c436a0efc04358059"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   grid_diagnostics_contract:
     dependency: transitive
