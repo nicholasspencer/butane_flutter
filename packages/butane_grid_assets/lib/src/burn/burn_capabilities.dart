@@ -373,8 +373,9 @@ class BurnHostCapability extends ServiceCapability {
     if (followerTarget == null || followerTarget.isEmpty) {
       return const Failed('follower rendezvous published no target');
     }
-    final centralTarget = localSpec?.target;
-    if (centralTarget == null || centralTarget.isEmpty) {
+    final localRunner = this.localRunner;
+    final centralTarget = localSpec?.target ?? '';
+    if (localRunner != null && centralTarget.isEmpty) {
       return const Failed('two-drive burn published no central target');
     }
     final endpoint = FollowerEndpoint(
@@ -393,7 +394,6 @@ class BurnHostCapability extends ServiceCapability {
     // TWO-DRIVE burn: launch the host's own local harness (the central) and
     // attach the second drive. A local launch failure fails the order —
     // teardown still reaps whatever launched (the runner is once-only).
-    final localRunner = this.localRunner;
     if (localRunner != null) {
       final FollowerEndpoint localEndpoint;
       try {
