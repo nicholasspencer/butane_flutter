@@ -8,6 +8,7 @@
 #include <winrt/base.h>
 
 #include <atomic>
+#include <cstdio>
 #include <map>
 #include <mutex>
 #include <tuple>
@@ -55,11 +56,22 @@ std::vector<uint8_t> BytesFromBuffer(const IBuffer& buffer) {
 }
 
 winrt::guid ParseGuid(const std::string& value) {
-  winrt::guid guid{};
-  const auto text = winrt::to_hstring(value);
-  winrt::check_hresult(
-      IIDFromString(text.c_str(), reinterpret_cast<GUID*>(&guid)));
-  return guid;
+  unsigned long data1 = 0;
+  unsigned int data2 = 0;
+  unsigned int data3 = 0;
+  unsigned int bytes[8]{};
+  const int parsed = sscanf_s(
+      value.c_str(),
+      "%8lx-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x",
+      &data1, &data2, &data3, &bytes[0], &bytes[1], &bytes[2], &bytes[3],
+      &bytes[4], &bytes[5], &bytes[6], &bytes[7]);
+  if (parsed != 11) throw winrt::hresult_invalid_argument();
+  return {static_cast<uint32_t>(data1), static_cast<uint16_t>(data2),
+          static_cast<uint16_t>(data3),
+          {static_cast<uint8_t>(bytes[0]), static_cast<uint8_t>(bytes[1]),
+           static_cast<uint8_t>(bytes[2]), static_cast<uint8_t>(bytes[3]),
+           static_cast<uint8_t>(bytes[4]), static_cast<uint8_t>(bytes[5]),
+           static_cast<uint8_t>(bytes[6]), static_cast<uint8_t>(bytes[7])}};
 }
 
 class WinrtNativeGattOperations final
