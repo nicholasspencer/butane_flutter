@@ -14,6 +14,12 @@ void main() {
     expect(skill, contains('bd create'));
     expect(skill, contains('bd update'));
     expect(skill, contains('bd show'));
+    expect(skill, isNot(contains('--ephemeral')));
+    expect(skill, isNot(contains('--persistent')));
+    expect(
+      skill,
+      contains('New burn requests are persistent from their first `bd create`'),
+    );
     for (final forbidden in [
       'runGrid',
       'GridDelegate',

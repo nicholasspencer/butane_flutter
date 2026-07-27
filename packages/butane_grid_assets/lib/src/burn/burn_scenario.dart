@@ -54,9 +54,9 @@ class DriveStep {
     this.expectContains = '',
     this.on = DriveEndpoint.follower,
     this.caseInsensitive = false,
-  })  : action = DriveAction.observe,
-        tool = '',
-        args = const {};
+  }) : action = DriveAction.observe,
+       tool = '',
+       args = const {};
 
   /// An `invoke <tool>` step (with [args]) asserting the result contains
   /// [expectContains], driven [on] an endpoint (default: the follower). See
@@ -67,8 +67,8 @@ class DriveStep {
     this.expectContains = '',
     this.on = DriveEndpoint.follower,
     this.caseInsensitive = false,
-  })  : action = DriveAction.invoke,
-        path = '';
+  }) : action = DriveAction.invoke,
+       path = '';
 
   /// Whether this step observes a path or invokes a tool.
   final DriveAction action;
@@ -158,6 +158,8 @@ Future<TestReport> runDriveScenario({
   required LeonardDrive drive,
   required DriveScenario scenario,
   required FollowerEndpoint endpoint,
+  required String central,
+  required String follower,
   LeonardDrive? localDrive,
   bool Function()? isCancelled,
 }) async {
@@ -168,7 +170,8 @@ Future<TestReport> runDriveScenario({
     bool passed;
     final target = step.on == DriveEndpoint.local ? localDrive : drive;
     if (target == null) {
-      observed = 'no local drive: scenario step targets the local endpoint '
+      observed =
+          'no local drive: scenario step targets the local endpoint '
           'but the host launched no local harness';
       passed = false;
     } else {
@@ -177,8 +180,9 @@ Future<TestReport> runDriveScenario({
           DriveAction.observe => await target.observe(step.path),
           DriveAction.invoke => await target.invoke(step.tool, step.args),
         };
-        final haystack =
-            step.caseInsensitive ? observed.toLowerCase() : observed;
+        final haystack = step.caseInsensitive
+            ? observed.toLowerCase()
+            : observed;
         final needle = step.caseInsensitive
             ? step.expectContains.toLowerCase()
             : step.expectContains;
@@ -199,6 +203,8 @@ Future<TestReport> runDriveScenario({
   return TestReport(
     scenario: scenario.name,
     endpoint: endpoint.vmServiceUri,
+    central: central,
+    follower: follower,
     steps: results,
     passed: results.isNotEmpty && results.every((r) => r.passed),
   );

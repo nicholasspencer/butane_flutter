@@ -115,27 +115,29 @@ void main() {
       expect(android.launches, isEmpty);
     });
 
-    test('ios without a device id refuses before constructing a launcher',
-        () async {
-      final served = butaneBurnServeHandler(
-        _serveArgs(),
-        (_) {},
-        desktopLauncher: _RecordingLauncher.new,
-      );
+    test(
+      'ios without a device id refuses before constructing a launcher',
+      () async {
+        final served = butaneBurnServeHandler(
+          _serveArgs(),
+          (_) {},
+          desktopLauncher: _RecordingLauncher.new,
+        );
 
-      await expectLater(
-        served.handler(
-          const LaunchSpec(app: 'butane_harness', target: 'ios').toJson(),
-        ),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.message,
-            'message',
-            'burn follower target "ios" requires serve --device-id',
+        await expectLater(
+          served.handler(
+            const LaunchSpec(app: 'butane_harness', target: 'ios').toJson(),
           ),
-        ),
-      );
-    });
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'burn follower target "ios" requires serve --device-id',
+            ),
+          ),
+        );
+      },
+    );
 
     test('macos remains usable without a device id', () async {
       final desktop = _RecordingLauncher();
