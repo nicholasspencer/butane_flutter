@@ -2,17 +2,34 @@
 #define FLUTTER_PLUGIN_BUTANE_WINDOWS_PLUGIN_H_
 
 #include "Api.gen.h"
+#include "butane_central_winrt.h"
 
 #include <flutter/plugin_registrar_windows.h>
 
 #include <memory>
+#include <functional>
 
 namespace butane_windows {
+class PlatformTaskRunner {
+ public:
+  virtual ~PlatformTaskRunner() = default;
+  virtual void PostTask(std::function<void()> task) = 0;
+};
+class FlutterEventSink {
+ public:
+  virtual ~FlutterEventSink() = default;
+  virtual void OnClientState(const std::string* client_identifier,
+                             ClientState state) = 0;
+  virtual void OnScanResult(const ScanResult& scan_result) = 0;
+};
 
 class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar);
   ButaneWindowsPlugin();
+  ButaneWindowsPlugin(std::unique_ptr<CentralBackend> central,
+                      std::unique_ptr<PlatformTaskRunner> platform_task_runner,
+                      std::unique_ptr<FlutterEventSink> event_sink);
   ~ButaneWindowsPlugin() override;
 
   ButaneWindowsPlugin(const ButaneWindowsPlugin&) = delete;
@@ -121,6 +138,12 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
       const std::string& characteristic_uuid,
       const std::vector<uint8_t>& value,
       std::function<void(ErrorOr<bool> reply)> result) override;
+ private:
+  flutter::BinaryMessenger* messenger_ = nullptr;
+  std::unique_ptr<RssiCache> rssi_cache_;
+  std::unique_ptr<PlatformTaskRunner> platform_task_runner_;
+  std::unique_ptr<FlutterEventSink> event_sink_;
+  std::unique_ptr<CentralBackend> central_;
 };
 
 }  // namespace butane_windows

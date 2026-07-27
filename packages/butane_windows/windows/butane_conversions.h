@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstdint>
 #include <optional>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -128,6 +129,7 @@ class RssiCache {
     int16_t rssi;
     Clock::time_point at;
   };
+  mutable std::mutex mutex_;
   std::unordered_map<uint64_t, Entry> entries_;
 };
 

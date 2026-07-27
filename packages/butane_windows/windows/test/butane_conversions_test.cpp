@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <thread>
 
 namespace butane_windows {
 namespace test {
@@ -248,6 +249,21 @@ TEST(RssiCache, ClearEmptiesEverything) {
   cache.Observe(0x2222ULL, -70, t0);
   cache.Clear();
   EXPECT_EQ(cache.Size(), 0u);
+}
+TEST(RssiCache, ConcurrentObserveAndGetIsSafe) {
+  RssiCache cache;
+  const auto now = RssiCache::Clock::now();
+  auto run = [&cache, now](uint64_t address, int16_t final_value) {
+    for (int i = 0; i < 1000; ++i)
+      cache.Observe(address, static_cast<int16_t>(final_value - 1), now);
+    cache.Observe(address, final_value, now);
+  };
+  std::thread a(run, uint64_t{1}, int16_t{-41});
+  std::thread b(run, uint64_t{2}, int16_t{-72});
+  a.join();
+  b.join();
+  EXPECT_EQ(cache.Get(1, now, 30s), -41);
+  EXPECT_EQ(cache.Get(2, now, 30s), -72);
 }
 
 }  // namespace test
