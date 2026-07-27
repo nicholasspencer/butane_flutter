@@ -28,6 +28,10 @@ list(APPEND PLUGIN_SOURCES
   "butane_central.h"
   "butane_central_winrt.cpp"
   "butane_central_winrt.h"
+  "butane_connection.cpp"
+  "butane_connection.h"
+  "butane_connection_winrt.cpp"
+  "butane_connection_winrt.h"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment

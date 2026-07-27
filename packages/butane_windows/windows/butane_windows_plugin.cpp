@@ -1,5 +1,6 @@
 #include "butane_windows_plugin.h"
 #include "butane_central.h"
+#include "butane_connection_winrt.h"
 #define CharacteristicProperty ButaneConversionCharacteristicProperty
 #include "butane_conversions.h"
 #undef CharacteristicProperty
@@ -68,6 +69,11 @@ class GeneratedFlutterEventSink final : public FlutterEventSink {
   void OnScanResult(const ScanResult& value) override {
     api_.OnScanResult(value, [] {}, [](const FlutterError&) {});
   }
+  void OnConnectionState(const Peripheral& peripheral,
+                         ConnectionState state) override {
+    api_.OnConnectionState(peripheral, state, [] {},
+                           [](const FlutterError&) {});
+  }
  private:
   ButaneFlutterApi api_;
 };
@@ -89,6 +95,7 @@ void ButaneWindowsPlugin::RegisterWithRegistrar(
   plugin->rssi_cache_ = std::make_unique<RssiCache>();
   plugin->central_ =
       std::make_unique<WindowsCentralBackend>(*plugin->rssi_cache_);
+  plugin->connection_ = std::make_unique<WindowsConnectionBackend>();
   ButaneHostApi::SetUp(registrar->messenger(), plugin.get());
   registrar->AddPlugin(std::move(plugin));
 }
@@ -96,13 +103,16 @@ void ButaneWindowsPlugin::RegisterWithRegistrar(
 ButaneWindowsPlugin::ButaneWindowsPlugin() {}
 ButaneWindowsPlugin::ButaneWindowsPlugin(
     std::unique_ptr<CentralBackend> central,
+    std::unique_ptr<ConnectionBackend> connection,
     std::unique_ptr<PlatformTaskRunner> runner,
     std::unique_ptr<FlutterEventSink> sink)
     : platform_task_runner_(std::move(runner)),
       event_sink_(std::move(sink)),
-      central_(std::move(central)) {}
+      central_(std::move(central)),
+      connection_(std::move(connection)) {}
 ButaneWindowsPlugin::~ButaneWindowsPlugin() {
   if (central_) central_->StopScan();
+  connection_.reset();
   central_.reset();
   event_sink_.reset();
   platform_task_runner_.reset();
@@ -173,19 +183,55 @@ void ButaneWindowsPlugin::ConnectedPeripherals(
 void ButaneWindowsPlugin::Connect(
     const PeripheralSession& session,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("connect"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError(
+        "invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  if (!connection_) {
+    result(Unimplemented("connect"));
+    return;
+  }
+  connection_->Connect(
+      *address, session,
+      [runner = platform_task_runner_.get(),
+       sink = event_sink_.get()](ConnectionSnapshot snapshot) {
+        runner->PostTask([sink, snapshot = std::move(snapshot)] {
+          const Peripheral peripheral(snapshot.session, snapshot.state);
+          sink->OnConnectionState(peripheral, snapshot.state);
+        });
+      },
+      std::move(result));
 }
 
 void ButaneWindowsPlugin::CancelConnection(
     const PeripheralSession& session,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("cancelConnection"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError(
+        "invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  if (connection_) connection_->Disconnect(*address);
+  result(std::nullopt);
 }
 
 void ButaneWindowsPlugin::ConnectionState(
     const PeripheralSession& session,
     std::function<void(ErrorOr<butane_windows::ConnectionState> reply)> result) {
-  result(Unimplemented("connectionState"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError(
+        "invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  result(connection_ ? connection_->State(*address)
+                     : ConnectionState::kDisconnected);
 }
 
 void ButaneWindowsPlugin::DiscoverServices(
