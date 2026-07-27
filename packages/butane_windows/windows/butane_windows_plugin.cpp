@@ -1,5 +1,6 @@
 #include "butane_windows_plugin.h"
 #include "butane_central.h"
+#include "butane_connection_winrt.h"
 #define CharacteristicProperty ButaneConversionCharacteristicProperty
 #include "butane_conversions.h"
 #undef CharacteristicProperty
@@ -10,6 +11,7 @@
 
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -23,17 +25,24 @@ FlutterError Unimplemented(std::string_view method) {
 }
 class FlutterPlatformTaskRunner final : public PlatformTaskRunner {
  public:
-  explicit FlutterPlatformTaskRunner(flutter::PluginRegistrarWindows* registrar)
-      : registrar_(registrar), window_(registrar->GetView()->GetNativeWindow()) {
+  FlutterPlatformTaskRunner(flutter::PluginRegistrarWindows* registrar,
+                            HWND window)
+      : registrar_(registrar), window_(window) {
     delegate_id_ = registrar_->RegisterTopLevelWindowProcDelegate(
         [this](HWND, UINT message, WPARAM, LPARAM) -> std::optional<LRESULT> {
           if (message != kTaskMessage) return std::nullopt;
           Drain();
           return 0;
         });
+    delegate_registered_ = delegate_id_ >= 0;
+    if (!delegate_registered_) {
+      throw std::runtime_error("window delegate registration failed");
+    }
   }
   ~FlutterPlatformTaskRunner() override {
-    registrar_->UnregisterTopLevelWindowProcDelegate(delegate_id_);
+    if (delegate_registered_) {
+      registrar_->UnregisterTopLevelWindowProcDelegate(delegate_id_);
+    }
   }
   void PostTask(std::function<void()> task) override {
     {
@@ -55,6 +64,7 @@ class FlutterPlatformTaskRunner final : public PlatformTaskRunner {
   flutter::PluginRegistrarWindows* registrar_;
   HWND window_;
   int delegate_id_;
+  bool delegate_registered_ = false;
   std::mutex mutex_;
   std::deque<std::function<void()>> tasks_;
 };
@@ -68,27 +78,73 @@ class GeneratedFlutterEventSink final : public FlutterEventSink {
   void OnScanResult(const ScanResult& value) override {
     api_.OnScanResult(value, [] {}, [](const FlutterError&) {});
   }
+  void OnConnectionState(const Peripheral& peripheral,
+                         ConnectionState state) override {
+    api_.OnConnectionState(peripheral, state, [] {},
+                           [](const FlutterError&) {});
+  }
  private:
   ButaneFlutterApi api_;
 };
 
 }  // namespace
 
-void ButaneWindowsPlugin::RegisterWithRegistrar(
-    flutter::PluginRegistrarWindows* registrar) {
-  auto plugin = std::make_unique<ButaneWindowsPlugin>();
-  static std::once_flag initialized;
-  std::call_once(initialized, [] {
+bool TryInitializeWinrtApartment(
+    const std::function<void()>& initializer) noexcept {
+  try {
+    initializer();
+    return true;
+  } catch (const winrt::hresult_error&) {
+    return false;
+  }
+}
+
+bool TryInitializeWinrtApartment() noexcept {
+  return TryInitializeWinrtApartment([] {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
   });
+}
+
+bool ProbePlatformWindow(const std::function<HWND()>& probe) noexcept {
+  try {
+    return probe() != nullptr;
+  } catch (...) {
+    return false;
+  }
+}
+
+std::unique_ptr<PlatformTaskRunner> CreatePlatformTaskRunner(
+    flutter::PluginRegistrarWindows* registrar) noexcept {
+  if (!registrar) return nullptr;
+  HWND window = nullptr;
+  try {
+    const auto view = registrar->GetView();
+    if (!view) return nullptr;
+    window = view->GetNativeWindow();
+    if (!window) return nullptr;
+    return std::make_unique<FlutterPlatformTaskRunner>(registrar, window);
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+void ButaneWindowsPlugin::RegisterWithRegistrar(
+    flutter::PluginRegistrarWindows* registrar) {
+  if (!registrar || !registrar->messenger()) return;
+  auto plugin = std::make_unique<ButaneWindowsPlugin>();
   plugin->messenger_ = registrar->messenger();
-  plugin->platform_task_runner_ =
-      std::make_unique<FlutterPlatformTaskRunner>(registrar);
-  plugin->event_sink_ =
-      std::make_unique<GeneratedFlutterEventSink>(plugin->messenger_);
-  plugin->rssi_cache_ = std::make_unique<RssiCache>();
-  plugin->central_ =
-      std::make_unique<WindowsCentralBackend>(*plugin->rssi_cache_);
+  const bool apartment_ready = TryInitializeWinrtApartment();
+  plugin->platform_task_runner_ = CreatePlatformTaskRunner(registrar);
+  if (plugin->platform_task_runner_) {
+    plugin->event_sink_ =
+        std::make_unique<GeneratedFlutterEventSink>(plugin->messenger_);
+  }
+  if (apartment_ready) {
+    plugin->rssi_cache_ = std::make_unique<RssiCache>();
+    plugin->central_ =
+        std::make_unique<WindowsCentralBackend>(*plugin->rssi_cache_);
+    plugin->connection_ = std::make_unique<WindowsConnectionBackend>();
+  }
   ButaneHostApi::SetUp(registrar->messenger(), plugin.get());
   registrar->AddPlugin(std::move(plugin));
 }
@@ -96,13 +152,16 @@ void ButaneWindowsPlugin::RegisterWithRegistrar(
 ButaneWindowsPlugin::ButaneWindowsPlugin() {}
 ButaneWindowsPlugin::ButaneWindowsPlugin(
     std::unique_ptr<CentralBackend> central,
+    std::unique_ptr<ConnectionBackend> connection,
     std::unique_ptr<PlatformTaskRunner> runner,
     std::unique_ptr<FlutterEventSink> sink)
     : platform_task_runner_(std::move(runner)),
       event_sink_(std::move(sink)),
-      central_(std::move(central)) {}
+      central_(std::move(central)),
+      connection_(std::move(connection)) {}
 ButaneWindowsPlugin::~ButaneWindowsPlugin() {
   if (central_) central_->StopScan();
+  connection_.reset();
   central_.reset();
   event_sink_.reset();
   platform_task_runner_.reset();
@@ -123,7 +182,9 @@ void ButaneWindowsPlugin::State(
       [this, client_id, initial, result = std::move(result)](
           ClientState state) mutable {
         if (initial->exchange(false)) { result(state); return; }
+        if (!platform_task_runner_ || !event_sink_) return;
         platform_task_runner_->PostTask([this, client_id, state] {
+          if (!event_sink_) return;
           event_sink_->OnClientState(client_id ? &*client_id : nullptr, state);
         });
       });
@@ -140,9 +201,12 @@ void ButaneWindowsPlugin::Scan(
   auto error = central_->StartScan(
       filter.value(), [this, copy](AdvertisementEvent event) {
         auto scan_result = BuildScanResult(event, &copy);
-        if (scan_result.has_error()) return;
+        if (scan_result.has_error() || !platform_task_runner_ || !event_sink_) {
+          return;
+        }
         platform_task_runner_->PostTask(
             [this, value = ScanResult(scan_result.value())] {
+              if (!event_sink_) return;
               event_sink_->OnScanResult(value);
             });
       });
@@ -173,19 +237,56 @@ void ButaneWindowsPlugin::ConnectedPeripherals(
 void ButaneWindowsPlugin::Connect(
     const PeripheralSession& session,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("connect"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError(
+        "invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  if (!connection_) {
+    result(Unimplemented("connect"));
+    return;
+  }
+  connection_->Connect(
+      *address, session,
+      [runner = platform_task_runner_.get(),
+       sink = event_sink_.get()](ConnectionSnapshot snapshot) {
+        if (!runner || !sink) return;
+        runner->PostTask([sink, snapshot = std::move(snapshot)] {
+          const Peripheral peripheral(snapshot.session, snapshot.state);
+          sink->OnConnectionState(peripheral, snapshot.state);
+        });
+      },
+      std::move(result));
 }
 
 void ButaneWindowsPlugin::CancelConnection(
     const PeripheralSession& session,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("cancelConnection"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError(
+        "invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  if (connection_) connection_->Disconnect(*address);
+  result(std::nullopt);
 }
 
 void ButaneWindowsPlugin::ConnectionState(
     const PeripheralSession& session,
     std::function<void(ErrorOr<butane_windows::ConnectionState> reply)> result) {
-  result(Unimplemented("connectionState"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError(
+        "invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  result(connection_ ? connection_->State(*address)
+                     : ConnectionState::kDisconnected);
 }
 
 void ButaneWindowsPlugin::DiscoverServices(

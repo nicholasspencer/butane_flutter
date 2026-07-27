@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 #include "butane_central.h"
+#include "butane_connection.h"
 #include "butane_windows_plugin.h"
 #define CharacteristicProperty ButaneConversionCharacteristicProperty
 #include "butane_conversions.h"
@@ -20,6 +23,26 @@ TEST(ClientStateMapping, MapsAllRows) {
   EXPECT_EQ(MapClientState(true, false, NativeRadioState::kOff), ClientState::kPoweredOff);
   EXPECT_EQ(MapClientState(true, false, NativeRadioState::kDisabled), ClientState::kUnauthorized);
   EXPECT_EQ(MapClientState(true, false, NativeRadioState::kUnknown), ClientState::kUnknown);
+}
+TEST(ConnectionStateMapping, ConnectedAndDisconnected) {
+  using winrt::Windows::Devices::Bluetooth::BluetoothConnectionStatus;
+  EXPECT_EQ(MapConnectionStatus(BluetoothConnectionStatus::Connected),
+            ConnectionState::kConnected);
+  EXPECT_EQ(MapConnectionStatus(BluetoothConnectionStatus::Disconnected),
+            ConnectionState::kDisconnected);
+}
+TEST(PluginRegistrationGuard, RejectsMissingWindow) {
+  EXPECT_FALSE(ProbePlatformWindow([] { return static_cast<HWND>(nullptr); }));
+  EXPECT_TRUE(ProbePlatformWindow(
+      [] { return reinterpret_cast<HWND>(static_cast<uintptr_t>(1)); }));
+}
+TEST(PluginRegistrationGuard, ContainsApartmentFailure) {
+  EXPECT_FALSE(TryInitializeWinrtApartment([] {
+    throw winrt::hresult_error(E_FAIL);
+  }));
+  bool invoked = false;
+  EXPECT_TRUE(TryInitializeWinrtApartment([&] { invoked = true; }));
+  EXPECT_TRUE(invoked);
 }
 TEST(ServiceFilter, NullAndUuidWidthsNormalize) {
   EXPECT_TRUE(NormalizeServiceFilter(nullptr).value().empty());
@@ -112,6 +135,48 @@ class FakeRunner final : public PlatformTaskRunner {
   }
   std::vector<std::function<void()>> tasks;
 };
+class FakeConnection final : public ConnectionBackend {
+ public:
+  void Connect(uint64_t address, PeripheralSession session,
+               StateCallback callback, ConnectCallback complete) override {
+    ++connects;
+    addresses.push_back(address);
+    sessions.push_back(std::move(session));
+    states[address] = ConnectionState::kConnecting;
+    callbacks[address] = std::move(callback);
+    completions[address] = std::move(complete);
+  }
+  void Disconnect(uint64_t address) override {
+    ++disconnects;
+    const auto callback = callbacks.find(address);
+    if (callback == callbacks.end()) return;
+    callback->second(
+        {sessions.back(), ConnectionState::kDisconnecting});
+    callback->second({sessions.back(), ConnectionState::kDisconnected});
+    callbacks.erase(address);
+    states.erase(address);
+  }
+  ConnectionState State(uint64_t address) const override {
+    const auto it = states.find(address);
+    return it == states.end() ? ConnectionState::kDisconnected : it->second;
+  }
+  void Emit(uint64_t address, ConnectionState state) {
+    states[address] = state;
+    callbacks.at(address)({sessions.back(), state});
+  }
+  void Complete(uint64_t address,
+                std::optional<FlutterError> error = std::nullopt) {
+    if (error) states.erase(address);
+    completions.at(address)(std::move(error));
+  }
+  int connects = 0;
+  int disconnects = 0;
+  std::vector<uint64_t> addresses;
+  std::vector<PeripheralSession> sessions;
+  std::unordered_map<uint64_t, ConnectionState> states;
+  std::unordered_map<uint64_t, StateCallback> callbacks;
+  std::unordered_map<uint64_t, ConnectCallback> completions;
+};
 class FakeSink final : public FlutterEventSink {
  public:
   void OnClientState(const std::string* id, ClientState value) override {
@@ -119,21 +184,31 @@ class FakeSink final : public FlutterEventSink {
     states.push_back(value);
   }
   void OnScanResult(const ScanResult& value) override { results.push_back(value); }
+  void OnConnectionState(const Peripheral& peripheral,
+                         ConnectionState value) override {
+    connection_sessions.push_back(peripheral.session());
+    connection_states.push_back(value);
+  }
   std::optional<std::string> client_id;
   std::vector<ClientState> states;
   std::vector<ScanResult> results;
+  std::vector<PeripheralSession> connection_sessions;
+  std::vector<ConnectionState> connection_states;
 };
 struct Fixture {
   explicit Fixture(RssiCache* cache = nullptr) {
     auto c = std::make_unique<FakeCentral>(cache); central = c.get();
+    auto connection_value = std::make_unique<FakeConnection>();
+    connection = connection_value.get();
     auto r = std::make_unique<FakeRunner>(); runner = r.get();
     auto s = std::make_unique<FakeSink>(); sink = s.get();
     plugin = std::make_unique<ButaneWindowsPlugin>(
-        std::move(c), std::move(r), std::move(s));
+        std::move(c), std::move(connection_value), std::move(r), std::move(s));
   }
   FakeCentral* central;
   FakeRunner* runner;
   FakeSink* sink;
+  FakeConnection* connection;
   std::unique_ptr<ButaneWindowsPlugin> plugin;
 };
 TEST(ButaneWindowsPlugin, StateRepliesAndPostsStateChanges) {
@@ -181,5 +256,83 @@ TEST(ButaneWindowsPlugin, ReceiptUpdatesRssiBeforeDelivery) {
   EXPECT_EQ(cache.Get(event.bluetooth_address, RssiCache::Clock::now(), 30s),
       event.rssi);
   EXPECT_TRUE(f.sink->results.empty());
+}
+TEST(ButaneWindowsPlugin, ConnectRejectsMalformedAddress) {
+  Fixture f;
+  f.plugin->Connect(PeripheralSession("bad"), [](auto error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "invalid_argument");
+  });
+  EXPECT_EQ(f.connection->connects, 0);
+}
+TEST(ButaneWindowsPlugin, ConnectStartsAndDuplicateReusesEntry) {
+  Fixture f;
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  f.plugin->Connect(session, [](auto) {});
+  f.plugin->Connect(session, [](auto) {});
+  EXPECT_EQ(f.connection->connects, 2);
+  EXPECT_EQ(f.connection->addresses[0], 0x00A1B2C3D4E5ULL);
+}
+TEST(ButaneWindowsPlugin, ConnectionStateTracksPendingConnectedAndMissing) {
+  Fixture f;
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  f.plugin->Connect(session, [](auto) {});
+  f.plugin->ConnectionState(session, [](auto state) {
+    EXPECT_EQ(state.value(), ConnectionState::kConnecting);
+  });
+  f.connection->Emit(0x00A1B2C3D4E5ULL, ConnectionState::kConnected);
+  f.plugin->ConnectionState(session, [](auto state) {
+    EXPECT_EQ(state.value(), ConnectionState::kConnected);
+  });
+  f.plugin->ConnectionState(PeripheralSession("00:00:00:00:00:01"),
+                            [](auto state) {
+    EXPECT_EQ(state.value(), ConnectionState::kDisconnected);
+  });
+}
+TEST(ButaneWindowsPlugin, ConnectFailureErasesPendingState) {
+  Fixture f;
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  f.plugin->Connect(session, [](auto) {});
+  f.connection->Complete(
+      0x00A1B2C3D4E5ULL,
+      FlutterError("connection_failed", "failed"));
+  f.plugin->ConnectionState(session, [](auto state) {
+    EXPECT_EQ(state.value(), ConnectionState::kDisconnected);
+  });
+}
+TEST(ButaneWindowsPlugin, CancelConnectionIsIdempotentAndCloses) {
+  Fixture f;
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  f.plugin->Connect(session, [](auto) {});
+  f.plugin->CancelConnection(session,
+                             [](auto error) { EXPECT_FALSE(error); });
+  f.plugin->CancelConnection(session,
+                             [](auto error) { EXPECT_FALSE(error); });
+  EXPECT_EQ(f.connection->disconnects, 2);
+}
+TEST(ButaneWindowsPlugin, MalformedCancelAndStateReturnInvalidArgument) {
+  Fixture f;
+  const PeripheralSession malformed("not-an-address");
+  f.plugin->CancelConnection(malformed, [](auto error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "invalid_argument");
+  });
+  f.plugin->ConnectionState(malformed, [](auto result) {
+    ASSERT_TRUE(result.has_error());
+    EXPECT_EQ(result.error().code(), "invalid_argument");
+  });
+}
+TEST(ButaneWindowsPlugin, ConnectionChangePostsBeforeFlutterApi) {
+  Fixture f;
+  const PeripheralSession session(
+      "00:A1:B2:C3:D4:E5", nullptr, nullptr, nullptr);
+  f.plugin->Connect(session, [](auto) {});
+  f.connection->Emit(0x00A1B2C3D4E5ULL, ConnectionState::kConnected);
+  EXPECT_TRUE(f.sink->connection_states.empty());
+  f.runner->RunAll();
+  ASSERT_EQ(f.sink->connection_states.size(), 1u);
+  EXPECT_EQ(f.sink->connection_states[0], ConnectionState::kConnected);
+  EXPECT_EQ(f.sink->connection_sessions[0].peripheral_identifier(),
+            session.peripheral_identifier());
 }
 }  // namespace butane_windows::test

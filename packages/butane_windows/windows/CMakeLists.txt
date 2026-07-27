@@ -28,6 +28,10 @@ list(APPEND PLUGIN_SOURCES
   "butane_central.h"
   "butane_central_winrt.cpp"
   "butane_central_winrt.h"
+  "butane_connection.cpp"
+  "butane_connection.h"
+  "butane_connection_winrt.cpp"
+  "butane_connection_winrt.h"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -90,6 +94,7 @@ FetchContent_MakeAvailable(googletest)
 # The plugin's C API is not very useful for unit testing, so build the sources
 # directly into the test binary rather than using the DLL.
 add_executable(${TEST_RUNNER}
+  test/butane_connection_winrt_test.cpp
   test/butane_windows_plugin_test.cpp
   test/butane_conversions_test.cpp
   ${PLUGIN_SOURCES}

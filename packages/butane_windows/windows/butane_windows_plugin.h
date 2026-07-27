@@ -3,6 +3,7 @@
 
 #include "Api.gen.h"
 #include "butane_central_winrt.h"
+#include "butane_connection.h"
 
 #include <flutter/plugin_registrar_windows.h>
 
@@ -21,13 +22,23 @@ class FlutterEventSink {
   virtual void OnClientState(const std::string* client_identifier,
                              ClientState state) = 0;
   virtual void OnScanResult(const ScanResult& scan_result) = 0;
+  virtual void OnConnectionState(const Peripheral& peripheral,
+                                 ConnectionState state) = 0;
 };
+
+bool TryInitializeWinrtApartment() noexcept;
+bool TryInitializeWinrtApartment(
+    const std::function<void()>& initializer) noexcept;
+bool ProbePlatformWindow(const std::function<HWND()>& probe) noexcept;
+std::unique_ptr<PlatformTaskRunner> CreatePlatformTaskRunner(
+    flutter::PluginRegistrarWindows* registrar) noexcept;
 
 class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar);
   ButaneWindowsPlugin();
   ButaneWindowsPlugin(std::unique_ptr<CentralBackend> central,
+                      std::unique_ptr<ConnectionBackend> connection,
                       std::unique_ptr<PlatformTaskRunner> platform_task_runner,
                       std::unique_ptr<FlutterEventSink> event_sink);
   ~ButaneWindowsPlugin() override;
@@ -144,6 +155,7 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
   std::unique_ptr<PlatformTaskRunner> platform_task_runner_;
   std::unique_ptr<FlutterEventSink> event_sink_;
   std::unique_ptr<CentralBackend> central_;
+  std::unique_ptr<ConnectionBackend> connection_;
 };
 
 }  // namespace butane_windows
