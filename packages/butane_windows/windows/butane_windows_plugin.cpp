@@ -3,6 +3,7 @@
 #include "butane_connection_winrt.h"
 #include "butane_conversions.h"
 #include "butane_gatt_discovery_winrt.h"
+#include "butane_gatt_operations_winrt.h"
 #include <windows.h>
 #include <winrt/base.h>
 #include <atomic>
@@ -99,6 +100,12 @@ class GeneratedFlutterEventSink final : public FlutterEventSink {
     api_.OnConnectionState(peripheral, state, [] {},
                            [](const FlutterError&) {});
   }
+  void OnCharacteristicValue(
+      const Peripheral& peripheral, const Characteristic& characteristic,
+      const std::vector<uint8_t>& value) override {
+    api_.OnCharacteristicValue(peripheral, characteristic, value, [] {},
+                               [](const FlutterError&) {});
+  }
  private:
   ButaneFlutterApi api_;
 };
@@ -161,6 +168,8 @@ void ButaneWindowsPlugin::RegisterWithRegistrar(
         std::make_unique<WindowsCentralBackend>(*plugin->rssi_cache_);
     plugin->connection_ = std::make_unique<WindowsConnectionBackend>();
     plugin->discovery_ = std::make_unique<WindowsGattDiscoveryBackend>();
+    plugin->operations_ = std::make_unique<WindowsGattOperationsBackend>(
+        CreateNativeGattOperations());
   }
   ButaneHostApi::SetUp(registrar->messenger(), plugin.get());
   registrar->AddPlugin(std::move(plugin));
@@ -168,18 +177,24 @@ void ButaneWindowsPlugin::RegisterWithRegistrar(
 
 ButaneWindowsPlugin::ButaneWindowsPlugin() {}
 ButaneWindowsPlugin::ButaneWindowsPlugin(
+    std::unique_ptr<RssiCache> rssi_cache,
     std::unique_ptr<CentralBackend> central,
     std::unique_ptr<ConnectionBackend> connection,
     std::unique_ptr<GattDiscoveryBackend> discovery,
+    std::unique_ptr<GattOperationsBackend> operations,
     std::unique_ptr<PlatformTaskRunner> runner,
     std::unique_ptr<FlutterEventSink> sink)
-    : platform_task_runner_(std::move(runner)),
+    : rssi_cache_(std::move(rssi_cache)),
+      platform_task_runner_(std::move(runner)),
       event_sink_(std::move(sink)),
       central_(std::move(central)),
       connection_(std::move(connection)),
-      discovery_(std::move(discovery)) {}
+      discovery_(std::move(discovery)),
+      operations_(std::move(operations)) {}
 ButaneWindowsPlugin::~ButaneWindowsPlugin() {
   if (central_) central_->StopScan();
+  if (operations_) operations_->Close();
+  operations_.reset();
   connection_.reset();
   discovery_.reset();
   central_.reset();
@@ -412,14 +427,49 @@ void ButaneWindowsPlugin::WriteCharacteristic(
     const std::string& characteristic_uuid,
     const std::vector<uint8_t>& value, bool without_response,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("writeCharacteristic"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  const auto service = NormalizeUuid(service_uuid);
+  const auto characteristic = NormalizeUuid(characteristic_uuid);
+  if (!address || !service || !characteristic) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier and service and characteristic UUIDs must be valid."));
+    return;
+  }
+  if (!operations_) { result(Unimplemented("writeCharacteristic")); return; }
+  operations_->WriteCharacteristic(*address, *service, *characteristic, value,
+                                    without_response, std::move(result));
 }
 
 void ButaneWindowsPlugin::ObserveCharacteristic(
     bool observe, const PeripheralSession& session,
     const std::string& service_uuid, const std::string& characteristic_uuid,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("observeCharacteristic"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  const auto service = NormalizeUuid(service_uuid);
+  const auto characteristic = NormalizeUuid(characteristic_uuid);
+  if (!address || !service || !characteristic) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier and service and characteristic UUIDs must be valid."));
+    return;
+  }
+  if (!operations_) { result(Unimplemented("observeCharacteristic")); return; }
+  const PeripheralSession session_copy = session;
+  operations_->ObserveCharacteristic(
+      observe, *address, *service, *characteristic,
+      [runner = platform_task_runner_.get(), sink = event_sink_.get(),
+       session_copy, service = *service,
+       characteristic = *characteristic](GattValueEvent event) {
+        if (!runner || !sink) return;
+        runner->PostTask(
+            [sink, session_copy, service, characteristic,
+             value = std::move(event.value)] {
+              const Peripheral peripheral(
+                  session_copy, ConnectionState::kConnected);
+              const Characteristic attribute(characteristic);
+              sink->OnCharacteristicValue(peripheral, attribute, value);
+            });
+      },
+      std::move(result));
 }
 
 void ButaneWindowsPlugin::ReadDescriptor(
@@ -435,19 +485,58 @@ void ButaneWindowsPlugin::WriteDescriptor(
     const std::string& characteristic_uuid,
     const std::string& descriptor_uuid, const std::vector<uint8_t>& value,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("writeDescriptor"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  const auto service = NormalizeUuid(service_uuid);
+  const auto characteristic = NormalizeUuid(characteristic_uuid);
+  const auto descriptor = NormalizeUuid(descriptor_uuid);
+  if (!address || !service || !characteristic || !descriptor) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier and all GATT UUIDs must be valid."));
+    return;
+  }
+  if (!operations_) { result(Unimplemented("writeDescriptor")); return; }
+  operations_->WriteDescriptor(*address, *service, *characteristic,
+                               *descriptor, value, std::move(result));
 }
 
 void ButaneWindowsPlugin::ReadRssi(
     const PeripheralSession& session,
     std::function<void(ErrorOr<int64_t> reply)> result) {
-  result(Unimplemented("readRssi"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  const auto rssi = rssi_cache_
+      ? rssi_cache_->Get(*address, RssiCache::Clock::now(),
+                         std::chrono::seconds(30))
+      : std::nullopt;
+  if (!rssi) {
+    result(FlutterError("rssi-unavailable",
+        "Windows RSSI is an advertisement snapshot and is unavailable "
+        "when missing or older than 30 seconds."));
+    return;
+  }
+  result(static_cast<int64_t>(*rssi));
 }
 
 void ButaneWindowsPlugin::RequestMtu(
     const PeripheralSession& session, int64_t mtu,
     std::function<void(ErrorOr<int64_t> reply)> result) {
-  result(Unimplemented("requestMtu"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  if (mtu < 23 || mtu > 65535) {
+    result(FlutterError("invalid_argument",
+        "MTU must be between 23 and 65535."));
+    return;
+  }
+  if (!operations_) { result(Unimplemented("requestMtu")); return; }
+  operations_->RequestMtu(*address, mtu, std::move(result));
 }
 
 void ButaneWindowsPlugin::PeripheralManagerState(
