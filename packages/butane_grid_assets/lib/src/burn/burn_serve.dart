@@ -27,7 +27,8 @@ import 'ios_follower_launcher.dart';
 void configureBurnServeFlags(ArgParser parser) => parser
   ..addOption(
     'harness-dir',
-    help: 'The butane_harness checkout on this box — built (--debug) and '
+    help:
+        'The butane_harness checkout on this box — built (--debug) and '
         'launched as the follower app-under-test.',
   )
   ..addOption(
@@ -63,9 +64,9 @@ class BurnTargetFollowerLauncher implements FollowerLauncher {
       'android' => android(),
       'macos' || 'linux' => desktop(),
       final target => throw StateError(
-          'unsupported burn follower target "$target" '
-          '(supported: ios, android, macos, linux)',
-        ),
+        'unsupported burn follower target "$target" '
+        '(supported: ios, android, macos, linux)',
+      ),
     };
     return launcher.launch(spec);
   }
@@ -79,7 +80,8 @@ class BurnTargetFollowerLauncher implements FollowerLauncher {
   DispatchHandler handler,
   String? banner,
   void Function(String leaseId)? onLeaseEnded,
-}) butaneBurnServeHandler(
+})
+butaneBurnServeHandler(
   ArgResults args,
   void Function(String) log, {
   BurnFollowerLauncherFactory? iosLauncher,
@@ -93,7 +95,8 @@ class BurnTargetFollowerLauncher implements FollowerLauncher {
   final deviceId = args.option('device-id') ?? '';
   final runner = ButaneFollowerRunner(
     launcher: BurnTargetFollowerLauncher(
-      ios: iosLauncher ??
+      ios:
+          iosLauncher ??
           () {
             _requireDeviceId('ios', deviceId);
             return IosFollowerLauncher(
@@ -102,7 +105,8 @@ class BurnTargetFollowerLauncher implements FollowerLauncher {
               onLog: log,
             );
           },
-      android: androidLauncher ??
+      android:
+          androidLauncher ??
           () {
             _requireDeviceId('android', deviceId);
             return AndroidFollowerLauncher(
@@ -111,18 +115,17 @@ class BurnTargetFollowerLauncher implements FollowerLauncher {
               onLog: log,
             );
           },
-      desktop: desktopLauncher ??
-          () => ButaneFollowerLauncher(
-                harnessDirectory: dir,
-                onLog: log,
-              ),
+      desktop:
+          desktopLauncher ??
+          () => ButaneFollowerLauncher(harnessDirectory: dir, onLog: log),
     ),
     processes: const SystemProcessGroupController(),
     onLog: log,
   );
   return (
     handler: burnDispatchHandler(runner: runner, onLog: log),
-    banner: '  burn lessor: follower harness at $dir '
+    banner:
+        '  burn lessor: follower harness at $dir '
         '(reaped on lease end)',
     onLeaseEnded: (leaseId) {
       log('lease $leaseId ended → reaping the follower app');

@@ -35,10 +35,10 @@ class DriveStepResult {
 
   /// JSON form.
   Map<String, dynamic> toJson() => {
-        'description': description,
-        'observed': observed,
-        'passed': passed,
-      };
+    'description': description,
+    'observed': observed,
+    'passed': passed,
+  };
 
   @override
   String toString() => 'DriveStepResult($description, passed: $passed)';
@@ -55,6 +55,8 @@ class TestReport {
   const TestReport({
     required this.scenario,
     required this.endpoint,
+    required this.central,
+    required this.follower,
     required this.steps,
     required this.passed,
   });
@@ -64,6 +66,12 @@ class TestReport {
 
   /// The follower VM-service endpoint that was driven (the direct channel).
   final String endpoint;
+
+  /// The platform running the local central harness.
+  final String central;
+
+  /// The platform running the leased follower harness.
+  final String follower;
 
   /// The per-step results, in execution order.
   final List<DriveStepResult> steps;
@@ -79,13 +87,15 @@ class TestReport {
 
   /// JSON form.
   Map<String, dynamic> toJson() => {
-        'scenario': scenario,
-        'endpoint': endpoint,
-        'passed': passed,
-        'total': total,
-        'failures': failures,
-        'steps': [for (final s in steps) s.toJson()],
-      };
+    'scenario': scenario,
+    'endpoint': endpoint,
+    'central': central,
+    'follower': follower,
+    'passed': passed,
+    'total': total,
+    'failures': failures,
+    'steps': [for (final s in steps) s.toJson()],
+  };
 
   @override
   String toString() =>

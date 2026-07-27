@@ -154,8 +154,8 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     CapabilityFacts? requires,
     this.lessee = '',
     void Function(String)? onLog,
-  })  : requires = requires ?? kDefaultFollowerRequires,
-        _onLog = onLog ?? _noLog;
+  }) : requires = requires ?? kDefaultFollowerRequires,
+       _onLog = onLog ?? _noLog;
 
   /// The candidate follower peers (matched by containment at mount).
   final List<FollowerPeer> peers;
@@ -244,6 +244,7 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
       'endpoint': endpoint.vmServiceUri,
       'station': endpoint.station,
       'lease': handle.grant.leaseId,
+      'target': launchSpec.target,
     });
   }
 
@@ -270,7 +271,7 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     // app (the guaranteed teardown crosses the bus). Idempotent for the holder.
     try {
       await handle.client.release(handle.grant);
-      _onLog('follower released ${handle.grant.leaseId}');
+      _onLog('follower lease released ${handle.grant.leaseId}');
     } on FederationException {
       // Already reaped/invalid — release is idempotent.
     }
@@ -312,8 +313,11 @@ class BurnHostCapability extends ServiceCapability {
     this.localDrive,
     void Function(String)? onLog,
   }) : _onLog = onLog ?? _noLog {
-    final given =
-        [localRunner, localSpec, localDrive].where((p) => p != null).length;
+    final given = [
+      localRunner,
+      localSpec,
+      localDrive,
+    ].where((p) => p != null).length;
     if (given != 0 && given != 3) {
       throw ArgumentError(
         'two-drive burn-host needs localRunner + localSpec + localDrive '
@@ -344,8 +348,9 @@ class BurnHostCapability extends ServiceCapability {
 
   final void Function(String) _onLog;
 
-  static final Expando<_HostHold> _holds =
-      Expando<_HostHold>('grid-burn-host-hold');
+  static final Expando<_HostHold> _holds = Expando<_HostHold>(
+    'grid-burn-host-hold',
+  );
 
   @override
   Future<StepOutcome> run(TreeContext context, StepArgs args) async {
@@ -355,13 +360,23 @@ class BurnHostCapability extends ServiceCapability {
 
     // AWAIT the follower endpoint, read pull-free from the AMBIENT sibling
     // view at ENTRY (the effect verb, D-5).
-    final siblings = context.getInheritedSeedOfExactType<SiblingView>() ??
+    final siblings =
+        context.getInheritedSeedOfExactType<SiblingView>() ??
         const SiblingView();
     final followerPath = '${_parentPath(args.nodePath)}/$followerStep';
     final published = siblings.resultOf(followerPath);
     final uri = published['endpoint'] ?? '';
     if (uri.isEmpty) {
       return const Failed('no follower endpoint (rendezvous failed)');
+    }
+    final followerTarget = published['target'];
+    if (followerTarget == null || followerTarget.isEmpty) {
+      return const Failed('follower rendezvous published no target');
+    }
+    final localRunner = this.localRunner;
+    final centralTarget = localSpec?.target ?? '';
+    if (localRunner != null && centralTarget.isEmpty) {
+      return const Failed('two-drive burn published no central target');
     }
     final endpoint = FollowerEndpoint(
       vmServiceUri: uri,
@@ -379,7 +394,6 @@ class BurnHostCapability extends ServiceCapability {
     // TWO-DRIVE burn: launch the host's own local harness (the central) and
     // attach the second drive. A local launch failure fails the order —
     // teardown still reaps whatever launched (the runner is once-only).
-    final localRunner = this.localRunner;
     if (localRunner != null) {
       final FollowerEndpoint localEndpoint;
       try {
@@ -399,7 +413,9 @@ class BurnHostCapability extends ServiceCapability {
       drive: drive,
       scenario: scenario,
       endpoint: endpoint,
-      localDrive: localRunner == null ? null : localDrive,
+      central: centralTarget,
+      follower: followerTarget,
+      localDrive: localDrive,
       isCancelled: () => args.cancel.isCancelled,
     );
     hold.report = report;
@@ -410,6 +426,8 @@ class BurnHostCapability extends ServiceCapability {
         ? Ok({
             'scenario': report.scenario,
             'passed': 'true',
+            'central': report.central,
+            'follower': report.follower,
             'steps': '${report.total}',
             'failures': '${report.failures}',
             'endpoint': report.endpoint,
@@ -431,7 +449,12 @@ class BurnHostCapability extends ServiceCapability {
     // is reaped by the `burn-follower` order's lease release (the bus
     // channel teardown).
     await drive.close();
-    await localDrive?.close();
+    _onLog('follower drive closed');
+    final localDrive = this.localDrive;
+    if (localDrive != null) {
+      await localDrive.close();
+      _onLog('local drive closed');
+    }
     await localRunner?.teardown();
     _holds[args] = null;
   }
@@ -465,24 +488,23 @@ DefaultCapabilityRegistry buildBurnRegistry({
   LeonardDrive? localDrive,
   void Function(String)? onLog,
   DateTime Function()? clock,
-}) =>
-    DefaultCapabilityRegistry(
-      capabilities: {
-        kBurnFollowerStep: BurnFollowerCapability(
-          peers: peers,
-          launchSpec: launchSpec,
-          requires: requires,
-          onLog: onLog,
-        ),
-        kBurnHostStep: BurnHostCapability(
-          drive: drive,
-          scenario: scenario,
-          localRunner: localRunner,
-          localSpec: localSpec,
-          localDrive: localDrive,
-          onLog: onLog,
-        ),
-      },
-      circuits: const {'burn': kBurnCircuit},
-      clock: clock,
-    );
+}) => DefaultCapabilityRegistry(
+  capabilities: {
+    kBurnFollowerStep: BurnFollowerCapability(
+      peers: peers,
+      launchSpec: launchSpec,
+      requires: requires,
+      onLog: onLog,
+    ),
+    kBurnHostStep: BurnHostCapability(
+      drive: drive,
+      scenario: scenario,
+      localRunner: localRunner,
+      localSpec: localSpec,
+      localDrive: localDrive,
+      onLog: onLog,
+    ),
+  },
+  circuits: const {'burn': kBurnCircuit},
+  clock: clock,
+);

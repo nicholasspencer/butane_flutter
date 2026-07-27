@@ -115,8 +115,8 @@ class _FakeProcessGroupController implements ProcessGroupController {
     final label = signal == ProcessSignal.sigterm
         ? 'TERM'
         : signal == ProcessSignal.sigkill
-            ? 'KILL'
-            : 'OTHER';
+        ? 'KILL'
+        : 'OTHER';
     signals.add('$label:$pgid');
     if (signal == ProcessSignal.sigterm) _alive = false; // exits on TERM
     return true;
@@ -279,7 +279,8 @@ class _ScriptedLeonardDrive implements LeonardDrive {
   _FakeFollowerLauncher launcher,
   _FakeProcessGroupController processes,
   ButaneFollowerRunner runner,
-}) _lessor({
+})
+_lessor({
   Map<String, Object?> profile = _macosIosProfile,
   String station = 'the-dashboard',
   void Function()? onLeaseGranted,
@@ -309,11 +310,10 @@ class _ScriptedLeonardDrive implements LeonardDrive {
   required String nodePath,
   CancelToken? cancel,
   SiblingView siblings = const SiblingView(),
-}) =>
-    (
-      context: FakeTreeContext(values: {SiblingView: siblings}),
-      args: stepArgs(nodePath, cancel: cancel),
-    );
+}) => (
+  context: FakeTreeContext(values: {SiblingView: siblings}),
+  args: stepArgs(nodePath, cancel: cancel),
+);
 
 const String _followerPath = 'tg-burn/$kBurnFollowerStep';
 const String _hostPath = 'tg-burn/$kBurnHostStep';
@@ -325,22 +325,24 @@ const String _hostPath = 'tg-burn/$kBurnHostStep';
 /// `StepKind.daemon`, so a successful launch reports `ready` (stays live), never
 /// `complete`.
 Future<({List<AllocationReport> reports, LeaseAllocation<BusLease> alloc})>
-    _driveFollower(
+_driveFollower(
   BurnFollowerCapability follower,
   ({FakeTreeContext context, StepArgs args}) c,
 ) async {
   final reports = <AllocationReport>[];
-  final alloc = follower.createAllocation(
-    AllocationContext(
-      treeContext: c.context,
-      args: c.args,
-      transport: FakeRuntimeProvider(),
-      address: AllocationAddress('tgdog-s', c.args.nodePath),
-      env: const {},
-      sink: reports.add,
-      kind: StepKind.daemon,
-    ),
-  ) as LeaseAllocation<BusLease>;
+  final alloc =
+      follower.createAllocation(
+            AllocationContext(
+              treeContext: c.context,
+              args: c.args,
+              transport: FakeRuntimeProvider(),
+              address: AllocationAddress('tgdog-s', c.args.nodePath),
+              env: const {},
+              sink: reports.add,
+              kind: StepKind.daemon,
+            ),
+          )
+          as LeaseAllocation<BusLease>;
   await alloc.startOrAdopt();
   return (reports: reports, alloc: alloc);
 }
@@ -352,21 +354,21 @@ Map<String, String>? _publishedEndpoint(List<AllocationReport> reports) {
   return ready.isEmpty ? null : ready.first.payload;
 }
 
-const LaunchSpec _spec = LaunchSpec(app: 'butane_flutter', target: 'linux');
+const LaunchSpec _spec = LaunchSpec(app: 'butane_flutter', target: 'ios');
 
 /// A passing scripted scenario (every step's expectation holds).
 DriveScenario _passingScenario() => const DriveScenario(
-      name: 'smoke',
-      steps: [
-        DriveStep.observe('cli', expectContains: 'ready'),
-        DriveStep.invoke('grid.ready', expectContains: 'tg-1'),
-      ],
-    );
+  name: 'smoke',
+  steps: [
+    DriveStep.observe('cli', expectContains: 'ready'),
+    DriveStep.invoke('grid.ready', expectContains: 'tg-1'),
+  ],
+);
 
 _ScriptedLeonardDrive _passingDrive() => _ScriptedLeonardDrive(
-      observeResponses: const {'cli': '{"state":"ready"}'},
-      invokeResponses: const {'grid.ready': '["tg-1","tg-2"]'},
-    );
+  observeResponses: const {'cli': '{"state":"ready"}'},
+  invokeResponses: const {'grid.ready': '["tg-1","tg-2"]'},
+);
 
 void main() {
   group('the burn circuit composition (ADR-0011 D9)', () {
@@ -410,8 +412,7 @@ void main() {
   });
 
   group('capability matching (Track C containment, ADR-0011 D6)', () {
-    test(
-        'matchFollower picks the first peer whose profile satisfies the '
+    test('matchFollower picks the first peer whose profile satisfies the '
         'requires by containment', () async {
       final macos = _lessor(profile: _macosIosProfile, station: 'studio');
       final linux = _lessor(profile: _linuxProfile, station: 'dashboard');
@@ -438,21 +439,34 @@ void main() {
     );
   });
 
-  group('the burn — the happy path (rendezvous → drive → report → teardown)',
-      () {
-    test(
-        'fan-out two orders → rendezvous → scripted drive → TestReport '
+  group('the burn — the happy path (rendezvous → drive → report → teardown)', () {
+    test('fan-out two orders → rendezvous → scripted drive → TestReport '
         'collected → both torn down', () async {
+      final logs = <String>[];
       final lessor = _lessor();
       final follower = BurnFollowerCapability(
         peers: [FollowerPeer(id: 'the-dashboard', client: lessor.station)],
         launchSpec: _spec,
         lessee: 'the-studio',
+        onLog: logs.add,
       );
       final drive = _passingDrive();
+      final localDrive = _ScriptedLeonardDrive();
+      final localRunner = ButaneFollowerRunner(
+        launcher: _FakeLocalLauncher(),
+        processes: _FakeProcessGroupController(),
+      );
       final host = BurnHostCapability(
         drive: drive,
         scenario: _passingScenario(),
+        localRunner: localRunner,
+        localSpec: const LaunchSpec(
+          app: 'butane_harness',
+          target: 'macos',
+          role: 'central',
+        ),
+        localDrive: localDrive,
+        onLog: logs.add,
       );
 
       // ORDER 1 — burn-follower: match → lease → dispatch launch → endpoint. As a
@@ -483,8 +497,9 @@ void main() {
         nodePath: _hostPath,
         siblings: SiblingView(results: {_followerPath: published}),
       );
-      final hOut = await host.run(hCtx.context, hCtx.args);
-      expect(hOut, isA<Ok>());
+      final hOut = await host.run(hCtx.context, hCtx.args) as Ok;
+      expect(hOut.payload!['central'], 'macos');
+      expect(hOut.payload!['follower'], 'ios');
       expect(
         drive.attachedTo,
         _published.vmServiceUri,
@@ -498,12 +513,30 @@ void main() {
       expect(report!.passed, isTrue);
       expect(report.total, 2);
       expect(report.failures, 0);
+      expect(report.central, 'macos');
+      expect(report.follower, 'ios');
+      expect(report.toJson()['central'], 'macos');
+      expect(report.toJson()['follower'], 'ios');
 
       // TEARDOWN both orders: host closes the drive; the follower allocation's
       // dispose releases the lease → the lessor reaps the launched app via the M4
       // terminateGroup reaper.
       await host.teardown(hCtx.args);
       await f.alloc.dispose();
+      expect(
+        logs.where(
+          {
+            'follower drive closed',
+            'local drive closed',
+            'follower lease released burn-lease-0',
+          }.contains,
+        ),
+        [
+          'follower drive closed',
+          'local drive closed',
+          'follower lease released burn-lease-0',
+        ],
+      );
       expect(drive.closed, isTrue, reason: 'the drive channel is closed');
       expect(lessor.station.calls, contains('release'));
       expect(
@@ -520,13 +553,14 @@ void main() {
   });
 
   group('the burn — the failure path (guaranteed teardown)', () {
-    test(
-        'the scripted scenario fails → host escalates (Failed) → the leaked '
+    test('the scripted scenario fails → host escalates (Failed) → the leaked '
         'follower daemon is STILL reaped', () async {
+      final logs = <String>[];
       final lessor = _lessor();
       final follower = BurnFollowerCapability(
         peers: [FollowerPeer(id: 'the-dashboard', client: lessor.station)],
         launchSpec: _spec,
+        onLog: logs.add,
       );
       // A scenario whose second step's expectation does NOT hold → a regression.
       final drive = _ScriptedLeonardDrive(
@@ -539,7 +573,22 @@ void main() {
           DriveStep.observe('panel', expectContains: 'ok'), // fails
         ],
       );
-      final host = BurnHostCapability(drive: drive, scenario: scenario);
+      final localDrive = _ScriptedLeonardDrive();
+      final host = BurnHostCapability(
+        drive: drive,
+        scenario: scenario,
+        localRunner: ButaneFollowerRunner(
+          launcher: _FakeLocalLauncher(),
+          processes: _FakeProcessGroupController(),
+        ),
+        localSpec: const LaunchSpec(
+          app: 'butane_harness',
+          target: 'macos',
+          role: 'central',
+        ),
+        localDrive: localDrive,
+        onLog: logs.add,
+      );
 
       final fCtx = _ctx(nodePath: _followerPath);
       final f = await _driveFollower(follower, fCtx);
@@ -571,10 +620,23 @@ void main() {
         reason: 'the leaked follower daemon is reaped on the failure path',
       );
       expect(lessor.processes.terminated, isTrue);
+      expect(
+        logs.where(
+          {
+            'follower drive closed',
+            'local drive closed',
+            'follower lease released burn-lease-0',
+          }.contains,
+        ),
+        [
+          'follower drive closed',
+          'local drive closed',
+          'follower lease released burn-lease-0',
+        ],
+      );
     });
 
-    test(
-        'no peer matches → the follower order is denied; nothing leases or '
+    test('no peer matches → the follower order is denied; nothing leases or '
         'launches', () async {
       final lessor = _lessor(profile: _linuxProfile); // old default, no match
       final follower = BurnFollowerCapability(
@@ -584,12 +646,9 @@ void main() {
       final ctx = _ctx(nodePath: _followerPath);
       final f = await _driveFollower(follower, ctx);
       expect(f.reports.single, isA<AllocationFailed>());
-      expect(
-          lessor.station.calls,
-          [
-            'presence',
-          ],
-          reason: 'probed, then no lease');
+      expect(lessor.station.calls, [
+        'presence',
+      ], reason: 'probed, then no lease');
       expect(lessor.runner.isRunning, isFalse);
       await f.alloc.dispose(); // no grant held → no release
       expect(lessor.station.countWith('release'), 0);
@@ -615,6 +674,40 @@ void main() {
       },
     );
 
+    test('the host rejects a follower rendezvous with no target', () async {
+      final drive = _passingDrive();
+      final host = BurnHostCapability(
+        drive: drive,
+        scenario: _passingScenario(),
+        localRunner: ButaneFollowerRunner(
+          launcher: _FakeLocalLauncher(),
+          processes: _FakeProcessGroupController(),
+        ),
+        localSpec: const LaunchSpec(
+          app: 'butane_harness',
+          target: 'macos',
+          role: 'central',
+        ),
+        localDrive: _ScriptedLeonardDrive(),
+      );
+      final ctx = _ctx(
+        nodePath: _hostPath,
+        siblings: SiblingView(
+          results: {
+            _followerPath: {
+              'endpoint': _published.vmServiceUri,
+              'station': _published.station,
+              'lease': 'burn-lease-0',
+            },
+          },
+        ),
+      );
+      expect(
+        await host.run(ctx.context, ctx.args),
+        const Failed('follower rendezvous published no target'),
+      );
+    });
+
     test('a denied lease → the follower order fails; dispose no-ops', () async {
       final lessor = _lessor()..station.denyLease = true;
       final follower = BurnFollowerCapability(
@@ -629,8 +722,7 @@ void main() {
       expect(lessor.station.countWith('release'), 0);
     });
 
-    test(
-        'a dispose racing the acquire releases the grant + skips the dispatch '
+    test('a dispose racing the acquire releases the grant + skips the dispatch '
         '(release even when cancelled)', () async {
       final cancel = CancelToken();
       final lessor = _lessor(onLeaseGranted: cancel.cancel);
@@ -678,6 +770,7 @@ void main() {
       'endpoint': _published.vmServiceUri,
       'station': _published.station,
       'lease': 'burn-lease-0',
+      'target': _spec.target,
     };
 
     test('presence cancellation skips lease and dispatch', () async {
@@ -913,6 +1006,16 @@ void main() {
             DriveStep.invoke('grid.ready'),
           ],
         ),
+        localRunner: ButaneFollowerRunner(
+          launcher: _FakeLocalLauncher(),
+          processes: _FakeProcessGroupController(),
+        ),
+        localSpec: const LaunchSpec(
+          app: 'butane_harness',
+          target: 'macos',
+          role: 'central',
+        ),
+        localDrive: _ScriptedLeonardDrive(),
       );
       final ctx = _ctx(
         nodePath: _hostPath,
@@ -967,12 +1070,11 @@ void main() {
         'endpoint': _published.vmServiceUri,
         'station': _published.station,
         'lease': 'burn-lease-0',
+        'target': _spec.target,
       };
 
-      test(
-          'steps route by endpoint selector; the local harness launches, both '
-          'drives attach, and teardown closes both + reaps the local',
-          () async {
+      test('steps route by endpoint selector; the local harness launches, both '
+          'drives attach, and teardown closes both + reaps the local', () async {
         final localProcesses = _FakeProcessGroupController();
         final localLauncher = _FakeLocalLauncher();
         final localRunner = ButaneFollowerRunner(
@@ -1059,8 +1161,47 @@ void main() {
       });
 
       test(
-          'a local step with no local trio is a FAILED step (fail-closed, '
-          'report-collecting) → the host escalates Failed', () async {
+        'a follower-only host runs follower steps and publishes a report',
+        () async {
+          final followerDrive = _ScriptedLeonardDrive(
+            invokeResponses: const {'butane.start_advertising': '{"ok":true}'},
+          );
+          final host = BurnHostCapability(
+            drive: followerDrive,
+            scenario: const DriveScenario(
+              name: 'follower-only',
+              steps: [
+                DriveStep.invoke(
+                  'butane.start_advertising',
+                  expectContains: 'ok',
+                ),
+              ],
+            ),
+          );
+          final hCtx = _ctx(
+            nodePath: _hostPath,
+            siblings: SiblingView(results: {_followerPath: published}),
+          );
+
+          final out = await host.run(hCtx.context, hCtx.args) as Ok;
+          expect(out.payload!['central'], '');
+          expect(out.payload!['follower'], 'ios');
+          expect(
+            followerDrive.calls,
+            contains('invoke:butane.start_advertising'),
+          );
+          final report = host.reportFor(hCtx.args)!;
+          expect(report.passed, isTrue);
+          expect(report.central, '');
+          expect(report.follower, 'ios');
+
+          await host.teardown(hCtx.args);
+          expect(followerDrive.closed, isTrue);
+        },
+      );
+
+      test('a local step with no local trio is a FAILED step '
+          '(fail-closed, report-collecting)', () async {
         final followerDrive = _ScriptedLeonardDrive(
           invokeResponses: const {'butane.start_advertising': '{"ok":true}'},
         );
@@ -1083,10 +1224,21 @@ void main() {
         );
         final out = await host.run(hCtx.context, hCtx.args);
         expect(out, isA<Failed>());
+        expect(
+          (out as Failed).reason,
+          'burn scenario "missing-local" failed: 1/2 step(s)',
+        );
         final report = host.reportFor(hCtx.args)!;
         expect(report.passed, isFalse);
-        expect(report.failures, 1, reason: 'only the local step fails');
-        expect(report.steps.last.observed, contains('no local drive'));
+        expect(report.total, 2);
+        expect(report.failures, 1);
+        expect(
+          report.steps.last.observed,
+          contains('scenario step targets the local endpoint'),
+        );
+
+        await host.teardown(hCtx.args);
+        expect(followerDrive.closed, isTrue);
       });
 
       test('a partial local trio is a constructor-time ArgumentError', () {
@@ -1100,8 +1252,7 @@ void main() {
         );
       });
 
-      test(
-          'a local launch failure fails the order; teardown still reaps '
+      test('a local launch failure fails the order; teardown still reaps '
           'nothing (once-only, nothing launched)', () async {
         final localProcesses = _FakeProcessGroupController();
         final localRunner = ButaneFollowerRunner(

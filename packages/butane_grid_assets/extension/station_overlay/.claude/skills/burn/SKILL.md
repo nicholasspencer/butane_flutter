@@ -24,7 +24,7 @@ Search the local butane store for an open burn bead matching the scenario. If
 none exists, create a staged driveable bead:
 
 ```bash
-bd create --title "Burn: <scenario> via <peer>" --type task --ephemeral \
+bd create --title "Burn: <scenario> via <peer>" --type task \
   --defer "$(date -v+7d +%Y-%m-%d)" --actor operator \
   --description "Resident burn request: peer=<peer>; scenario=<scenario>; harness-dir=<path>; follower-target=<target>; local=<true|false>. The burn circuit leases the follower over the federation bus and drives both harnesses directly through Leonard." \
   --acceptance "- [ ] The resident burn circuit records a TestReport receipt for <scenario>\n- [ ] The follower lease and both direct drive channels are released"
@@ -32,10 +32,12 @@ bd create --title "Burn: <scenario> via <peer>" --type task --ephemeral \
 
 For an existing bead, use its explicit id with `bd update <id> --actor operator`
 to replace the request description and acceptance criteria. Never call
-`bd update` with an empty id. After the request is complete, promote it with
-`bd update <id> --persistent --actor operator`. Show the final bead and ask the
-operator to bless it by removing the defer date; do not bless without that
-explicit confirmation.
+`bd update` with an empty id.
+
+New burn requests are persistent from their first `bd create`: proxied stores
+cannot list or promote ephemeral beads. Show the final bead and ask the operator
+to bless it by removing the defer date; do not bless without that explicit
+confirmation.
 
 ## Read receipts
 

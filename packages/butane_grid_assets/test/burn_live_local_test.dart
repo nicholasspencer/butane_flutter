@@ -78,7 +78,10 @@ const DriveScenario _liveScenario = DriveScenario(
   name: 'live-local-smoke',
   steps: [
     DriveStep.observe('extensions.grid.data', expectContains: '"readyCount":2'),
-    DriveStep.observe('extensions.grid.data', expectContains: '"readPath":"cli"'),
+    DriveStep.observe(
+      'extensions.grid.data',
+      expectContains: '"readPath":"cli"',
+    ),
     DriveStep.invoke('grid.ready', expectContains: '"tg-2"'),
   ],
 );
@@ -127,13 +130,22 @@ void main() {
 
       const processes = SystemProcessGroupController();
       final launcher = LocalDartFollowerLauncher(
-        daemonEntrypoint:
-            '${Directory.current.path}/tool/follower_daemon.dart',
+        daemonEntrypoint: '${Directory.current.path}/tool/follower_daemon.dart',
         station: _station,
         onLog: log,
       );
       final runner = ButaneFollowerRunner(
         launcher: launcher,
+        processes: processes,
+        onLog: log,
+      );
+      final localLauncher = LocalDartFollowerLauncher(
+        daemonEntrypoint: '${Directory.current.path}/tool/follower_daemon.dart',
+        station: '$_station-central',
+        onLog: log,
+      );
+      final localRunner = ButaneFollowerRunner(
+        launcher: localLauncher,
         processes: processes,
         onLog: log,
       );
@@ -180,40 +192,52 @@ void main() {
         );
         final reports = <AllocationReport>[];
         final fCtx = _ctx(nodePath: _followerPath);
-        alloc = follower.createAllocation(
-          AllocationContext(
-            treeContext: fCtx.context,
-            args: fCtx.args,
-            transport: FakeRuntimeProvider(),
-            address: AllocationAddress('tgdog-s', fCtx.args.nodePath),
-            env: const {},
-            sink: reports.add,
-            kind: StepKind.daemon,
-          ),
-        ) as LeaseAllocation<BusLease>;
+        alloc =
+            follower.createAllocation(
+                  AllocationContext(
+                    treeContext: fCtx.context,
+                    args: fCtx.args,
+                    transport: FakeRuntimeProvider(),
+                    address: AllocationAddress('tgdog-s', fCtx.args.nodePath),
+                    env: const {},
+                    sink: reports.add,
+                    kind: StepKind.daemon,
+                  ),
+                )
+                as LeaseAllocation<BusLease>;
         await alloc.startOrAdopt();
 
         final ready = reports.whereType<AllocationReady>().toList();
         expect(
           ready,
           hasLength(1),
-          reason: 'the daemon lease must reach ready — log:\n${logs.join('\n')}'
+          reason:
+              'the daemon lease must reach ready — log:\n${logs.join('\n')}'
               '\nreports: $reports',
         );
-        expect(reports.whereType<AllocationCompleted>(), isEmpty,
-            reason: 'a held daemon lease must not complete/retire');
+        expect(
+          reports.whereType<AllocationCompleted>(),
+          isEmpty,
+          reason: 'a held daemon lease must not complete/retire',
+        );
         final payload = ready.single.payload;
         expect(payload, isNotNull, reason: 'ready carries the rendezvous');
         final published = payload!;
-        expect(published['endpoint'], startsWith('ws://127.0.0.1:'),
-            reason: 'a REAL loopback VM-service endpoint was published');
+        expect(
+          published['endpoint'],
+          startsWith('ws://127.0.0.1:'),
+          reason: 'a REAL loopback VM-service endpoint was published',
+        );
         expect(published['endpoint'], endsWith('/ws'));
         expect(published['station'], _station);
         expect(runner.isRunning, isTrue, reason: 'the follower daemon is up');
 
         final daemon = launcher.lastLaunched!;
-        expect(processes.processAlive(daemon.pid), isTrue,
-            reason: 'the spawned daemon process is live');
+        expect(
+          processes.processAlive(daemon.pid),
+          isTrue,
+          reason: 'the spawned daemon process is live',
+        );
 
         // ORDER 2 — burn-host: endpoint via the SiblingView (pull-free, D-5) →
         // attach the REAL leonard_drive → run the SCRIPTED scenario.
@@ -221,6 +245,13 @@ void main() {
         final host = BurnHostCapability(
           drive: drive,
           scenario: _liveScenario,
+          localRunner: localRunner,
+          localSpec: const LaunchSpec(
+            app: 'follower_daemon',
+            target: 'macos',
+            role: 'central',
+          ),
+          localDrive: ProcessLeonardDrive(),
           onLog: log,
         );
         final hCtx = _ctx(
@@ -232,13 +263,17 @@ void main() {
         expect(
           out,
           isA<Ok>(),
-          reason: 'the live scenario must pass — report: $report\n'
+          reason:
+              'the live scenario must pass — report: $report\n'
               'log:\n${logs.join('\n')}',
         );
         expect(report, isNotNull);
         expect(report!.passed, isTrue);
-        expect(report.total, greaterThan(0),
-            reason: 'the report ran real steps');
+        expect(
+          report.total,
+          greaterThan(0),
+          reason: 'the report ran real steps',
+        );
         expect(report.total, _liveScenario.steps.length);
         expect(report.failures, 0);
         expect(report.endpoint, published['endpoint']);
@@ -247,13 +282,17 @@ void main() {
         // allocation's dispose RELEASES the lease over the REAL bus.
         await host.teardown(hCtx.args);
         await alloc.dispose();
-        expect(server.leases.available, 1,
-            reason: 'the released slot is free again on the lessor');
+        expect(
+          server.leases.available,
+          1,
+          reason: 'the released slot is free again on the lessor',
+        );
 
         // The serve-side gap (documented in burn_dispatch_handler.dart):
         // StationServer has no on-release hook, so the lessor composition —
         // this test — reaps the launched daemon itself (idempotent).
         await runner.teardown();
+        await localRunner.teardown();
         expect(runner.isRunning, isFalse);
 
         // THE MILESTONE ASSERT: the spawned daemon process is ACTUALLY gone.
@@ -261,6 +300,7 @@ void main() {
       } finally {
         // Guaranteed teardown — idempotent, exact pids/groups only.
         await runner.teardown();
+        await localRunner.teardown();
         final last = launcher.lastLaunched;
         if (last != null && processes.processAlive(last.pid)) {
           // Last resort: kill EXACTLY the pid this test spawned.

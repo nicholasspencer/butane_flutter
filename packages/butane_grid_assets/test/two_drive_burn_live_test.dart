@@ -85,8 +85,8 @@ Future<void> _runLiveScenario(
   final target = Platform.isMacOS
       ? 'macos'
       : Platform.isLinux
-          ? 'linux'
-          : '';
+      ? 'linux'
+      : '';
   if (target.isEmpty) {
     markTestSkipped('unsupported host platform');
     return;
@@ -158,6 +158,7 @@ Future<void> _runLiveScenario(
                 'endpoint': followerEndpoint.vmServiceUri,
                 'station': followerEndpoint.station,
                 'lease': 'live-local',
+                'target': target,
               },
             },
           ),
@@ -170,19 +171,26 @@ Future<void> _runLiveScenario(
     final report = host.reportFor(ctx.args);
     final rendered = report?.steps
         .map(
-          (s) => '${s.passed ? "PASS" : "FAIL"} ${s.description} '
+          (s) =>
+              '${s.passed ? "PASS" : "FAIL"} ${s.description} '
               '→ ${s.observed}',
         )
         .join('\n');
-    expect(out, isA<Ok>(),
-        reason: 'scenario failed:\n$rendered\nlog: ${log.join(' | ')}');
+    expect(
+      out,
+      isA<Ok>(),
+      reason: 'scenario failed:\n$rendered\nlog: ${log.join(' | ')}',
+    );
     expect(report!.passed, isTrue);
     expect(report.total, scenario.steps.length);
 
     // The host teardown reaps ITS local central (once-only).
     await host.teardown(ctx.args);
-    expect(localRunner.isRunning, isFalse,
-        reason: 'the local central is the host teardown\'s reap');
+    expect(
+      localRunner.isRunning,
+      isFalse,
+      reason: 'the local central is the host teardown\'s reap',
+    );
   } finally {
     // Idempotent teardown-of-last-resort for both ends (a remote follower's
     // teardown belongs to whoever launched it).
