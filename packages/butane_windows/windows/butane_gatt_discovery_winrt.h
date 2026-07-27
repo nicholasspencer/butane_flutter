@@ -3,6 +3,7 @@
 
 #include "butane_gatt_discovery.h"
 
+#include <atomic>
 #include <memory>
 
 namespace butane_windows {
@@ -16,6 +17,7 @@ class NativeGattDiscovery {
       GattDiscoveryStatus, std::optional<uint8_t>,
       std::vector<GattCharacteristicData>)>;
   virtual ~NativeGattDiscovery() = default;
+  virtual void Close() = 0;
   virtual void GetServices(uint64_t address, ServicesCallback callback) = 0;
   virtual void GetCharacteristics(
       uint64_t address, std::string service_uuid,
@@ -29,6 +31,7 @@ class WindowsGattDiscoveryBackend final : public GattDiscoveryBackend {
   explicit WindowsGattDiscoveryBackend(
       std::shared_ptr<NativeGattDiscovery> native =
           CreateNativeGattDiscovery());
+  ~WindowsGattDiscoveryBackend() override;
   void DiscoverServices(uint64_t address,
                         std::vector<std::string> service_uuids,
                         bool explicit_empty,
@@ -43,8 +46,9 @@ class WindowsGattDiscoveryBackend final : public GattDiscoveryBackend {
       uint64_t address, std::string_view service_uuid) const override;
 
  private:
+  struct CallbackState;
   std::shared_ptr<NativeGattDiscovery> native_;
-  GattDiscoveryCache cache_;
+  std::shared_ptr<CallbackState> state_;
 };
 
 }  // namespace butane_windows
