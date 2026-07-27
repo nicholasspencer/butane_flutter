@@ -127,7 +127,8 @@ TEST(WindowsGattOperationsBackend, MapsEveryErrorRow) {
   for (const auto& [status, code] : rows) {
     native->status = status;
     native->protocol = status == GattOperationStatus::kProtocolError
-                           ? std::optional<uint8_t>(0x0e)
+                           ? std::optional<uint8_t>(
+                                 static_cast<uint8_t>(0x0e))
                            : std::nullopt;
     backend.WriteDescriptor(1, "s", "c", "d", {}, [&](auto error) {
       ASSERT_TRUE(error);

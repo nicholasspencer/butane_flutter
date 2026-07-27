@@ -16,7 +16,6 @@ namespace butane_windows {
 namespace {
 using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
-using winrt::Windows::Foundation::GuidHelper;
 using namespace winrt::Windows::Storage::Streams;
 
 GattOperationStatus ConvertStatus(GattCommunicationStatus status) {
@@ -52,6 +51,14 @@ std::vector<uint8_t> BytesFromBuffer(const IBuffer& buffer) {
   std::vector<uint8_t> value(reader.UnconsumedBufferLength());
   if (!value.empty()) reader.ReadBytes(value);
   return value;
+}
+
+winrt::guid ParseGuid(const std::string& value) {
+  winrt::guid guid{};
+  const auto text = winrt::to_hstring(value);
+  winrt::check_hresult(
+      IIDFromString(text.c_str(), reinterpret_cast<IID*>(&guid)));
+  return guid;
 }
 
 class WinrtNativeGattOperations final
@@ -207,7 +214,7 @@ class WinrtNativeGattOperations final
         co_await BluetoothLEDevice::FromBluetoothAddressAsync(address);
     if (owner->IsClosed() || !resolved.device) co_return;
     auto services = co_await resolved.device.GetGattServicesForUuidAsync(
-        GuidHelper::FromString(winrt::to_hstring(service_uuid)),
+        ParseGuid(service_uuid),
         BluetoothCacheMode::Uncached);
     if (owner->IsClosed() ||
         services.Status() != GattCommunicationStatus::Success) {
@@ -221,7 +228,7 @@ class WinrtNativeGattOperations final
     resolved.service = services.Services().GetAt(0);
     auto characteristics =
         co_await resolved.service.GetCharacteristicsForUuidAsync(
-            GuidHelper::FromString(winrt::to_hstring(characteristic_uuid)),
+            ParseGuid(characteristic_uuid),
             BluetoothCacheMode::Uncached);
     if (owner->IsClosed() ||
         characteristics.Status() != GattCommunicationStatus::Success) {
@@ -289,7 +296,7 @@ class WinrtNativeGattOperations final
       }
       auto descriptors =
           co_await resolved.characteristic.GetDescriptorsForUuidAsync(
-              GuidHelper::FromString(winrt::to_hstring(descriptor_uuid)),
+              ParseGuid(descriptor_uuid),
               BluetoothCacheMode::Uncached);
       if (owner->IsClosed()) {
         CloseResolved(resolved);
