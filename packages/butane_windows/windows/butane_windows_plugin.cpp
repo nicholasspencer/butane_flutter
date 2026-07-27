@@ -1,12 +1,12 @@
 #include "butane_windows_plugin.h"
 #include "butane_central.h"
 #include "butane_connection_winrt.h"
-#define CharacteristicProperty ButaneConversionCharacteristicProperty
 #include "butane_conversions.h"
-#undef CharacteristicProperty
+#include "butane_gatt_discovery_winrt.h"
 #include <windows.h>
 #include <winrt/base.h>
 #include <atomic>
+#include <algorithm>
 #include <deque>
 
 #include <memory>
@@ -22,6 +22,22 @@ FlutterError Unimplemented(std::string_view method) {
   return FlutterError(
       "unimplemented",
       std::string(method) + " is not implemented on Windows.");
+}
+Characteristic ToPigeonCharacteristic(const GattCharacteristicData& data) {
+  flutter::EncodableList descriptors;
+  for (const auto& item : data.descriptors) {
+    descriptors.emplace_back(
+        flutter::CustomEncodableValue(Descriptor(item.uuid, nullptr)));
+  }
+  const DecodedCharacteristicProperty decoded =
+      CharacteristicPropertyFromMask(data.property_mask);
+  const CharacteristicProperty properties(
+      decoded.broadcast, decoded.read, decoded.write_without_response,
+      decoded.write, decoded.notify, decoded.indicate,
+      decoded.authenticated_signed_writes, decoded.extended_properties,
+      decoded.notify_encryption_required,
+      decoded.indicate_encryption_required);
+  return Characteristic(data.uuid, nullptr, &descriptors, &properties);
 }
 class FlutterPlatformTaskRunner final : public PlatformTaskRunner {
  public:
@@ -144,6 +160,7 @@ void ButaneWindowsPlugin::RegisterWithRegistrar(
     plugin->central_ =
         std::make_unique<WindowsCentralBackend>(*plugin->rssi_cache_);
     plugin->connection_ = std::make_unique<WindowsConnectionBackend>();
+    plugin->discovery_ = std::make_unique<WindowsGattDiscoveryBackend>();
   }
   ButaneHostApi::SetUp(registrar->messenger(), plugin.get());
   registrar->AddPlugin(std::move(plugin));
@@ -153,15 +170,18 @@ ButaneWindowsPlugin::ButaneWindowsPlugin() {}
 ButaneWindowsPlugin::ButaneWindowsPlugin(
     std::unique_ptr<CentralBackend> central,
     std::unique_ptr<ConnectionBackend> connection,
+    std::unique_ptr<GattDiscoveryBackend> discovery,
     std::unique_ptr<PlatformTaskRunner> runner,
     std::unique_ptr<FlutterEventSink> sink)
     : platform_task_runner_(std::move(runner)),
       event_sink_(std::move(sink)),
       central_(std::move(central)),
-      connection_(std::move(connection)) {}
+      connection_(std::move(connection)),
+      discovery_(std::move(discovery)) {}
 ButaneWindowsPlugin::~ButaneWindowsPlugin() {
   if (central_) central_->StopScan();
   connection_.reset();
+  discovery_.reset();
   central_.reset();
   event_sink_.reset();
   platform_task_runner_.reset();
@@ -293,26 +313,91 @@ void ButaneWindowsPlugin::DiscoverServices(
     const PeripheralSession& session,
     const flutter::EncodableList* service_uuids,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("discoverServices"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  if (!discovery_) { result(Unimplemented("discoverServices")); return; }
+  auto filter = NormalizeGattFilter(service_uuids);
+  if (filter.has_error()) { result(filter.error()); return; }
+  discovery_->DiscoverServices(*address, std::move(filter.value()),
+      service_uuids && service_uuids->empty(), std::move(result));
 }
 
 void ButaneWindowsPlugin::Services(
     const PeripheralSession& session,
     std::function<void(ErrorOr<flutter::EncodableList> reply)> result) {
-  result(Unimplemented("services"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier must be a Bluetooth address."));
+    return;
+  }
+  if (!discovery_) { result(Unimplemented("services")); return; }
+  auto services = discovery_->Services(*address);
+  if (services.has_error()) { result(services.error()); return; }
+  flutter::EncodableList values;
+  for (const auto& item : services.value()) {
+    values.emplace_back(
+        flutter::CustomEncodableValue(Service(item.uuid, item.is_primary)));
+  }
+  result(std::move(values));
 }
 
 void ButaneWindowsPlugin::DiscoverCharacteristics(
     const PeripheralSession& session, const std::string& service_uuid,
     const flutter::EncodableList* characteristic_uuids,
     std::function<void(std::optional<FlutterError> reply)> result) {
-  result(Unimplemented("discoverCharacteristics"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  const auto service = NormalizeUuid(service_uuid);
+  if (!address || !service) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier and service UUID must be valid."));
+    return;
+  }
+  if (!discovery_) {
+    result(Unimplemented("discoverCharacteristics"));
+    return;
+  }
+  auto services = discovery_->Services(*address);
+  if (services.has_error()) { result(services.error()); return; }
+  if (std::none_of(services.value().begin(), services.value().end(),
+                   [&](const auto& item) { return item.uuid == *service; })) {
+    result(FlutterError("not-found", "GATT discovery data was not found."));
+    return;
+  }
+  auto filter = NormalizeGattFilter(characteristic_uuids);
+  if (filter.has_error()) { result(filter.error()); return; }
+  discovery_->DiscoverCharacteristics(
+      *address, *service, std::move(filter.value()),
+      characteristic_uuids && characteristic_uuids->empty(),
+      std::move(result));
 }
 
 void ButaneWindowsPlugin::Characteristics(
     const PeripheralSession& session, const std::string& service_uuid,
     std::function<void(ErrorOr<flutter::EncodableList> reply)> result) {
-  result(Unimplemented("characteristics"));
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  const auto service = NormalizeUuid(service_uuid);
+  if (!address || !service) {
+    result(FlutterError("invalid_argument",
+        "Peripheral identifier and service UUID must be valid."));
+    return;
+  }
+  if (!discovery_) { result(Unimplemented("characteristics")); return; }
+  auto characteristics = discovery_->Characteristics(*address, *service);
+  if (characteristics.has_error()) {
+    result(characteristics.error());
+    return;
+  }
+  flutter::EncodableList values;
+  for (const auto& item : characteristics.value()) {
+    values.emplace_back(
+        flutter::CustomEncodableValue(ToPigeonCharacteristic(item)));
+  }
+  result(std::move(values));
 }
 
 void ButaneWindowsPlugin::ReadCharacteristic(

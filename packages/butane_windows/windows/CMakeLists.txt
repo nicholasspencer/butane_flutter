@@ -32,6 +32,10 @@ list(APPEND PLUGIN_SOURCES
   "butane_connection.h"
   "butane_connection_winrt.cpp"
   "butane_connection_winrt.h"
+  "butane_gatt_discovery.cpp"
+  "butane_gatt_discovery.h"
+  "butane_gatt_discovery_winrt.cpp"
+  "butane_gatt_discovery_winrt.h"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -97,6 +101,8 @@ add_executable(${TEST_RUNNER}
   test/butane_connection_winrt_test.cpp
   test/butane_windows_plugin_test.cpp
   test/butane_conversions_test.cpp
+  test/butane_gatt_discovery_test.cpp
+  test/butane_gatt_discovery_winrt_test.cpp
   ${PLUGIN_SOURCES}
 )
 apply_standard_settings(${TEST_RUNNER})

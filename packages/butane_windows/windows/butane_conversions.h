@@ -47,7 +47,7 @@ enum GattCharacteristicPropertiesFlag : uint32_t {
 // Android/BlueZ concepts. WinRT expresses encryption requirements through the
 // pairing/protection level on the session, not through characteristic
 // property flags.
-struct CharacteristicProperty {
+struct DecodedCharacteristicProperty {
   bool broadcast = false;
   bool read = false;
   bool write_without_response = false;
@@ -65,7 +65,7 @@ struct CharacteristicProperty {
 // This is the Windows half of butane_flutter-99s: iOS/macOS never populated
 // the property list, so Dart callers had to trial-and-error every operation
 // and catch the failure. Windows populates it from the first commit.
-CharacteristicProperty CharacteristicPropertyFromMask(uint32_t mask);
+DecodedCharacteristicProperty CharacteristicPropertyFromMask(uint32_t mask);
 
 // Formats a WinRT `BluetoothAddress` (a 48-bit value in a uint64) as the
 // conventional colon-separated uppercase MAC string, most-significant octet
