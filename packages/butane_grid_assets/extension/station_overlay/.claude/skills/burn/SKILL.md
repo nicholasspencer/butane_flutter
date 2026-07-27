@@ -13,9 +13,10 @@ never starts a station and never invokes a second grid.
 ## Inputs
 
 Collect `peer=<host:port>`, `scenario=<name>` (default `smoke`),
-`harness-dir=<path>`, `follower-target=<target>` (default `linux`), and whether
-the local central harness is enabled. Reject a missing peer or harness path
-before mutating the store.
+`harness-dir=<path>`, `follower-target=<target>` (default `ios` on the
+macOS station), `device-id=<id>` for iOS/Android, and whether the local
+central harness is enabled. Reject a missing peer or harness path before
+mutating the store.
 
 ## File or refine the work
 

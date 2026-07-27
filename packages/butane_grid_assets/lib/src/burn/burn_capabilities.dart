@@ -5,7 +5,7 @@
 /// [kBurnCircuit] pours two orders:
 ///  - **`burn-follower`** ([BurnFollowerCapability]) — LEASED to a peer whose
 ///    capability profile satisfies the follower requirements by CONTAINMENT
-///    (Track C; e.g. `{system-os=linux, flutter-target=linux, radio=ble}`). It
+///    (Track C; e.g. `{system-os=macos, flutter-target=ios, radio=ble}`). It
 ///    leases a slot over the federation BUS, dispatches the launch, and receives
 ///    the follower's published endpoint (the rendezvous). Declared a
 ///    [StepKind.daemon] — the follower app is a long-lived daemon on the peer
@@ -47,13 +47,14 @@ const String kBurnFollowerStep = 'burn-follower';
 /// The `burn-host` step/capability id (the local order).
 const String kBurnHostStep = 'burn-host';
 
-/// The default follower capability requirements (ADR-0011 D9): a Linux peer that
-/// can build+run a `flutter-target=linux` app and exposes a BLE radio. Matched by
-/// CONTAINMENT against a peer's advertised profile (Track C).
+/// The default follower capability requirements (ADR-0011 D9): a macOS peer
+/// that can build+deploy a `flutter-target=ios` app to its attached device and
+/// exposes a BLE radio. Matched by CONTAINMENT against a peer's advertised
+/// profile (Track C; ADR-0011 D6).
 final CapabilityFacts kDefaultFollowerRequires = const CapabilityFacts(
   sets: {
-    kSystemOs: {'linux'},
-    kFlutterTarget: {'linux'},
+    kSystemOs: {'macos'},
+    kFlutterTarget: {'ios'},
     kRadio: {'ble'},
   },
 );
@@ -354,8 +355,7 @@ class BurnHostCapability extends ServiceCapability {
 
     // AWAIT the follower endpoint, read pull-free from the AMBIENT sibling
     // view at ENTRY (the effect verb, D-5).
-    final siblings =
-        context.getInheritedSeedOfExactType<SiblingView>() ??
+    final siblings = context.getInheritedSeedOfExactType<SiblingView>() ??
         const SiblingView();
     final followerPath = '${_parentPath(args.nodePath)}/$followerStep';
     final published = siblings.resultOf(followerPath);
@@ -483,6 +483,6 @@ DefaultCapabilityRegistry buildBurnRegistry({
           onLog: onLog,
         ),
       },
-  circuits: const {'burn': kBurnCircuit},
+      circuits: const {'burn': kBurnCircuit},
       clock: clock,
     );
