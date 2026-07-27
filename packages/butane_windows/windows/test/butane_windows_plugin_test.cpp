@@ -8,6 +8,7 @@
 #include <vector>
 #include "butane_central.h"
 #include "butane_connection.h"
+#include "butane_gatt_operations.h"
 #include "butane_windows_plugin.h"
 #include "butane_conversions.h"
 namespace butane_windows::test {
@@ -131,12 +132,19 @@ class FakeCentral final : public CentralBackend {
 };
 class FakeRunner final : public PlatformTaskRunner {
  public:
+  explicit FakeRunner(
+      std::shared_ptr<std::vector<std::string>> lifecycle = nullptr)
+      : lifecycle(std::move(lifecycle)) {}
+  ~FakeRunner() override {
+    if (lifecycle) lifecycle->push_back("runner");
+  }
   void PostTask(std::function<void()> task) override { tasks.push_back(std::move(task)); }
   void RunAll() {
     auto pending = std::move(tasks); tasks.clear();
     for (auto& task : pending) task();
   }
   std::vector<std::function<void()>> tasks;
+  std::shared_ptr<std::vector<std::string>> lifecycle;
 };
 class FakeConnection final : public ConnectionBackend {
  public:
@@ -228,8 +236,60 @@ class FakeGattDiscovery final : public GattDiscoveryBackend {
   mutable uint64_t last_read_address = 0;
   mutable std::string last_read_service;
 };
+class FakeGattOperations final : public GattOperationsBackend {
+ public:
+  explicit FakeGattOperations(
+      std::shared_ptr<std::vector<std::string>> lifecycle = nullptr)
+      : lifecycle(std::move(lifecycle)) {}
+  void WriteCharacteristic(uint64_t address, std::string service_uuid,
+      std::string characteristic_uuid, std::vector<uint8_t> value,
+      bool without_response, Completion completion) override {
+    last_address = address; service = std::move(service_uuid);
+    characteristic = std::move(characteristic_uuid); bytes = std::move(value);
+    without = without_response; completion(error);
+  }
+  void ObserveCharacteristic(bool observe, uint64_t address,
+      std::string service_uuid, std::string characteristic_uuid,
+      ValueCallback on_value, Completion completion) override {
+    observing = observe; last_address = address;
+    service = std::move(service_uuid);
+    characteristic = std::move(characteristic_uuid);
+    value_callback = std::move(on_value); completion(error);
+  }
+  void WriteDescriptor(uint64_t address, std::string service_uuid,
+      std::string characteristic_uuid, std::string descriptor_uuid,
+      std::vector<uint8_t> value, Completion completion) override {
+    last_address = address; service = std::move(service_uuid);
+    characteristic = std::move(characteristic_uuid);
+    descriptor = std::move(descriptor_uuid); bytes = std::move(value);
+    completion(error);
+  }
+  void RequestMtu(uint64_t address, int64_t requested_mtu,
+      MtuCompletion completion) override {
+    last_address = address; mtu = requested_mtu;
+    if (mtu_error) completion(*mtu_error); else completion(negotiated_mtu);
+  }
+  void Close() override {
+    closed = true;
+    if (lifecycle) lifecycle->push_back("operations");
+  }
+  uint64_t last_address = 0;
+  std::string service, characteristic, descriptor;
+  std::vector<uint8_t> bytes;
+  bool without = false, observing = false, closed = false;
+  int64_t mtu = 0, negotiated_mtu = 247;
+  std::optional<FlutterError> error, mtu_error;
+  ValueCallback value_callback;
+  std::shared_ptr<std::vector<std::string>> lifecycle;
+};
 class FakeSink final : public FlutterEventSink {
  public:
+  explicit FakeSink(
+      std::shared_ptr<std::vector<std::string>> lifecycle = nullptr)
+      : lifecycle(std::move(lifecycle)) {}
+  ~FakeSink() override {
+    if (lifecycle) lifecycle->push_back("sink");
+  }
   void OnClientState(const std::string* id, ClientState value) override {
     client_id = id ? std::optional<std::string>(*id) : std::nullopt;
     states.push_back(value);
@@ -240,30 +300,49 @@ class FakeSink final : public FlutterEventSink {
     connection_sessions.push_back(peripheral.session());
     connection_states.push_back(value);
   }
+  void OnCharacteristicValue(const Peripheral& peripheral,
+      const Characteristic& characteristic,
+      const std::vector<uint8_t>& value) override {
+    characteristic_peripherals.push_back(peripheral);
+    characteristics.push_back(characteristic);
+    characteristic_values.push_back(value);
+  }
   std::optional<std::string> client_id;
   std::vector<ClientState> states;
   std::vector<ScanResult> results;
   std::vector<PeripheralSession> connection_sessions;
   std::vector<ConnectionState> connection_states;
+  std::vector<Peripheral> characteristic_peripherals;
+  std::vector<Characteristic> characteristics;
+  std::vector<std::vector<uint8_t>> characteristic_values;
+  std::shared_ptr<std::vector<std::string>> lifecycle;
 };
 struct Fixture {
-  explicit Fixture(RssiCache* cache = nullptr) {
+  Fixture() {
+    lifecycle = std::make_shared<std::vector<std::string>>();
+    auto cache_value = std::make_unique<RssiCache>(); cache = cache_value.get();
     auto c = std::make_unique<FakeCentral>(cache); central = c.get();
     auto connection_value = std::make_unique<FakeConnection>();
     connection = connection_value.get();
     auto discovery_value = std::make_unique<FakeGattDiscovery>();
     discovery = discovery_value.get();
-    auto r = std::make_unique<FakeRunner>(); runner = r.get();
-    auto s = std::make_unique<FakeSink>(); sink = s.get();
+    auto operations_value = std::make_unique<FakeGattOperations>(lifecycle);
+    operations = operations_value.get();
+    auto r = std::make_unique<FakeRunner>(lifecycle); runner = r.get();
+    auto s = std::make_unique<FakeSink>(lifecycle); sink = s.get();
     plugin = std::make_unique<ButaneWindowsPlugin>(
-        std::move(c), std::move(connection_value), std::move(discovery_value),
-        std::move(r), std::move(s));
+        std::move(cache_value), std::move(c), std::move(connection_value),
+        std::move(discovery_value), std::move(operations_value), std::move(r),
+        std::move(s));
   }
+  RssiCache* cache;
   FakeCentral* central;
   FakeRunner* runner;
   FakeSink* sink;
   FakeConnection* connection;
   FakeGattDiscovery* discovery;
+  FakeGattOperations* operations;
+  std::shared_ptr<std::vector<std::string>> lifecycle;
   std::unique_ptr<ButaneWindowsPlugin> plugin;
 };
 TEST(ButaneWindowsPlugin, StateRepliesAndPostsStateChanges) {
@@ -303,12 +382,11 @@ TEST(ButaneWindowsPlugin, CancelScanIsIdempotent) {
   EXPECT_EQ(f.central->stops, 2);
 }
 TEST(ButaneWindowsPlugin, ReceiptUpdatesRssiBeforeDelivery) {
-  RssiCache cache;
-  Fixture f(&cache);
+  Fixture f;
   f.plugin->Scan(nullptr, nullptr, [](auto error) { EXPECT_FALSE(error); });
   auto event = Advertisement();
   f.central->Emit(event);
-  EXPECT_EQ(cache.Get(event.bluetooth_address, RssiCache::Clock::now(), 30s),
+  EXPECT_EQ(f.cache->Get(event.bluetooth_address, RssiCache::Clock::now(), 30s),
       event.rssi);
   EXPECT_TRUE(f.sink->results.empty());
 }
@@ -514,5 +592,96 @@ TEST(ButaneWindowsPlugin, DiscoveryStatusUsesSharedErrors) {
         EXPECT_EQ(error->code(), "unauthorized");
         EXPECT_EQ(error->message(), "Bluetooth GATT access was denied.");
       });
+}
+TEST(ButaneWindowsPlugin, WriteCharacteristicForwardsBothOptionsAndBytes) {
+  Fixture f;
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  for (const bool without_response : {false, true}) {
+    f.plugin->WriteCharacteristic(session, "180D", "2A37", {0, 1, 255},
+        without_response, [](auto error) { EXPECT_FALSE(error); });
+    EXPECT_EQ(f.operations->last_address, 0x00A1B2C3D4E5ULL);
+    EXPECT_EQ(f.operations->bytes, (std::vector<uint8_t>{0, 1, 255}));
+    EXPECT_EQ(f.operations->without, without_response);
+  }
+}
+TEST(ButaneWindowsPlugin, WriteCharacteristicRejectsMalformedIdentity) {
+  Fixture f;
+  f.plugin->WriteCharacteristic(PeripheralSession("bad"), "180D", "2A37",
+      {}, false, [](auto error) {
+        ASSERT_TRUE(error); EXPECT_EQ(error->code(), "invalid_argument");
+      });
+  EXPECT_EQ(f.operations->last_address, 0u);
+}
+TEST(ButaneWindowsPlugin, ObservePostsValueBeforeFlutterApi) {
+  Fixture f;
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  f.plugin->ObserveCharacteristic(true, session, "180D", "2A37",
+      [](auto error) { EXPECT_FALSE(error); });
+  ASSERT_TRUE(f.operations->value_callback);
+  f.operations->value_callback({0x00A1B2C3D4E5ULL,
+      "0000180d-0000-1000-8000-00805f9b34fb",
+      "00002a37-0000-1000-8000-00805f9b34fb", {4, 5}});
+  EXPECT_TRUE(f.sink->characteristic_values.empty());
+  f.runner->RunAll();
+  ASSERT_EQ(f.sink->characteristic_values.size(), 1u);
+  EXPECT_EQ(f.sink->characteristic_values[0], (std::vector<uint8_t>{4, 5}));
+  EXPECT_EQ(f.sink->characteristics[0].service_uuid(),
+      "0000180d-0000-1000-8000-00805f9b34fb");
+}
+TEST(ButaneWindowsPlugin, UnobserveForwardsDisable) {
+  Fixture f;
+  f.plugin->ObserveCharacteristic(false,
+      PeripheralSession("00:A1:B2:C3:D4:E5"), "180D", "2A37",
+      [](auto error) { EXPECT_FALSE(error); });
+  EXPECT_FALSE(f.operations->observing);
+}
+TEST(ButaneWindowsPlugin, WriteDescriptorForwardsFullPathAndErrors) {
+  Fixture f;
+  f.operations->error = FlutterError("unauthorized", "denied");
+  f.plugin->WriteDescriptor(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      "180D", "2A37", "2902", {9, 8}, [](auto error) {
+        ASSERT_TRUE(error); EXPECT_EQ(error->code(), "unauthorized");
+      });
+  EXPECT_EQ(f.operations->descriptor,
+      "00002902-0000-1000-8000-00805f9b34fb");
+  EXPECT_EQ(f.operations->bytes, (std::vector<uint8_t>{9, 8}));
+}
+TEST(ButaneWindowsPlugin, ReadRssiReturnsFreshAdvertisementSnapshot) {
+  Fixture f;
+  f.cache->Observe(0x00A1B2C3D4E5ULL, -61, RssiCache::Clock::now());
+  f.plugin->ReadRssi(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      [](auto result) { ASSERT_FALSE(result.has_error());
+                        EXPECT_EQ(result.value(), -61); });
+}
+TEST(ButaneWindowsPlugin, ReadRssiRejectsMissingAndStaleSnapshot) {
+  Fixture f;
+  f.plugin->ReadRssi(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      [](auto result) { ASSERT_TRUE(result.has_error());
+                        EXPECT_EQ(result.error().code(), "rssi-unavailable"); });
+  f.cache->Observe(0x00A1B2C3D4E5ULL, -61,
+                   RssiCache::Clock::now() - 31s);
+  f.plugin->ReadRssi(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      [](auto result) { ASSERT_TRUE(result.has_error());
+                        EXPECT_EQ(result.error().code(), "rssi-unavailable"); });
+}
+TEST(ButaneWindowsPlugin, RequestMtuReturnsNegotiatedValueAndRejectsRange) {
+  Fixture f;
+  f.plugin->RequestMtu(PeripheralSession("00:A1:B2:C3:D4:E5"), 512,
+      [](auto result) { ASSERT_FALSE(result.has_error());
+                        EXPECT_EQ(result.value(), 247); });
+  EXPECT_EQ(f.operations->mtu, 512);
+  f.plugin->RequestMtu(PeripheralSession("00:A1:B2:C3:D4:E5"), 22,
+      [](auto result) { ASSERT_TRUE(result.has_error());
+                        EXPECT_EQ(result.error().code(), "invalid_argument"); });
+  EXPECT_EQ(f.operations->mtu, 512);
+}
+TEST(ButaneWindowsPlugin, OperationsCloseBeforeDispatchDependencies) {
+  Fixture f;
+  const auto lifecycle = f.lifecycle;
+  f.plugin.reset();
+  ASSERT_EQ(lifecycle->size(), 3u);
+  EXPECT_EQ((*lifecycle)[0], "operations");
+  EXPECT_EQ((*lifecycle)[1], "sink");
+  EXPECT_EQ((*lifecycle)[2], "runner");
 }
 }  // namespace butane_windows::test
