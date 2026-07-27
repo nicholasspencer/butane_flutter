@@ -4,6 +4,7 @@
 #include "Api.gen.h"
 #include "butane_central_winrt.h"
 #include "butane_connection.h"
+#include "butane_gatt_discovery.h"
 
 #include <flutter/plugin_registrar_windows.h>
 
@@ -39,6 +40,7 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
   ButaneWindowsPlugin();
   ButaneWindowsPlugin(std::unique_ptr<CentralBackend> central,
                       std::unique_ptr<ConnectionBackend> connection,
+                      std::unique_ptr<GattDiscoveryBackend> discovery,
                       std::unique_ptr<PlatformTaskRunner> platform_task_runner,
                       std::unique_ptr<FlutterEventSink> event_sink);
   ~ButaneWindowsPlugin() override;
@@ -156,6 +158,7 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
   std::unique_ptr<FlutterEventSink> event_sink_;
   std::unique_ptr<CentralBackend> central_;
   std::unique_ptr<ConnectionBackend> connection_;
+  std::unique_ptr<GattDiscoveryBackend> discovery_;
 };
 
 }  // namespace butane_windows

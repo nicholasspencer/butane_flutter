@@ -68,8 +68,8 @@ bool IsAllHex(std::string_view text) {
 
 }  // namespace
 
-CharacteristicProperty CharacteristicPropertyFromMask(uint32_t mask) {
-  CharacteristicProperty property;
+DecodedCharacteristicProperty CharacteristicPropertyFromMask(uint32_t mask) {
+  DecodedCharacteristicProperty property;
   property.broadcast = (mask & kGattPropertyBroadcast) != 0;
   property.read = (mask & kGattPropertyRead) != 0;
   property.write_without_response =

@@ -9,11 +9,14 @@
 #include "butane_central.h"
 #include "butane_connection.h"
 #include "butane_windows_plugin.h"
-#define CharacteristicProperty ButaneConversionCharacteristicProperty
 #include "butane_conversions.h"
-#undef CharacteristicProperty
 namespace butane_windows::test {
 using namespace std::chrono_literals;
+template <typename T>
+const T* CustomValue(const flutter::EncodableValue& value) {
+  const auto& custom = std::get<flutter::CustomEncodableValue>(value);
+  return std::any_cast<T>(&static_cast<const std::any&>(custom));
+}
 static_assert(std::is_base_of_v<ButaneHostApi, ButaneWindowsPlugin>);
 static_assert(std::is_class_v<ButaneFlutterApi>);
 TEST(ClientStateMapping, MapsAllRows) {
@@ -177,6 +180,54 @@ class FakeConnection final : public ConnectionBackend {
   std::unordered_map<uint64_t, StateCallback> callbacks;
   std::unordered_map<uint64_t, ConnectCallback> completions;
 };
+class FakeGattDiscovery final : public GattDiscoveryBackend {
+ public:
+  void DiscoverServices(uint64_t address, std::vector<std::string> uuids,
+                        bool explicit_empty,
+                        Completion completion) override {
+    service_address = address;
+    service_filter = std::move(uuids);
+    service_explicit_empty = explicit_empty;
+    completion(discover_error);
+  }
+  ErrorOr<std::vector<GattServiceData>> Services(
+      uint64_t address) const override {
+    last_read_address = address;
+    if (read_error) return *read_error;
+    return services;
+  }
+  void DiscoverCharacteristics(
+      uint64_t address, std::string service_uuid,
+      std::vector<std::string> uuids, bool explicit_empty,
+      Completion completion) override {
+    characteristic_address = address;
+    characteristic_service = std::move(service_uuid);
+    characteristic_filter = std::move(uuids);
+    characteristic_explicit_empty = explicit_empty;
+    completion(discover_error);
+  }
+  ErrorOr<std::vector<GattCharacteristicData>> Characteristics(
+      uint64_t address, std::string_view service_uuid) const override {
+    last_read_address = address;
+    last_read_service = std::string(service_uuid);
+    if (read_error) return *read_error;
+    return characteristics;
+  }
+
+  std::optional<FlutterError> discover_error;
+  std::optional<FlutterError> read_error;
+  std::vector<GattServiceData> services;
+  std::vector<GattCharacteristicData> characteristics;
+  uint64_t service_address = 0;
+  std::vector<std::string> service_filter;
+  bool service_explicit_empty = false;
+  uint64_t characteristic_address = 0;
+  std::string characteristic_service;
+  std::vector<std::string> characteristic_filter;
+  bool characteristic_explicit_empty = false;
+  mutable uint64_t last_read_address = 0;
+  mutable std::string last_read_service;
+};
 class FakeSink final : public FlutterEventSink {
  public:
   void OnClientState(const std::string* id, ClientState value) override {
@@ -200,15 +251,19 @@ struct Fixture {
     auto c = std::make_unique<FakeCentral>(cache); central = c.get();
     auto connection_value = std::make_unique<FakeConnection>();
     connection = connection_value.get();
+    auto discovery_value = std::make_unique<FakeGattDiscovery>();
+    discovery = discovery_value.get();
     auto r = std::make_unique<FakeRunner>(); runner = r.get();
     auto s = std::make_unique<FakeSink>(); sink = s.get();
     plugin = std::make_unique<ButaneWindowsPlugin>(
-        std::move(c), std::move(connection_value), std::move(r), std::move(s));
+        std::move(c), std::move(connection_value), std::move(discovery_value),
+        std::move(r), std::move(s));
   }
   FakeCentral* central;
   FakeRunner* runner;
   FakeSink* sink;
   FakeConnection* connection;
+  FakeGattDiscovery* discovery;
   std::unique_ptr<ButaneWindowsPlugin> plugin;
 };
 TEST(ButaneWindowsPlugin, StateRepliesAndPostsStateChanges) {
@@ -334,5 +389,130 @@ TEST(ButaneWindowsPlugin, ConnectionChangePostsBeforeFlutterApi) {
   EXPECT_EQ(f.sink->connection_states[0], ConnectionState::kConnected);
   EXPECT_EQ(f.sink->connection_sessions[0].peripheral_identifier(),
             session.peripheral_identifier());
+}
+TEST(ButaneWindowsPlugin, DiscoverServicesNormalizesFilter) {
+  Fixture f;
+  flutter::EncodableList filter{flutter::EncodableValue("180D")};
+  f.plugin->DiscoverServices(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      &filter, [](auto error) { EXPECT_FALSE(error); });
+  EXPECT_EQ(f.discovery->service_address, 0x00A1B2C3D4E5ULL);
+  ASSERT_EQ(f.discovery->service_filter.size(), 1u);
+  EXPECT_EQ(f.discovery->service_filter[0],
+            "0000180d-0000-1000-8000-00805f9b34fb");
+  EXPECT_FALSE(f.discovery->service_explicit_empty);
+}
+TEST(ButaneWindowsPlugin, ServicesMapPrimaryAndCanonicalUuid) {
+  Fixture f;
+  f.discovery->services = {
+      {"0000180d-0000-1000-8000-00805f9b34fb", true}};
+  f.plugin->Services(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      [](auto result) {
+        ASSERT_FALSE(result.has_error());
+        ASSERT_EQ(result.value().size(), 1u);
+        const auto* service = CustomValue<Service>(result.value()[0]);
+        ASSERT_NE(service, nullptr);
+        EXPECT_EQ(service->uuid(),
+                  "0000180d-0000-1000-8000-00805f9b34fb");
+        EXPECT_TRUE(service->is_primary());
+      });
+}
+TEST(ButaneWindowsPlugin, DiscoverCharacteristicsRejectsUnknownService) {
+  Fixture f;
+  f.discovery->services = {
+      {"0000180f-0000-1000-8000-00805f9b34fb", true}};
+  f.plugin->DiscoverCharacteristics(
+      PeripheralSession("00:A1:B2:C3:D4:E5"), "180D", nullptr,
+      [](auto error) {
+        ASSERT_TRUE(error);
+        EXPECT_EQ(error->code(), "not-found");
+      });
+  EXPECT_EQ(f.discovery->characteristic_address, 0u);
+}
+TEST(ButaneWindowsPlugin,
+     CharacteristicsPopulateAllPropertiesAndDescriptors) {
+  Fixture f;
+  f.discovery->characteristics = {
+      {"00002a37-0000-1000-8000-00805f9b34fb", 0x3ff,
+       {{"00002902-0000-1000-8000-00805f9b34fb"}}},
+      {"reliable", kGattPropertyReliableWrites, {}},
+      {"auxiliary", kGattPropertyWritableAuxiliaries, {}}};
+  f.plugin->Characteristics(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      "180D", [](auto result) {
+        ASSERT_FALSE(result.has_error());
+        ASSERT_EQ(result.value().size(), 3u);
+        const auto* characteristic =
+            CustomValue<Characteristic>(result.value()[0]);
+        ASSERT_NE(characteristic, nullptr);
+        ASSERT_NE(characteristic->properties(), nullptr);
+        const auto& properties = *characteristic->properties();
+        EXPECT_TRUE(properties.broadcast());
+        EXPECT_TRUE(properties.read());
+        EXPECT_TRUE(properties.write_without_response());
+        EXPECT_TRUE(properties.write());
+        EXPECT_TRUE(properties.notify());
+        EXPECT_TRUE(properties.indicate());
+        EXPECT_TRUE(properties.authenticated_signed_writes());
+        EXPECT_TRUE(properties.extended_properties());
+        EXPECT_FALSE(properties.notify_encryption_required());
+        EXPECT_FALSE(properties.indicate_encryption_required());
+        ASSERT_NE(characteristic->descriptors(), nullptr);
+        ASSERT_EQ(characteristic->descriptors()->size(), 1u);
+        const auto* descriptor =
+            CustomValue<Descriptor>(characteristic->descriptors()->at(0));
+        ASSERT_NE(descriptor, nullptr);
+        EXPECT_EQ(descriptor->uuid(),
+                  "00002902-0000-1000-8000-00805f9b34fb");
+        EXPECT_EQ(descriptor->value(), nullptr);
+        for (size_t index : {size_t{1}, size_t{2}}) {
+          const auto* alias =
+              CustomValue<Characteristic>(result.value()[index]);
+          ASSERT_NE(alias, nullptr);
+          ASSERT_NE(alias->properties(), nullptr);
+          EXPECT_TRUE(alias->properties()->extended_properties());
+        }
+      });
+}
+TEST(ButaneWindowsPlugin, ZeroMaskStillReturnsNonNullProperties) {
+  Fixture f;
+  f.discovery->characteristics = {{"zero", 0, {}}};
+  f.plugin->Characteristics(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      "180D", [](auto result) {
+        ASSERT_FALSE(result.has_error());
+        const auto* characteristic =
+            CustomValue<Characteristic>(result.value()[0]);
+        ASSERT_NE(characteristic, nullptr);
+        ASSERT_NE(characteristic->properties(), nullptr);
+        EXPECT_FALSE(characteristic->properties()->read());
+      });
+}
+TEST(ButaneWindowsPlugin, MalformedDiscoveryInputReturnsInvalidArgument) {
+  Fixture f;
+  f.plugin->DiscoverServices(PeripheralSession("bad"), nullptr,
+      [](auto error) {
+        ASSERT_TRUE(error);
+        EXPECT_EQ(error->code(), "invalid_argument");
+      });
+  f.plugin->Characteristics(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      "bad", [](auto result) {
+        ASSERT_TRUE(result.has_error());
+        EXPECT_EQ(result.error().code(), "invalid_argument");
+      });
+  flutter::EncodableList invalid_filter{flutter::EncodableValue(int32_t{1})};
+  f.plugin->DiscoverServices(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      &invalid_filter, [](auto error) {
+        ASSERT_TRUE(error);
+        EXPECT_EQ(error->code(), "invalid_argument");
+      });
+}
+TEST(ButaneWindowsPlugin, DiscoveryStatusUsesSharedErrors) {
+  Fixture f;
+  f.discovery->discover_error =
+      GattDiscoveryError(GattDiscoveryStatus::kAccessDenied, std::nullopt);
+  f.plugin->DiscoverServices(PeripheralSession("00:A1:B2:C3:D4:E5"),
+      nullptr, [](auto error) {
+        ASSERT_TRUE(error);
+        EXPECT_EQ(error->code(), "unauthorized");
+        EXPECT_EQ(error->message(), "Bluetooth GATT access was denied.");
+      });
 }
 }  // namespace butane_windows::test
