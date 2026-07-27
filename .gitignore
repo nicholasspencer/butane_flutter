@@ -352,3 +352,6 @@ packages/butane_harness/ios/Podfile.lock
 # gc-projected core operational skills (symlinks into the city; machine-specific, derived)
 .claude/skills/core.gc-*
 .agents/skills/core.gc-*
+
+# the_grid live-arm worktrees + station artifacts (cut under this substation root)
+.grid/
