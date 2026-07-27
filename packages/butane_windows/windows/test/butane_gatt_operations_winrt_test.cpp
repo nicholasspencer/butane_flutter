@@ -141,8 +141,8 @@ TEST(WindowsGattOperationsBackend, ReportsNegotiatedMtu) {
   native->mtu = 512;
   WindowsGattOperationsBackend backend(native);
   backend.RequestMtu(8, 23, [](ErrorOr<int64_t> result) {
-    ASSERT_TRUE(std::holds_alternative<int64_t>(result));
-    EXPECT_EQ(std::get<int64_t>(result), 512);
+    ASSERT_FALSE(result.has_error());
+    EXPECT_EQ(result.value(), 512);
   });
 }
 

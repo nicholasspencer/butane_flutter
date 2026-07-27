@@ -16,6 +16,7 @@ namespace butane_windows {
 namespace {
 using namespace winrt::Windows::Devices::Bluetooth;
 using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
+using winrt::Windows::Foundation::GuidHelper;
 using namespace winrt::Windows::Storage::Streams;
 
 GattOperationStatus ConvertStatus(GattCommunicationStatus status) {
@@ -206,7 +207,7 @@ class WinrtNativeGattOperations final
         co_await BluetoothLEDevice::FromBluetoothAddressAsync(address);
     if (owner->IsClosed() || !resolved.device) co_return;
     auto services = co_await resolved.device.GetGattServicesForUuidAsync(
-        winrt::guid(service_uuid),
+        GuidHelper::FromString(winrt::to_hstring(service_uuid)),
         BluetoothCacheMode::Uncached);
     if (owner->IsClosed() ||
         services.Status() != GattCommunicationStatus::Success) {
@@ -220,7 +221,7 @@ class WinrtNativeGattOperations final
     resolved.service = services.Services().GetAt(0);
     auto characteristics =
         co_await resolved.service.GetCharacteristicsForUuidAsync(
-            winrt::guid(characteristic_uuid),
+            GuidHelper::FromString(winrt::to_hstring(characteristic_uuid)),
             BluetoothCacheMode::Uncached);
     if (owner->IsClosed() ||
         characteristics.Status() != GattCommunicationStatus::Success) {
@@ -288,7 +289,7 @@ class WinrtNativeGattOperations final
       }
       auto descriptors =
           co_await resolved.characteristic.GetDescriptorsForUuidAsync(
-              winrt::guid(descriptor_uuid),
+              GuidHelper::FromString(winrt::to_hstring(descriptor_uuid)),
               BluetoothCacheMode::Uncached);
       if (owner->IsClosed()) {
         CloseResolved(resolved);
