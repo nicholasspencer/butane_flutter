@@ -26,6 +26,13 @@ class FlutterEventSink {
                                  ConnectionState state) = 0;
 };
 
+bool TryInitializeWinrtApartment() noexcept;
+bool TryInitializeWinrtApartment(
+    const std::function<void()>& initializer) noexcept;
+bool ProbePlatformWindow(const std::function<HWND()>& probe) noexcept;
+std::unique_ptr<PlatformTaskRunner> CreatePlatformTaskRunner(
+    flutter::PluginRegistrarWindows* registrar) noexcept;
+
 class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar);

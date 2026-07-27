@@ -1,8 +1,9 @@
 #include "butane_connection_winrt.h"
 
+#include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/base.h>
 
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -10,84 +11,241 @@ namespace butane_windows {
 namespace {
 using winrt::Windows::Devices::Bluetooth::BluetoothLEDevice;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattSession;
+
+class WinrtNativeConnection final
+    : public NativeConnection,
+      public std::enable_shared_from_this<WinrtNativeConnection> {
+ public:
+  explicit WinrtNativeConnection(uint64_t address) : address_(address) {}
+
+  void Start(StateCallback on_state, ReadyCallback on_ready) override {
+    {
+      const std::scoped_lock lock(mutex_);
+      if (closed_) return;
+      on_state_ = std::move(on_state);
+      on_ready_ = std::move(on_ready);
+    }
+    ConnectAsync(shared_from_this());
+  }
+
+  void Close() override {
+    BluetoothLEDevice device{nullptr};
+    GattSession session{nullptr};
+    BluetoothLEDevice::ConnectionStatusChanged_revoker revoker;
+    {
+      const std::scoped_lock lock(mutex_);
+      if (closed_) return;
+      closed_ = true;
+      on_state_ = nullptr;
+      on_ready_ = nullptr;
+      device = std::move(device_);
+      session = std::move(session_);
+      revoker = std::move(status_revoker_);
+    }
+    Cleanup(device, session, revoker);
+  }
+
+ private:
+  static void Cleanup(
+      BluetoothLEDevice& device, GattSession& session,
+      BluetoothLEDevice::ConnectionStatusChanged_revoker& revoker) {
+    try {
+      revoker.revoke();
+    } catch (const winrt::hresult_error&) {
+    }
+    try {
+      if (session) {
+        session.MaintainConnection(false);
+        session.Close();
+      }
+    } catch (const winrt::hresult_error&) {
+    }
+    try {
+      if (device) device.Close();
+    } catch (const winrt::hresult_error&) {
+    }
+  }
+
+  bool IsClosed() const {
+    const std::scoped_lock lock(mutex_);
+    return closed_;
+  }
+
+  void Complete(std::optional<std::string> error) {
+    ReadyCallback callback;
+    {
+      const std::scoped_lock lock(mutex_);
+      if (closed_ || ready_reported_) return;
+      ready_reported_ = true;
+      callback = std::move(on_ready_);
+    }
+    if (callback) callback(std::move(error));
+  }
+
+  static winrt::fire_and_forget ConnectAsync(
+      std::shared_ptr<WinrtNativeConnection> self) {
+    BluetoothLEDevice device{nullptr};
+    GattSession session{nullptr};
+    BluetoothLEDevice::ConnectionStatusChanged_revoker revoker;
+    try {
+      device =
+          co_await BluetoothLEDevice::FromBluetoothAddressAsync(self->address_);
+      if (self->IsClosed()) {
+        Cleanup(device, session, revoker);
+        co_return;
+      }
+      if (!device) {
+        self->Complete("Bluetooth device not found");
+        co_return;
+      }
+
+      session = co_await GattSession::FromDeviceIdAsync(
+          device.BluetoothDeviceId());
+      if (self->IsClosed()) {
+        Cleanup(device, session, revoker);
+        co_return;
+      }
+      if (!session) {
+        Cleanup(device, session, revoker);
+        self->Complete("GATT session unavailable");
+        co_return;
+      }
+
+      session.MaintainConnection(true);
+      std::weak_ptr<WinrtNativeConnection> weak = self;
+      revoker = device.ConnectionStatusChanged(
+          winrt::auto_revoke,
+          [weak](BluetoothLEDevice const& sender, auto const&) {
+            const auto owner = weak.lock();
+            if (!owner) return;
+            StateCallback callback;
+            {
+              const std::scoped_lock lock(owner->mutex_);
+              if (owner->closed_) return;
+              callback = owner->on_state_;
+            }
+            if (callback) {
+              callback(MapConnectionStatus(sender.ConnectionStatus()));
+            }
+          });
+
+      const auto current_state =
+          MapConnectionStatus(device.ConnectionStatus());
+      StateCallback state_callback;
+      {
+        const std::scoped_lock lock(self->mutex_);
+        if (self->closed_) {
+          // Cleanup below must happen without holding the object's mutex.
+        } else {
+          self->device_ = std::move(device);
+          self->session_ = std::move(session);
+          self->status_revoker_ = std::move(revoker);
+          state_callback = self->on_state_;
+        }
+      }
+      if (self->IsClosed()) {
+        Cleanup(device, session, revoker);
+        co_return;
+      }
+      if (state_callback) {
+        state_callback(current_state);
+      }
+      self->Complete(std::nullopt);
+    } catch (const winrt::hresult_error& error) {
+      Cleanup(device, session, revoker);
+      if (!self->IsClosed()) {
+        self->Complete(winrt::to_string(error.message()));
+      }
+    }
+  }
+
+  uint64_t address_;
+  mutable std::mutex mutex_;
+  bool closed_ = false;
+  bool ready_reported_ = false;
+  StateCallback on_state_;
+  ReadyCallback on_ready_;
+  BluetoothLEDevice device_{nullptr};
+  GattSession session_{nullptr};
+  BluetoothLEDevice::ConnectionStatusChanged_revoker status_revoker_;
+};
+
+class WinrtConnectionFactory final : public NativeConnectionFactory {
+ public:
+  std::shared_ptr<NativeConnection> Create(uint64_t address) override {
+    return std::make_shared<WinrtNativeConnection>(address);
+  }
+};
 }  // namespace
 
+std::shared_ptr<NativeConnectionFactory> CreateWinrtConnectionFactory() {
+  return std::make_shared<WinrtConnectionFactory>();
+}
+
+WindowsConnectionBackend::WindowsConnectionBackend(
+    std::shared_ptr<NativeConnectionFactory> factory)
+    : factory_(std::move(factory)) {}
+
 WindowsConnectionBackend::~WindowsConnectionBackend() {
-  std::vector<uint64_t> addresses;
+  std::vector<std::shared_ptr<NativeConnection>> connections;
   {
     const std::scoped_lock lock(mutex_);
-    addresses.reserve(entries_.size());
-    for (const auto& item : entries_) addresses.push_back(item.first);
+    connections.reserve(entries_.size());
+    for (auto& item : entries_) {
+      connections.push_back(std::move(item.second->native));
+    }
+    entries_.clear();
   }
-  for (uint64_t address : addresses) Disconnect(address);
+  for (const auto& connection : connections) connection->Close();
 }
 
 void WindowsConnectionBackend::Connect(uint64_t address,
                                        PeripheralSession session,
                                        StateCallback on_state,
                                        ConnectCallback on_complete) {
-  auto entry = std::make_shared<ConnectionEntry>(
-      std::move(session), std::move(on_state));
+  std::shared_ptr<ConnectionEntry> entry;
+  bool duplicate = false;
   {
     const std::scoped_lock lock(mutex_);
-    const auto [it, inserted] = entries_.emplace(address, entry);
-    if (!inserted) {
-      on_complete(std::nullopt);
-      return;
+    duplicate = entries_.find(address) != entries_.end();
+    if (!duplicate) {
+      entry = std::make_shared<ConnectionEntry>(
+          std::move(session), std::move(on_state), factory_->Create(address));
+      entries_.emplace(address, entry);
     }
   }
-  entry->on_state(ConnectionSnapshot{entry->session,
-                                     ConnectionState::kConnecting});
-  ConnectAsync(address, std::move(entry), std::move(on_complete));
+  if (duplicate) {
+    on_complete(std::nullopt);
+    return;
+  }
+
+  entry->on_state(
+      ConnectionSnapshot{entry->session, ConnectionState::kConnecting});
+  entry->native->Start(
+      [this, address, entry](ConnectionState state) {
+        Publish(address, entry, state);
+      },
+      [this, address, entry,
+       on_complete = std::move(on_complete)](
+          std::optional<std::string> error) mutable {
+        Ready(address, entry, std::move(on_complete), std::move(error));
+      });
 }
 
-winrt::fire_and_forget WindowsConnectionBackend::ConnectAsync(
-    uint64_t address, std::shared_ptr<ConnectionEntry> entry,
-    ConnectCallback on_complete) {
-  try {
-    auto device =
-        co_await BluetoothLEDevice::FromBluetoothAddressAsync(address);
-    if (!device) {
-      throw winrt::hresult_error(E_FAIL, L"Bluetooth device not found");
-    }
-    auto gatt_session =
-        co_await GattSession::FromDeviceIdAsync(device.BluetoothDeviceId());
-    if (!gatt_session) {
-      device.Close();
-      throw winrt::hresult_error(E_FAIL, L"GATT session unavailable");
-    }
-
-    gatt_session.MaintainConnection(true);
-    auto revoker = device.ConnectionStatusChanged(
-        winrt::auto_revoke,
-        [this, address](BluetoothLEDevice const& sender, auto const&) {
-          Publish(address, MapConnectionStatus(sender.ConnectionStatus()));
-        });
+void WindowsConnectionBackend::Ready(
+    uint64_t address, const std::shared_ptr<ConnectionEntry>& entry,
+    ConnectCallback on_complete, std::optional<std::string> error) {
+  if (!error) {
+    bool retained;
     {
       const std::scoped_lock lock(mutex_);
       const auto it = entries_.find(address);
-      if (it == entries_.end() || it->second != entry) {
-        revoker.revoke();
-        gatt_session.MaintainConnection(false);
-        gatt_session.Close();
-        device.Close();
-        co_return;
-      }
-      entry->device = device;
-      entry->gatt_session = gatt_session;
-      entry->status_revoker = std::move(revoker);
+      retained = it != entries_.end() && it->second == entry;
     }
-    Publish(address, MapConnectionStatus(device.ConnectionStatus()));
-    on_complete(std::nullopt);
-  } catch (const winrt::hresult_error& error) {
-    Fail(address, entry, std::move(on_complete),
-         winrt::to_string(error.message()));
+    if (retained) on_complete(std::nullopt);
+    return;
   }
-}
 
-void WindowsConnectionBackend::Fail(
-    uint64_t address, const std::shared_ptr<ConnectionEntry>& entry,
-    ConnectCallback on_complete, std::string message) {
   bool retained = false;
   {
     const std::scoped_lock lock(mutex_);
@@ -97,25 +255,26 @@ void WindowsConnectionBackend::Fail(
       retained = true;
     }
   }
-  Close(*entry);
+  entry->native->Close();
   if (!retained) return;
   entry->state = ConnectionState::kDisconnected;
   entry->on_state(
       ConnectionSnapshot{entry->session, ConnectionState::kDisconnected});
-  on_complete(FlutterError("connection_failed", std::move(message)));
+  on_complete(FlutterError("connection_failed", std::move(*error)));
 }
 
-void WindowsConnectionBackend::Publish(uint64_t address,
-                                       ConnectionState state) {
-  std::shared_ptr<ConnectionEntry> entry;
+void WindowsConnectionBackend::Publish(
+    uint64_t address, const std::shared_ptr<ConnectionEntry>& expected,
+    ConnectionState state) {
+  StateCallback callback;
   {
     const std::scoped_lock lock(mutex_);
     const auto it = entries_.find(address);
-    if (it == entries_.end()) return;
-    entry = it->second;
-    entry->state = state;
+    if (it == entries_.end() || it->second != expected) return;
+    it->second->state = state;
+    callback = it->second->on_state;
   }
-  entry->on_state(ConnectionSnapshot{entry->session, state});
+  callback(ConnectionSnapshot{expected->session, state});
 }
 
 void WindowsConnectionBackend::Disconnect(uint64_t address) {
@@ -130,7 +289,7 @@ void WindowsConnectionBackend::Disconnect(uint64_t address) {
   }
   entry->on_state(
       ConnectionSnapshot{entry->session, ConnectionState::kDisconnecting});
-  Close(*entry);
+  entry->native->Close();
   entry->state = ConnectionState::kDisconnected;
   entry->on_state(
       ConnectionSnapshot{entry->session, ConnectionState::kDisconnected});
@@ -141,24 +300,6 @@ ConnectionState WindowsConnectionBackend::State(uint64_t address) const {
   const auto it = entries_.find(address);
   return it == entries_.end() ? ConnectionState::kDisconnected
                               : it->second->state;
-}
-
-void WindowsConnectionBackend::Close(ConnectionEntry& entry) {
-  try {
-    entry.status_revoker.revoke();
-  } catch (const winrt::hresult_error&) {
-  }
-  try {
-    if (entry.gatt_session) {
-      entry.gatt_session.MaintainConnection(false);
-      entry.gatt_session.Close();
-    }
-  } catch (const winrt::hresult_error&) {
-  }
-  try {
-    if (entry.device) entry.device.Close();
-  } catch (const winrt::hresult_error&) {
-  }
 }
 
 }  // namespace butane_windows

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -29,6 +30,19 @@ TEST(ConnectionStateMapping, ConnectedAndDisconnected) {
             ConnectionState::kConnected);
   EXPECT_EQ(MapConnectionStatus(BluetoothConnectionStatus::Disconnected),
             ConnectionState::kDisconnected);
+}
+TEST(PluginRegistrationGuard, RejectsMissingWindow) {
+  EXPECT_FALSE(ProbePlatformWindow([] { return static_cast<HWND>(nullptr); }));
+  EXPECT_TRUE(ProbePlatformWindow(
+      [] { return reinterpret_cast<HWND>(static_cast<uintptr_t>(1)); }));
+}
+TEST(PluginRegistrationGuard, ContainsApartmentFailure) {
+  EXPECT_FALSE(TryInitializeWinrtApartment([] {
+    throw winrt::hresult_error(E_FAIL);
+  }));
+  bool invoked = false;
+  EXPECT_TRUE(TryInitializeWinrtApartment([&] { invoked = true; }));
+  EXPECT_TRUE(invoked);
 }
 TEST(ServiceFilter, NullAndUuidWidthsNormalize) {
   EXPECT_TRUE(NormalizeServiceFilter(nullptr).value().empty());
