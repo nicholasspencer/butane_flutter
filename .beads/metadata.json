@@ -1,7 +1,7 @@
 {
   "database": "dolt",
   "backend": "dolt",
-  "dolt_mode": "server",
+  "dolt_mode": "proxied-server",
   "dolt_database": "butane_flutter",
   "project_id": "16c49532-b116-4788-a3ff-9676b90a036e"
 }
