@@ -43,8 +43,8 @@ class ButaneFollowerLauncher implements FollowerLauncher {
     this.readyTimeout = const Duration(minutes: 2),
     ProcessGroupController processes = const SystemProcessGroupController(),
     void Function(String)? onLog,
-  })  : _processes = processes,
-        _onLog = onLog ?? _noLog;
+  }) : _processes = processes,
+       _onLog = onLog ?? _noLog;
 
   /// The butane harness package directory (contains `pubspec.yaml` and the
   /// platform runners).
@@ -121,11 +121,11 @@ class ButaneFollowerLauncher implements FollowerLauncher {
   /// a nonzero exit.
   Future<void> _build(String target) async {
     _onLog('butane launcher: flutter build $target --debug');
-    final result = await Process.run(
-      flutterExecutable,
-      <String>['build', target, '--debug'],
-      workingDirectory: harnessDirectory,
-    ).timeout(buildTimeout);
+    final result = await Process.run(flutterExecutable, <String>[
+      'build',
+      target,
+      '--debug',
+    ], workingDirectory: harnessDirectory).timeout(buildTimeout);
     if (result.exitCode != 0) {
       throw StateError(
         'flutter build $target --debug exited ${result.exitCode}\n'
@@ -140,12 +140,13 @@ class ButaneFollowerLauncher implements FollowerLauncher {
     switch (target) {
       case 'macos':
         // build/macos/Build/Products/Debug/<App>.app/Contents/MacOS/<App>
-        final products =
-            Directory('$harnessDirectory/build/macos/Build/Products/Debug');
+        final products = Directory(
+          '$harnessDirectory/build/macos/Build/Products/Debug',
+        );
         final app = products.existsSync()
             ? products.listSync().whereType<Directory>().where(
-                  (d) => d.path.endsWith('.app'),
-                )
+                (d) => d.path.endsWith('.app'),
+              )
             : const <Directory>[];
         for (final bundle in app) {
           final name = bundle.uri.pathSegments

@@ -159,9 +159,9 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     this.lessee = '',
     Map<String, String>? environment,
     void Function(String)? onLog,
-  })  : requires = requires ?? kDefaultFollowerRequires,
-        environment = environment ?? Platform.environment,
-        _onLog = onLog ?? _noLog;
+  }) : requires = requires ?? kDefaultFollowerRequires,
+       environment = environment ?? Platform.environment,
+       _onLog = onLog ?? _noLog;
 
   /// The candidate follower peers (matched by containment at mount).
   final List<FollowerPeer> peers;
@@ -383,7 +383,8 @@ class BurnHostCapability extends ServiceCapability {
 
     // AWAIT the follower endpoint, read pull-free from the AMBIENT sibling
     // view at ENTRY (the effect verb, D-5).
-    final siblings = context.getInheritedSeedOfExactType<SiblingView>() ??
+    final siblings =
+        context.getInheritedSeedOfExactType<SiblingView>() ??
         const SiblingView();
     final followerPath = '${_parentPath(args.nodePath)}/$followerStep';
     final published = siblings.resultOf(followerPath);
@@ -513,24 +514,23 @@ DefaultCapabilityRegistry buildBurnRegistry({
   LeonardDrive? localDrive,
   void Function(String)? onLog,
   DateTime Function()? clock,
-}) =>
-    DefaultCapabilityRegistry(
-      capabilities: {
-        kBurnFollowerStep: BurnFollowerCapability(
-          peers: peers,
-          launchSpec: launchSpec,
-          requires: requires,
-          onLog: onLog,
-        ),
-        kBurnHostStep: BurnHostCapability(
-          drive: drive,
-          scenario: scenario,
-          localRunner: localRunner,
-          localSpec: localSpec,
-          localDrive: localDrive,
-          onLog: onLog,
-        ),
-      },
-      circuits: const {'burn': kBurnCircuit},
-      clock: clock,
-    );
+}) => DefaultCapabilityRegistry(
+  capabilities: {
+    kBurnFollowerStep: BurnFollowerCapability(
+      peers: peers,
+      launchSpec: launchSpec,
+      requires: requires,
+      onLog: onLog,
+    ),
+    kBurnHostStep: BurnHostCapability(
+      drive: drive,
+      scenario: scenario,
+      localRunner: localRunner,
+      localSpec: localSpec,
+      localDrive: localDrive,
+      onLog: onLog,
+    ),
+  },
+  circuits: const {'burn': kBurnCircuit},
+  clock: clock,
+);

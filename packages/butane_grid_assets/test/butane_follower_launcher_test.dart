@@ -33,15 +33,17 @@ void main() {
       }
       final drivePrefix = await ProcessLeonardDrive.discover();
       if (drivePrefix == null) {
-        markTestSkipped('leonard_drive not discoverable (lenny not checked '
-            r'out and $LEONARD_DRIVE unset)');
+        markTestSkipped(
+          'leonard_drive not discoverable (lenny not checked '
+          r'out and $LEONARD_DRIVE unset)',
+        );
         return;
       }
       final target = Platform.isMacOS
           ? 'macos'
           : Platform.isLinux
-              ? 'linux'
-              : '';
+          ? 'linux'
+          : '';
       if (target.isEmpty) {
         markTestSkipped('unsupported host platform for the harness launch');
         return;
@@ -63,24 +65,30 @@ void main() {
         final endpoint = await runner.launch(
           LaunchSpec(app: 'butane_harness', target: target),
         );
-        expect(endpoint.isPublished, isTrue,
-            reason: 'launcher must publish the scraped sentinel URI');
+        expect(
+          endpoint.isPublished,
+          isTrue,
+          reason: 'launcher must publish the scraped sentinel URI',
+        );
         expect(endpoint.vmServiceUri, startsWith('ws://'));
 
         // --- drive: the REAL leonard_drive over the DIRECT channel ---
         final drive = ProcessLeonardDrive();
         await drive.attach(endpoint);
-        final fragment = jsonDecode(
-          await drive.observe('extensions.butane.data'),
-        ) as Map<String, Object?>;
-        expect(fragment['role'], 'peripheral',
-            reason: 'LaunchSpec defaults the follower to the peripheral role');
+        final fragment =
+            jsonDecode(await drive.observe('extensions.butane.data'))
+                as Map<String, Object?>;
+        expect(
+          fragment['role'],
+          'peripheral',
+          reason: 'LaunchSpec defaults the follower to the peripheral role',
+        );
         expect(fragment, contains('advertising'));
 
         // A tool round-trip through the registry frontend.
-        final stateResult = jsonDecode(
-          await drive.invoke('butane.check_state', const {}),
-        ) as Map<String, Object?>;
+        final stateResult =
+            jsonDecode(await drive.invoke('butane.check_state', const {}))
+                as Map<String, Object?>;
         expect(stateResult['ok'], isTrue);
       } finally {
         // --- teardown: the guaranteed reap (even on the failure path) ---
@@ -97,9 +105,13 @@ void main() {
               await Future<void>.delayed(const Duration(milliseconds: 250));
             }
           }
-          expect(alive, isFalse,
-              reason: 'harness pid ${daemon.pid} must be reaped '
-                  '(log: ${log.join(' | ')})');
+          expect(
+            alive,
+            isFalse,
+            reason:
+                'harness pid ${daemon.pid} must be reaped '
+                '(log: ${log.join(' | ')})',
+          );
         }
       }
     },

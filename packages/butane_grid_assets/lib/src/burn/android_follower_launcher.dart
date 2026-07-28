@@ -11,18 +11,17 @@ import 'package:grid_runtime/grid_runtime.dart'
 import 'follower.dart';
 
 /// Runs one command and returns its completed result.
-typedef AndroidCommandRunner = Future<ProcessResult> Function(
-  String executable,
-  List<String> arguments, {
-  String? workingDirectory,
-  Duration? timeout,
-});
+typedef AndroidCommandRunner =
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> arguments, {
+      String? workingDirectory,
+      Duration? timeout,
+    });
 
 /// Starts the long-lived logcat process used as the local daemon leader.
-typedef AndroidProcessStarter = Future<Process> Function(
-  String executable,
-  List<String> arguments,
-);
+typedef AndroidProcessStarter =
+    Future<Process> Function(String executable, List<String> arguments);
 
 /// Verifies that a forwarded VM-service WebSocket accepts a connection.
 typedef AndroidEndpointProbe = Future<void> Function(Uri uri);
@@ -75,11 +74,11 @@ class AndroidFollowerLauncher implements FollowerLauncher {
     AndroidProcessStarter processStarter = _startProcess,
     AndroidEndpointProbe endpointProbe = _probeEndpoint,
     void Function(String)? onLog,
-  })  : _processes = processes,
-        _commandRunner = commandRunner,
-        _processStarter = processStarter,
-        _endpointProbe = endpointProbe,
-        _onLog = onLog ?? _noLog;
+  }) : _processes = processes,
+       _commandRunner = commandRunner,
+       _processStarter = processStarter,
+       _endpointProbe = endpointProbe,
+       _onLog = onLog ?? _noLog;
 
   /// The selected adb device serial.
   final String deviceId;
@@ -172,13 +171,7 @@ class AndroidFollowerLauncher implements FollowerLauncher {
       final serviceFuture = _scrapeGridVmUri(logcat);
       await _checked(
         adbExecutable,
-        _adb([
-          'shell',
-          'am',
-          'start',
-          '-n',
-          '$packageName/$activityName',
-        ]),
+        _adb(['shell', 'am', 'start', '-n', '$packageName/$activityName']),
       );
       final deviceUri = await serviceFuture.timeout(readyTimeout);
       if (deviceUri.scheme != 'ws' && deviceUri.scheme != 'wss') {
@@ -245,22 +238,25 @@ class AndroidFollowerLauncher implements FollowerLauncher {
   Future<Uri> _scrapeGridVmUri(Process process) {
     final ready = Completer<Uri>();
     void drain(Stream<List<int>> stream) {
-      stream.transform(utf8.decoder).transform(const LineSplitter()).listen(
-        (line) {
-          _onLog('  adb: $line');
-          if (ready.isCompleted) return;
-          final match = RegExp(r'GRID_VM_URI=(\S+)').firstMatch(line);
-          if (match == null) return;
-          try {
-            ready.complete(Uri.parse(match.group(1)!));
-          } on Object catch (error, stack) {
-            ready.completeError(error, stack);
-          }
-        },
-        onError: (Object error, StackTrace stack) {
-          if (!ready.isCompleted) ready.completeError(error, stack);
-        },
-      );
+      stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+            (line) {
+              _onLog('  adb: $line');
+              if (ready.isCompleted) return;
+              final match = RegExp(r'GRID_VM_URI=(\S+)').firstMatch(line);
+              if (match == null) return;
+              try {
+                ready.complete(Uri.parse(match.group(1)!));
+              } on Object catch (error, stack) {
+                ready.completeError(error, stack);
+              }
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!ready.isCompleted) ready.completeError(error, stack);
+            },
+          );
     }
 
     drain(process.stdout);

@@ -53,8 +53,8 @@ class LocalDartFollowerLauncher implements FollowerLauncher {
     ProcessGroupController processes = const SystemProcessGroupController(),
     this.readyTimeout = const Duration(seconds: 60),
     void Function(String)? onLog,
-  })  : _processes = processes,
-        _onLog = onLog ?? _noLog;
+  }) : _processes = processes,
+       _onLog = onLog ?? _noLog;
 
   /// The daemon `.dart` entrypoint to launch.
   final String daemonEntrypoint;
@@ -85,7 +85,8 @@ class LocalDartFollowerLauncher implements FollowerLauncher {
         '--disable-service-auth-codes',
         daemonEntrypoint,
       ],
-      workingDirectory: _packageRootOf(daemonEntrypoint) ??
+      workingDirectory:
+          _packageRootOf(daemonEntrypoint) ??
           File(daemonEntrypoint).parent.path,
       // detachedWithStdio: the one spawn mode that setsid()s the child into a
       // NEW session + process group (see the library doc — pid-as-pgid under

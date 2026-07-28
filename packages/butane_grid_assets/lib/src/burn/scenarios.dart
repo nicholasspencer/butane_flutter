@@ -24,10 +24,7 @@ const String kNusTxUuid = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 const DriveScenario kSmokeScenario = DriveScenario(
   name: 'smoke',
   steps: [
-    DriveStep.invoke(
-      'butane.wait_for_state',
-      expectContains: '"matched":true',
-    ),
+    DriveStep.invoke('butane.wait_for_state', expectContains: '"matched":true'),
     DriveStep.invoke(
       'butane.wait_for_state',
       expectContains: '"matched":true',
@@ -55,10 +52,7 @@ const DriveScenario kSmokeScenario = DriveScenario(
       },
       expectContains: 'advertising',
     ),
-    DriveStep.observe(
-      'extensions.butane.data',
-      expectContains: 'BURN-LIVE',
-    ),
+    DriveStep.observe('extensions.butane.data', expectContains: 'BURN-LIVE'),
     DriveStep.invoke(
       'butane.check_state',
       expectContains: 'poweredOn',
@@ -83,10 +77,7 @@ const DriveScenario kNusRoundTripScenario = DriveScenario(
   name: 'nus-round-trip',
   steps: [
     // Gate both adapters (BLE ops before poweredOn hang in CoreBluetooth).
-    DriveStep.invoke(
-      'butane.wait_for_state',
-      expectContains: '"matched":true',
-    ),
+    DriveStep.invoke('butane.wait_for_state', expectContains: '"matched":true'),
     DriveStep.invoke(
       'butane.wait_for_state',
       expectContains: '"matched":true',
@@ -163,20 +154,14 @@ const DriveScenario kNusRoundTripScenario = DriveScenario(
     ),
     DriveStep.invoke(
       'butane.get_written_value',
-      args: {
-        'serviceUuid': kNusServiceUuid,
-        'characteristicUuid': kNusRxUuid,
-      },
+      args: {'serviceUuid': kNusServiceUuid, 'characteristicUuid': kNusRxUuid},
       expectContains: 'YnVybg==',
     ),
     // Subscribe to TX; the peripheral notifies `pong`; the central gates on
     // its arrival (delivery is async — never a bare observe).
     DriveStep.invoke(
       'butane.subscribe',
-      args: {
-        'serviceUuid': kNusServiceUuid,
-        'characteristicUuid': kNusTxUuid,
-      },
+      args: {'serviceUuid': kNusServiceUuid, 'characteristicUuid': kNusTxUuid},
       expectContains: '"subscribed":true',
       on: DriveEndpoint.local,
     ),
@@ -191,10 +176,7 @@ const DriveScenario kNusRoundTripScenario = DriveScenario(
     ),
     DriveStep.invoke(
       'butane.wait_for_notification',
-      args: {
-        'serviceUuid': kNusServiceUuid,
-        'characteristicUuid': kNusTxUuid,
-      },
+      args: {'serviceUuid': kNusServiceUuid, 'characteristicUuid': kNusTxUuid},
       expectContains: 'cG9uZw==',
       on: DriveEndpoint.local,
     ),
