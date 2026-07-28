@@ -89,8 +89,8 @@ class IosFollowerLauncher implements FollowerLauncher {
     this.readyTimeout = const Duration(minutes: 4),
     ProcessGroupController processes = const SystemProcessGroupController(),
     void Function(String)? onLog,
-  })  : _processes = processes,
-        _onLog = onLog ?? _noLog;
+  }) : _processes = processes,
+       _onLog = onLog ?? _noLog;
 
   /// The target device UDID (`flutter run -d`).
   final String deviceId;
@@ -261,8 +261,10 @@ class IosFollowerLauncher implements FollowerLauncher {
         }
       }
       if (candidates.isNotEmpty) {
-        _onLog('ios launcher: ${candidates.length} mDNS record(s), none '
-            'exploration-ready yet — retrying');
+        _onLog(
+          'ios launcher: ${candidates.length} mDNS record(s), none '
+          'exploration-ready yet — retrying',
+        );
       }
       await Future<void>.delayed(const Duration(seconds: 3));
     }
@@ -276,23 +278,24 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// leaves the old SRV cached alongside the new), each paired with the
   /// device IPv4. The caller probes each for exploration-readiness.
   Future<List<_DeviceEndpoint>> _resolveCandidates() async {
-    final l = await _boundedOutput(
-      'dns-sd',
-      ['-L', bundleId, '_dartVmService._tcp', 'local.'],
-      const Duration(seconds: 3),
-    );
+    final l = await _boundedOutput('dns-sd', [
+      '-L',
+      bundleId,
+      '_dartVmService._tcp',
+      'local.',
+    ], const Duration(seconds: 3));
     // Each resolution is "reached at HOST:PORT …" followed by its
     // "authCode=…" TXT line; pair each port with the authCode that follows.
-    final pairs = RegExp(r'reached at (\S+):(\d+)[\s\S]*?authCode=(\S+)')
-        .allMatches(l)
-        .toList();
+    final pairs = RegExp(
+      r'reached at (\S+):(\d+)[\s\S]*?authCode=(\S+)',
+    ).allMatches(l).toList();
     if (pairs.isEmpty) return const [];
     final host = pairs.first.group(1)!;
-    final g = await _boundedOutput(
-      'dns-sd',
-      ['-G', 'v4', host],
-      const Duration(seconds: 3),
-    );
+    final g = await _boundedOutput('dns-sd', [
+      '-G',
+      'v4',
+      host,
+    ], const Duration(seconds: 3));
     final ip = RegExp(r'(\d+\.\d+\.\d+\.\d+)').firstMatch(g)?.group(1);
     if (ip == null) return const [];
     // De-dup by port, newest last (later records supersede).
@@ -317,13 +320,13 @@ class IosFollowerLauncher implements FollowerLauncher {
     // The VM service escapes the slash in JSON: `"id":"isolates\/1234"` — so
     // match an optional backslash and capture just the number. Check every
     // isolate (the exploration host is on the root isolate, usually first).
-    final ids = RegExp(r'"id"\s*:\s*"isolates\\?/(\d+)"')
-        .allMatches(vm)
-        .map((m) => m.group(1)!)
-        .toSet();
+    final ids = RegExp(
+      r'"id"\s*:\s*"isolates\\?/(\d+)"',
+    ).allMatches(vm).map((m) => m.group(1)!).toSet();
     for (final id in ids) {
-      final isolate =
-          await _curlBody('$base/getIsolate?isolateId=isolates/$id');
+      final isolate = await _curlBody(
+        '$base/getIsolate?isolateId=isolates/$id',
+      );
       if (isolate.contains('ext.exploration.butane')) return true;
     }
     return false;
@@ -342,26 +345,22 @@ class IosFollowerLauncher implements FollowerLauncher {
   Future<void> _terminateExisting(String resolvedDeviceId) async {
     try {
       final apps = _decodeList(
-        await _devicectlJson(
-          ['device', 'info', 'apps'],
-          resolvedDeviceId,
-        ),
+        await _devicectlJson(['device', 'info', 'apps'], resolvedDeviceId),
         'apps',
       );
-      final url = apps.cast<Map<String, Object?>>().firstWhere(
-            (a) => a['bundleIdentifier'] == bundleId,
-            orElse: () => const {},
-          )['url'] as String?;
-      final uuid = RegExp(r'Application/([0-9A-Fa-f-]+)/')
-          .firstMatch(url ?? '')
-          ?.group(1);
+      final url =
+          apps.cast<Map<String, Object?>>().firstWhere(
+                (a) => a['bundleIdentifier'] == bundleId,
+                orElse: () => const {},
+              )['url']
+              as String?;
+      final uuid = RegExp(
+        r'Application/([0-9A-Fa-f-]+)/',
+      ).firstMatch(url ?? '')?.group(1);
       if (uuid == null) return; // not installed / not found — nothing to reap
 
       final procs = _decodeList(
-        await _devicectlJson(
-          ['device', 'info', 'processes'],
-          resolvedDeviceId,
-        ),
+        await _devicectlJson(['device', 'info', 'processes'], resolvedDeviceId),
         'runningProcesses',
       );
       for (final p in procs.cast<Map<String, Object?>>()) {
@@ -417,22 +416,24 @@ class IosFollowerLauncher implements FollowerLauncher {
     final scriptFile = File(
       '${Directory.systemTemp.path}/butane_vm_relay_$relayPort.py',
     )..writeAsStringSync(_kRelayScript);
-    final relay = await Process.start(
-      python3,
-      [scriptFile.path, '$relayPort', device.ip, '${device.port}'],
-    );
+    final relay = await Process.start(python3, [
+      scriptFile.path,
+      '$relayPort',
+      device.ip,
+      '${device.port}',
+    ]);
     final ready = Completer<void>();
-    relay.stdout.listen((bytes) {
-      if (String.fromCharCodes(bytes).contains('RELAY_READY') &&
-          !ready.isCompleted) {
-        ready.complete();
-      }
-    }, onError: (Object _) {}, cancelOnError: false);
-    relay.stderr.listen(
-      (_) {},
+    relay.stdout.listen(
+      (bytes) {
+        if (String.fromCharCodes(bytes).contains('RELAY_READY') &&
+            !ready.isCompleted) {
+          ready.complete();
+        }
+      },
       onError: (Object _) {},
       cancelOnError: false,
     );
+    relay.stderr.listen((_) {}, onError: (Object _) {}, cancelOnError: false);
     await ready.future.timeout(const Duration(seconds: 10));
 
     // Confirm the Dart-reachable loopback actually serves the exploration

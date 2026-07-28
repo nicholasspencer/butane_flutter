@@ -17,11 +17,7 @@ void main() {
     expect(preflight.validate(valid), same(valid));
   });
 
-  for (final entry in <({
-    String name,
-    BurnOrderInputs inputs,
-    String error,
-  })>[
+  for (final entry in <({String name, BurnOrderInputs inputs, String error})>[
     (
       name: 'missing device',
       inputs: const BurnOrderInputs(
@@ -77,8 +73,11 @@ void main() {
       expect(
         () => preflight.validate(entry.inputs),
         throwsA(
-          isA<StateError>()
-              .having((error) => error.message, 'message', entry.error),
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            entry.error,
+          ),
         ),
       );
     });

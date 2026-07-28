@@ -67,17 +67,18 @@ void main() {
   });
 
   test('LaunchSpec burn inputs round-trip and absent fields decode empty', () {
-    final spec = const LaunchSpec(
-      app: 'butane_harness',
-      target: 'ios',
-      scenario: 'smoke',
-    ).withBurnInputs(
-      const BurnOrderInputs(
-        followerDevice: 'device',
-        harnessDirectory: '/harness',
-        leonardDrive: '/leonard',
-      ),
-    );
+    final spec =
+        const LaunchSpec(
+          app: 'butane_harness',
+          target: 'ios',
+          scenario: 'smoke',
+        ).withBurnInputs(
+          const BurnOrderInputs(
+            followerDevice: 'device',
+            harnessDirectory: '/harness',
+            leonardDrive: '/leonard',
+          ),
+        );
 
     expect(LaunchSpec.fromJson(spec.toJson()).toJson(), spec.toJson());
     final absent = LaunchSpec.fromJson(const {

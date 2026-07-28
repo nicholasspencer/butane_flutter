@@ -236,20 +236,19 @@ class ProcessLeonardDrive implements LeonardDrive {
     if (uri == null || uri.isEmpty) {
       throw StateError('ProcessLeonardDrive: attach(endpoint) first');
     }
-    final drive = _invocation ??= _discover(
-          executableOverride: executableOverride,
-          onLog: _onLog,
-        ) ??
+    final drive = _invocation ??=
+        _discover(executableOverride: executableOverride, onLog: _onLog) ??
         (throw StateError(
           r'leonard_drive not discoverable (set $LEONARD_DRIVE or check out '
           'lenny at ~/development/com.nicospencer/lenny)',
         ));
 
-    final result = await Process.run(
-      drive.executable,
-      <String>[...drive.prefixArgs, ...subArgs, '--vm-uri', uri],
-      workingDirectory: drive.workingDirectory,
-    ).timeout(callTimeout);
+    final result = await Process.run(drive.executable, <String>[
+      ...drive.prefixArgs,
+      ...subArgs,
+      '--vm-uri',
+      uri,
+    ], workingDirectory: drive.workingDirectory).timeout(callTimeout);
 
     if (result.exitCode != 0) {
       throw StateError(
