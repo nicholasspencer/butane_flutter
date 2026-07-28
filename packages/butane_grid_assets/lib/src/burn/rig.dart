@@ -5,6 +5,11 @@ import 'dart:io';
 
 import 'package:beads_dart/beads_dart.dart' show Bead, IssueType;
 
+/// The infrastructure rig issue type, named locally: hosted beads_dart 0.1.0
+/// shipped `IssueType.rig`, 0.1.1 (published from the org mainline) does not —
+/// the pack must compile against both vintages, so it owns the constant.
+const kRigIssueType = IssueType('rig');
+
 /// Whether a rig device is physical hardware or an emulator/simulator.
 enum RigDeviceKind {
   /// A physical device attached to its host.
@@ -213,7 +218,7 @@ final class RigPreflight {
     try {
       final bead = await lookupRig(rigId);
       if (bead == null) throw StateError('was not found');
-      if (bead.issueType != IssueType.rig) {
+      if (bead.issueType != kRigIssueType) {
         throw StateError('has issue type ${bead.issueType}');
       }
       final rig = Rig.fromMetadata(rigId, bead.metadata);
