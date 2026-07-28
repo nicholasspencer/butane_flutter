@@ -85,6 +85,11 @@ class TestReport {
   /// The number of steps whose scripted assertion failed.
   int get failures => steps.where((s) => !s.passed).length;
 
+  /// Stable single-line receipt recorded for a passing resident burn.
+  String get receipt =>
+      'burn-receipt: scenario=$scenario; passed=$passed; '
+      'central=$central; follower=$follower';
+
   /// JSON form.
   Map<String, dynamic> toJson() => {
     'scenario': scenario,

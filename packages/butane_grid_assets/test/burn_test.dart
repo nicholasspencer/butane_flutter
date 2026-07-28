@@ -517,6 +517,22 @@ void main() {
       expect(report.follower, 'ios');
       expect(report.toJson()['central'], 'macos');
       expect(report.toJson()['follower'], 'ios');
+      expect(
+        report.receipt,
+        'burn-receipt: scenario=smoke; passed=true; '
+        'central=macos; follower=ios',
+      );
+      expect(report.receipt, isNot(contains('\n')));
+      expect(report.receipt, isNot(contains('\r')));
+      expect(
+        logs.where(
+          (line) =>
+              line ==
+              'burn-receipt: scenario=smoke; passed=true; '
+                  'central=macos; follower=ios',
+        ),
+        hasLength(1),
+      );
 
       // TEARDOWN both orders: host closes the drive; the follower allocation's
       // dispose releases the lease → the lessor reaps the launched app via the M4
@@ -537,6 +553,11 @@ void main() {
           'follower lease released burn-lease-0',
         ],
       );
+      expect(logs.where((line) => line.startsWith('teardown-receipt:')), [
+        'teardown-receipt: follower drive closed',
+        'teardown-receipt: local drive closed',
+        'teardown-receipt: follower lease released burn-lease-0',
+      ]);
       expect(drive.closed, isTrue, reason: 'the drive channel is closed');
       expect(lessor.station.calls, contains('release'));
       expect(
@@ -609,6 +630,7 @@ void main() {
         2,
         reason: 'every step is recorded, not just the first',
       );
+      expect(logs.where((line) => line.startsWith('burn-receipt:')), isEmpty);
 
       // The GUARANTEED teardown: even though the host escalated, tearing the
       // orders down reaps the follower daemon — no leaked process.
@@ -634,6 +656,11 @@ void main() {
           'follower lease released burn-lease-0',
         ],
       );
+      expect(logs.where((line) => line.startsWith('teardown-receipt:')), [
+        'teardown-receipt: follower drive closed',
+        'teardown-receipt: local drive closed',
+        'teardown-receipt: follower lease released burn-lease-0',
+      ]);
     });
 
     test('no peer matches → the follower order is denied; nothing leases or '

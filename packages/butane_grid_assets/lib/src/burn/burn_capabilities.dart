@@ -272,6 +272,9 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     try {
       await handle.client.release(handle.grant);
       _onLog('follower lease released ${handle.grant.leaseId}');
+      _onLog(
+        'teardown-receipt: follower lease released ${handle.grant.leaseId}',
+      );
     } on FederationException {
       // Already reaped/invalid — release is idempotent.
     }
@@ -422,6 +425,7 @@ class BurnHostCapability extends ServiceCapability {
     if (args.cancel.isCancelled) return const Failed('cancelled');
 
     _onLog('host collected report: $report');
+    if (report.passed) _onLog(report.receipt);
     return report.passed
         ? Ok({
             'scenario': report.scenario,
@@ -450,10 +454,12 @@ class BurnHostCapability extends ServiceCapability {
     // channel teardown).
     await drive.close();
     _onLog('follower drive closed');
+    _onLog('teardown-receipt: follower drive closed');
     final localDrive = this.localDrive;
     if (localDrive != null) {
       await localDrive.close();
       _onLog('local drive closed');
+      _onLog('teardown-receipt: local drive closed');
     }
     await localRunner?.teardown();
     _holds[args] = null;
