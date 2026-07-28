@@ -28,6 +28,7 @@
 library;
 
 export 'src/burn/burn_capabilities.dart';
+export 'src/burn/burn_order_landing.dart';
 export 'src/burn/burn_order_inputs.dart';
 export 'src/burn/burn_preflight.dart';
 export 'src/burn/burn_dispatch_handler.dart';
