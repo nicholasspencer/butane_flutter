@@ -33,6 +33,7 @@ export 'src/burn/burn_preflight.dart';
 export 'src/burn/burn_dispatch_handler.dart';
 export 'src/burn/burn_report.dart';
 export 'src/burn/burn_scenario.dart';
+export 'src/burn/burn_station_composition.dart';
 export 'src/burn/burn_serve.dart';
 export 'src/burn/android_follower_launcher.dart';
 export 'src/burn/butane_follower_launcher.dart';
