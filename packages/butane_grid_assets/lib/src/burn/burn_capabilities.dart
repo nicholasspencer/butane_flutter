@@ -306,6 +306,26 @@ class _HostHold {
   TestReport? report;
 }
 
+/// One reusable in-process follower launch/reap lifecycle.
+final class LocalFollowerLaunch {
+  /// Creates the lifecycle over the existing guaranteed-reap [runner].
+  LocalFollowerLaunch({required this.runner, void Function(String)? onLog})
+    : _onLog = onLog ?? _noLog;
+
+  /// The existing coordinator that owns launch and once-only process-group reap.
+  final ButaneFollowerRunner runner;
+  final void Function(String) _onLog;
+
+  /// Launches [spec] in process and returns its published endpoint.
+  Future<FollowerEndpoint> launch(LaunchSpec spec) => runner.launch(spec);
+
+  /// Reaps the launched process group once and emits the resident receipt.
+  Future<void> teardown() async {
+    await runner.teardown();
+    _onLog('teardown-receipt: resident follower reaped');
+  }
+}
+
 /// The `burn-host` order (ADR-0011 D9): await the follower endpoint, attach
 /// `leonard_drive` over the DIRECT perception channel — and, for the
 /// TWO-DRIVE burn, launch the host's own LOCAL harness (the central, per the
@@ -347,6 +367,10 @@ class BurnHostCapability extends ServiceCapability {
         'together (got $given of 3)',
       );
     }
+    final runner = localRunner;
+    _localFollower = runner == null
+        ? null
+        : LocalFollowerLaunch(runner: runner, onLog: _onLog);
   }
 
   /// The direct perception channel to the FOLLOWER (`leonard_drive`; a
@@ -370,6 +394,7 @@ class BurnHostCapability extends ServiceCapability {
   final LeonardDrive? localDrive;
 
   final void Function(String) _onLog;
+  late final LocalFollowerLaunch? _localFollower;
 
   static final Expando<_HostHold> _holds = Expando<_HostHold>(
     'grid-burn-host-hold',
@@ -396,9 +421,9 @@ class BurnHostCapability extends ServiceCapability {
     if (followerTarget == null || followerTarget.isEmpty) {
       return const Failed('follower rendezvous published no target');
     }
-    final localRunner = this.localRunner;
+    final localFollower = _localFollower;
     final centralTarget = localSpec?.target ?? '';
-    if (localRunner != null && centralTarget.isEmpty) {
+    if (localFollower != null && centralTarget.isEmpty) {
       return const Failed('two-drive burn published no central target');
     }
     final endpoint = FollowerEndpoint(
@@ -417,10 +442,10 @@ class BurnHostCapability extends ServiceCapability {
     // TWO-DRIVE burn: launch the host's own local harness (the central) and
     // attach the second drive. A local launch failure fails the order —
     // teardown still reaps whatever launched (the runner is once-only).
-    if (localRunner != null) {
+    if (localFollower != null) {
       final FollowerEndpoint localEndpoint;
       try {
-        localEndpoint = await localRunner.launch(localSpec!);
+        localEndpoint = await localFollower.launch(localSpec!);
       } on Object catch (e) {
         return Failed('local harness launch failed: $e');
       }
@@ -481,7 +506,7 @@ class BurnHostCapability extends ServiceCapability {
       _onLog('local drive closed');
       _onLog('teardown-receipt: local drive closed');
     }
-    await localRunner?.teardown();
+    await _localFollower?.teardown();
     _holds[args] = null;
   }
 }

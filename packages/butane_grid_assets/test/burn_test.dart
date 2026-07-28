@@ -576,6 +576,7 @@ void main() {
       expect(logs.where((line) => line.startsWith('teardown-receipt:')), [
         'teardown-receipt: follower drive closed',
         'teardown-receipt: local drive closed',
+        'teardown-receipt: resident follower reaped',
         'teardown-receipt: follower lease released burn-lease-0',
       ]);
       expect(drive.closed, isTrue, reason: 'the drive channel is closed');
@@ -679,6 +680,7 @@ void main() {
       expect(logs.where((line) => line.startsWith('teardown-receipt:')), [
         'teardown-receipt: follower drive closed',
         'teardown-receipt: local drive closed',
+        'teardown-receipt: resident follower reaped',
         'teardown-receipt: follower lease released burn-lease-0',
       ]);
     });
@@ -1225,6 +1227,56 @@ void main() {
       });
 
       test(
+        'two-drive host delegates launch and reap to LocalFollowerLaunch',
+        () async {
+          final localProcesses = _FakeProcessGroupController();
+          final localLauncher = _FakeLocalLauncher();
+          final localRunner = ButaneFollowerRunner(
+            launcher: localLauncher,
+            processes: localProcesses,
+          );
+          final host = BurnHostCapability(
+            drive: _ScriptedLeonardDrive(
+              invokeResponses: const {'follower.probe': '{"ok":true}'},
+            ),
+            scenario: const DriveScenario(
+              name: 'shared-lifecycle',
+              steps: [
+                DriveStep.invoke('follower.probe', expectContains: 'ok'),
+                DriveStep.invoke(
+                  'local.probe',
+                  expectContains: 'ok',
+                  on: DriveEndpoint.local,
+                ),
+              ],
+            ),
+            localRunner: localRunner,
+            localSpec: const LaunchSpec(
+              app: 'butane_harness',
+              target: 'macos',
+              role: 'central',
+            ),
+            localDrive: _ScriptedLeonardDrive(
+              invokeResponses: const {'local.probe': '{"ok":true}'},
+            ),
+          );
+          final hCtx = _ctx(
+            nodePath: _hostPath,
+            siblings: SiblingView(results: {_followerPath: published}),
+          );
+
+          expect(await host.run(hCtx.context, hCtx.args), isA<Ok>());
+          expect(localLauncher.launches, 1);
+          await host.teardown(hCtx.args);
+          await host.teardown(hCtx.args);
+
+          expect(localProcesses.signals.where((s) => s == 'TERM:5151'), [
+            'TERM:5151',
+          ]);
+        },
+      );
+
+      test(
         'a follower-only host runs follower steps and publishes a report',
         () async {
           final followerDrive = _ScriptedLeonardDrive(
@@ -1358,9 +1410,13 @@ class _FakeLocalLauncher implements FollowerLauncher {
     station: 'the-studio-local',
   );
 
+  int launches = 0;
+
   @override
-  Future<LaunchedDaemon> launch(LaunchSpec spec) async =>
-      const LaunchedDaemon(pid: 5151, pgid: 5151, endpoint: endpoint);
+  Future<LaunchedDaemon> launch(LaunchSpec spec) async {
+    launches++;
+    return const LaunchedDaemon(pid: 5151, pgid: 5151, endpoint: endpoint);
+  }
 }
 
 /// A launcher that always fails (the local launch failure path).
