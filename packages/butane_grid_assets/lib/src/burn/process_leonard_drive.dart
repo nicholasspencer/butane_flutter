@@ -39,10 +39,19 @@ typedef _DriveInvocation = ({
 class ProcessLeonardDrive implements LeonardDrive {
   /// Creates the drive. [callTimeout] bounds each shelled call (a `dart run`
   /// first call includes a compile).
-  ProcessLeonardDrive({this.callTimeout = const Duration(seconds: 120)});
+  ProcessLeonardDrive({
+    this.callTimeout = const Duration(seconds: 120),
+    this.executableOverride = '',
+    void Function(String)? onLog,
+  }) : _onLog = onLog ?? _noLog;
 
   /// The per-call timeout.
   final Duration callTimeout;
+
+  /// Explicit ORDER-carried executable or entrypoint.
+  final String executableOverride;
+
+  final void Function(String) _onLog;
 
   String? _vmUri;
   _DriveInvocation? _invocation;
@@ -50,16 +59,24 @@ class ProcessLeonardDrive implements LeonardDrive {
   /// Discovers how to invoke `leonard_drive` and returns the argv prefix
   /// (`[executable, ...prefixArgs]`), or `null` when lenny is not discoverable
   /// (the live test's self-skip signal).
-  static Future<List<String>?> discover() async {
-    final inv = _discover();
+  static Future<List<String>?> discover({
+    String executableOverride = '',
+    void Function(String)? onLog,
+  }) async {
+    final inv = _discover(
+      executableOverride: executableOverride,
+      onLog: onLog ?? _noLog,
+    );
     return inv == null ? null : [inv.executable, ...inv.prefixArgs];
   }
 
-  /// The attach test's discovery order, verbatim.
-  static _DriveInvocation? _discover() {
-    // 1. Explicit override.
-    final override = Platform.environment['LEONARD_DRIVE'];
-    if (override != null && override.trim().isNotEmpty) {
+  /// Resolves an explicit ORDER value, environment compatibility fallback,
+  /// PATH, then the sibling checkout.
+  static _DriveInvocation? _discover({
+    required String executableOverride,
+    required void Function(String) onLog,
+  }) {
+    _DriveInvocation invocationFor(String override) {
       final f = File(override);
       if (f.existsSync()) {
         return override.endsWith('.dart')
@@ -74,7 +91,6 @@ class ProcessLeonardDrive implements LeonardDrive {
                 workingDirectory: null,
               );
       }
-      // Treat as a bare command name resolvable via PATH.
       return (
         executable: override,
         prefixArgs: const <String>[],
@@ -82,7 +98,21 @@ class ProcessLeonardDrive implements LeonardDrive {
       );
     }
 
-    // 2. On PATH.
+    // 1. Explicit ORDER override.
+    final explicit = executableOverride.trim();
+    if (explicit.isNotEmpty) return invocationFor(explicit);
+
+    // 2. Compatibility environment fallback.
+    final override = Platform.environment['LEONARD_DRIVE']?.trim();
+    if (override != null && override.trim().isNotEmpty) {
+      onLog(
+        'burn input burn.leonard_drive: metadata absent; '
+        'using environment LEONARD_DRIVE',
+      );
+      return invocationFor(override);
+    }
+
+    // 3. On PATH.
     final onPath = _which('leonard_drive');
     if (onPath != null) {
       return (
@@ -92,7 +122,7 @@ class ProcessLeonardDrive implements LeonardDrive {
       );
     }
 
-    // 3. Sibling lenny checkout entrypoint.
+    // 4. Sibling lenny checkout entrypoint.
     final home = Platform.environment['HOME'];
     if (home != null) {
       final entry = File(
@@ -151,7 +181,8 @@ class ProcessLeonardDrive implements LeonardDrive {
     final observation = envelope['observation'];
     if (observation == null) {
       throw StateError(
-          'leonard_drive observe printed no observation: $envelope');
+        'leonard_drive observe printed no observation: $envelope',
+      );
     }
     return jsonEncode(_navigate(observation, path));
   }
@@ -205,7 +236,10 @@ class ProcessLeonardDrive implements LeonardDrive {
     if (uri == null || uri.isEmpty) {
       throw StateError('ProcessLeonardDrive: attach(endpoint) first');
     }
-    final drive = _invocation ??= _discover() ??
+    final drive = _invocation ??= _discover(
+          executableOverride: executableOverride,
+          onLog: _onLog,
+        ) ??
         (throw StateError(
           r'leonard_drive not discoverable (set $LEONARD_DRIVE or check out '
           'lenny at ~/development/com.nicospencer/lenny)',
@@ -237,3 +271,5 @@ class ProcessLeonardDrive implements LeonardDrive {
     return jsonDecode(lines.last) as Map<String, Object?>;
   }
 }
+
+void _noLog(String _) {}

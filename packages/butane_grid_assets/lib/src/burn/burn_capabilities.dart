@@ -28,11 +28,15 @@
 /// layering + the host's single write-locus.
 library;
 
+import 'dart:io';
+
+import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart';
 import 'package:grid_assets/grid_assets.dart' show BusLease;
 import 'package:grid_engine/grid_engine.dart';
 
 import 'burn_report.dart';
+import 'burn_order_inputs.dart';
 import 'burn_scenario.dart';
 import 'follower.dart';
 
@@ -153,9 +157,11 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     required this.launchSpec,
     CapabilityFacts? requires,
     this.lessee = '',
+    Map<String, String>? environment,
     void Function(String)? onLog,
-  }) : requires = requires ?? kDefaultFollowerRequires,
-       _onLog = onLog ?? _noLog;
+  })  : requires = requires ?? kDefaultFollowerRequires,
+        environment = environment ?? Platform.environment,
+        _onLog = onLog ?? _noLog;
 
   /// The candidate follower peers (matched by containment at mount).
   final List<FollowerPeer> peers;
@@ -168,6 +174,9 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
 
   /// The lessee station id (empty ⇒ the work bead id at mount).
   final String lessee;
+
+  /// Compatibility environment consulted only when ORDER metadata is absent.
+  final Map<String, String> environment;
 
   final void Function(String) _onLog;
 
@@ -217,13 +226,24 @@ class BurnFollowerCapability extends LeaseCapability<BusLease> {
     TreeContext context,
     StepArgs args,
   ) async {
+    final bead = context.getInheritedSeedOfExactType<Bead>();
+    if (bead == null) {
+      return Failed('burn-follower requires ambient work bead ${args.beadId}');
+    }
+    final inputs = BurnOrderInputs.resolve(
+      metadata: bead.metadata,
+      environment: environment,
+      onLog: _onLog,
+    );
+    final dispatchedSpec = launchSpec.withBurnInputs(inputs);
+
     // DISPATCH the launch over the bus → the follower publishes its endpoint
     // (the rendezvous handoff rides the dispatch result).
     final Map<String, dynamic> raw;
     try {
       raw = await handle.client.dispatch(
         handle.grant,
-        launchSpec.toJson(),
+        dispatchedSpec.toJson(),
         idempotencyKey: _idem(args),
       );
     } on LeaseInvalidException catch (e) {
@@ -363,8 +383,7 @@ class BurnHostCapability extends ServiceCapability {
 
     // AWAIT the follower endpoint, read pull-free from the AMBIENT sibling
     // view at ENTRY (the effect verb, D-5).
-    final siblings =
-        context.getInheritedSeedOfExactType<SiblingView>() ??
+    final siblings = context.getInheritedSeedOfExactType<SiblingView>() ??
         const SiblingView();
     final followerPath = '${_parentPath(args.nodePath)}/$followerStep';
     final published = siblings.resultOf(followerPath);
@@ -494,23 +513,24 @@ DefaultCapabilityRegistry buildBurnRegistry({
   LeonardDrive? localDrive,
   void Function(String)? onLog,
   DateTime Function()? clock,
-}) => DefaultCapabilityRegistry(
-  capabilities: {
-    kBurnFollowerStep: BurnFollowerCapability(
-      peers: peers,
-      launchSpec: launchSpec,
-      requires: requires,
-      onLog: onLog,
-    ),
-    kBurnHostStep: BurnHostCapability(
-      drive: drive,
-      scenario: scenario,
-      localRunner: localRunner,
-      localSpec: localSpec,
-      localDrive: localDrive,
-      onLog: onLog,
-    ),
-  },
-  circuits: const {'burn': kBurnCircuit},
-  clock: clock,
-);
+}) =>
+    DefaultCapabilityRegistry(
+      capabilities: {
+        kBurnFollowerStep: BurnFollowerCapability(
+          peers: peers,
+          launchSpec: launchSpec,
+          requires: requires,
+          onLog: onLog,
+        ),
+        kBurnHostStep: BurnHostCapability(
+          drive: drive,
+          scenario: scenario,
+          localRunner: localRunner,
+          localSpec: localSpec,
+          localDrive: localDrive,
+          onLog: onLog,
+        ),
+      },
+      circuits: const {'burn': kBurnCircuit},
+      clock: clock,
+    );

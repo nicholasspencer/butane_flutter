@@ -34,6 +34,7 @@ library;
 
 import 'dart:io';
 
+import 'package:beads_dart/beads_dart.dart';
 import 'package:butane_grid_assets/butane_grid_assets.dart';
 import 'package:grid_assets/grid_assets.dart' show BusLease;
 import 'package:grid_engine/grid_engine.dart';
@@ -92,7 +93,12 @@ const DriveScenario _liveScenario = DriveScenario(
   required String nodePath,
   SiblingView siblings = const SiblingView(),
 }) => (
-  context: FakeTreeContext(values: {SiblingView: siblings}),
+  context: FakeTreeContext(
+    values: {
+      SiblingView: siblings,
+      Bead: const Bead(id: 'live-local-burn'),
+    },
+  ),
   args: stepArgs(nodePath),
 );
 

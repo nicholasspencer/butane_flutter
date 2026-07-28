@@ -33,10 +33,14 @@ import 'dart:io';
 
 import 'package:grid_runtime/grid_runtime.dart'
     show ProcessGroupController, SystemProcessGroupController;
+import 'package:meta/meta.dart';
 
 import 'follower.dart';
 
 void _noLog(String _) {}
+
+/// The device and harness directory selected for one iOS launch.
+typedef IosLaunchInputs = ({String deviceId, String harnessDirectory});
 
 /// The loopback relay, run by the LAN-exempt `python3`. Written to a temp file
 /// at launch so the launcher is self-contained (a Dart relay can't work — it
@@ -75,8 +79,8 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// loopback port the Dart-reachable endpoint binds (distinct per concurrent
   /// follower).
   IosFollowerLauncher({
-    required this.deviceId,
-    required this.harnessDirectory,
+    this.deviceId = '',
+    this.harnessDirectory = '',
     this.station = 'butane-ios-follower',
     this.bundleId = 'com.nicospencer.butaneHarness',
     this.relayPort = 50999,
@@ -121,8 +125,38 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// The most recently launched daemon (teardown-of-last-resort in tests).
   LaunchedDaemon? get lastLaunched => _last;
 
+  /// Resolves ORDER-carried inputs ahead of constructor compatibility inputs.
+  @visibleForTesting
+  IosLaunchInputs resolveIosLaunchInputs(LaunchSpec spec) {
+    final resolvedDeviceId = spec.followerDevice.trim().isNotEmpty
+        ? spec.followerDevice.trim()
+        : deviceId.trim();
+    final resolvedHarnessDirectory = spec.harnessDirectory.trim().isNotEmpty
+        ? spec.harnessDirectory.trim()
+        : harnessDirectory.trim();
+    if (resolvedDeviceId.isEmpty) {
+      throw StateError(
+        'iOS burn follower requires burn.follower_device '
+        '(or compatibility deviceId)',
+      );
+    }
+    if (resolvedHarnessDirectory.isEmpty) {
+      throw StateError(
+        'iOS burn follower requires burn.harness_dir '
+        '(or compatibility harnessDirectory)',
+      );
+    }
+    return (
+      deviceId: resolvedDeviceId,
+      harnessDirectory: resolvedHarnessDirectory,
+    );
+  }
+
   @override
   Future<LaunchedDaemon> launch(LaunchSpec spec) async {
+    final inputs = resolveIosLaunchInputs(spec);
+    final resolvedDeviceId = inputs.deviceId;
+    final resolvedHarnessDirectory = inputs.harnessDirectory;
     final role = spec.role.isEmpty ? 'peripheral' : spec.role;
 
     // Terminate any prior instance of THIS app first: a leftover harness stays
@@ -130,9 +164,11 @@ class IosFollowerLauncher implements FollowerLauncher {
     // and backgrounds the leftover — a race that hands the drive a
     // soon-to-be-suspended app. Scoped to the bundle's install container so a
     // co-installed Flutter app (also `Runner`) is never touched.
-    await _terminateExisting();
+    await _terminateExisting(resolvedDeviceId);
 
-    _onLog('ios launcher: flutter run --profile -d $deviceId (ROLE=$role)');
+    _onLog(
+      'ios launcher: flutter run --profile -d $resolvedDeviceId (ROLE=$role)',
+    );
 
     // `flutter run --profile`: launches + holds a profile app (survives the
     // JIT-less standalone constraint). New session/group so the reaper can
@@ -143,10 +179,10 @@ class IosFollowerLauncher implements FollowerLauncher {
         'run',
         '--profile',
         '-d',
-        deviceId,
+        resolvedDeviceId,
         '--dart-define=ROLE=$role',
       ],
-      workingDirectory: harnessDirectory,
+      workingDirectory: resolvedHarnessDirectory,
       mode: ProcessStartMode.detachedWithStdio,
     );
     // Drain flutter's stdio so it never blocks on a full pipe; surface lines.
@@ -192,7 +228,7 @@ class IosFollowerLauncher implements FollowerLauncher {
               'process',
               'terminate',
               '--device',
-              deviceId,
+              resolvedDeviceId,
               '--bundle-id',
               bundleId,
             ]).timeout(const Duration(seconds: 20));
@@ -303,10 +339,13 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// terminates every process whose executable lives under that container
   /// (`devicectl device info processes`) — so a co-installed Flutter app
   /// (also named `Runner`) is never signalled.
-  Future<void> _terminateExisting() async {
+  Future<void> _terminateExisting(String resolvedDeviceId) async {
     try {
       final apps = _decodeList(
-        await _devicectlJson(['device', 'info', 'apps']),
+        await _devicectlJson(
+          ['device', 'info', 'apps'],
+          resolvedDeviceId,
+        ),
         'apps',
       );
       final url = apps.cast<Map<String, Object?>>().firstWhere(
@@ -319,7 +358,10 @@ class IosFollowerLauncher implements FollowerLauncher {
       if (uuid == null) return; // not installed / not found — nothing to reap
 
       final procs = _decodeList(
-        await _devicectlJson(['device', 'info', 'processes']),
+        await _devicectlJson(
+          ['device', 'info', 'processes'],
+          resolvedDeviceId,
+        ),
         'runningProcesses',
       );
       for (final p in procs.cast<Map<String, Object?>>()) {
@@ -333,7 +375,7 @@ class IosFollowerLauncher implements FollowerLauncher {
           'process',
           'terminate',
           '--device',
-          deviceId,
+          resolvedDeviceId,
           '--pid',
           '$pid',
         ]).timeout(const Duration(seconds: 15));
@@ -351,7 +393,10 @@ class IosFollowerLauncher implements FollowerLauncher {
   }
 
   /// Runs `xcrun devicectl <args> --json-output <tmp>` and returns the JSON.
-  Future<String> _devicectlJson(List<String> args) async {
+  Future<String> _devicectlJson(
+    List<String> args,
+    String resolvedDeviceId,
+  ) async {
     final out = File(
       '${Directory.systemTemp.path}/butane_devicectl_$relayPort.json',
     );
@@ -359,7 +404,7 @@ class IosFollowerLauncher implements FollowerLauncher {
       'devicectl',
       ...args,
       '--device',
-      deviceId,
+      resolvedDeviceId,
       '--json-output',
       out.path,
     ]).timeout(const Duration(seconds: 30));
@@ -383,13 +428,18 @@ class IosFollowerLauncher implements FollowerLauncher {
         ready.complete();
       }
     }, onError: (Object _) {}, cancelOnError: false);
-    relay.stderr.listen((_) {}, onError: (Object _) {}, cancelOnError: false);
+    relay.stderr.listen(
+      (_) {},
+      onError: (Object _) {},
+      cancelOnError: false,
+    );
     await ready.future.timeout(const Duration(seconds: 10));
 
     // Confirm the Dart-reachable loopback actually serves the exploration
     // host (not just any TCP forward).
     if (!await _explorationReady(
-        'http://127.0.0.1:$relayPort/${device.authCode}')) {
+      'http://127.0.0.1:$relayPort/${device.authCode}',
+    )) {
       relay.kill(ProcessSignal.sigkill);
       throw StateError('ios launcher: relay loopback not exploration-ready');
     }
