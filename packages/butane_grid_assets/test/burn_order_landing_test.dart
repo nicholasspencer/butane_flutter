@@ -22,7 +22,7 @@ String skipName(BurnOrderSkipReason reason) => switch (reason) {
 
 Bead rig(String id, String platform, {String? deviceId}) => Bead(
   id: id,
-  issueType: IssueType.rig,
+  issueType: kRigIssueType,
   metadata: {
     'rig.device_udid': deviceId ?? 'device-$id',
     'rig.target_platform': platform,

@@ -29,7 +29,7 @@ Map<String, Object?> rigMetadata({
 
 Bead rigBead({Map<String, Object?>? metadata, bool correctType = true}) => Bead(
   id: rigId,
-  issueType: correctType ? IssueType.rig : IssueType.role,
+  issueType: correctType ? kRigIssueType : const IssueType('role'),
   metadata: metadata ?? rigMetadata(),
 );
 
