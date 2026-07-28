@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:beads_dart/beads_dart.dart';
 import 'package:butane_grid_assets/butane_grid_assets.dart';
 import 'package:grid_assets/grid_assets.dart' show BusLease;
 import 'package:grid_engine/grid_engine.dart';
@@ -75,10 +76,12 @@ class _FakeFollowerLauncher implements FollowerLauncher {
   );
 
   int launches = 0;
+  LaunchSpec? lastSpec;
 
   @override
   Future<LaunchedDaemon> launch(LaunchSpec spec) async {
     launches++;
+    lastSpec = spec;
     return _daemon;
   }
 }
@@ -310,8 +313,15 @@ _lessor({
   required String nodePath,
   CancelToken? cancel,
   SiblingView siblings = const SiblingView(),
+  Map<String, dynamic> metadata = const {},
+  bool includeBead = true,
 }) => (
-  context: FakeTreeContext(values: {SiblingView: siblings}),
+  context: FakeTreeContext(
+    values: {
+      SiblingView: siblings,
+      if (includeBead) Bead: Bead(id: 'tg-burn', metadata: metadata),
+    },
+  ),
   args: stepArgs(nodePath, cancel: cancel),
 );
 
@@ -472,7 +482,14 @@ void main() {
       // ORDER 1 — burn-follower: match → lease → dispatch launch → endpoint. As a
       // daemon lease it reports `ready` (stays live), NEVER `complete` (the
       // daemon-reap fix): the endpoint rides the ready payload.
-      final fCtx = _ctx(nodePath: _followerPath);
+      final fCtx = _ctx(
+        nodePath: _followerPath,
+        metadata: const {
+          BurnOrderInputs.followerDeviceKey: 'order-device',
+          BurnOrderInputs.harnessDirectoryKey: '/order/harness',
+          BurnOrderInputs.leonardDriveKey: '/order/leonard',
+        },
+      );
       final f = await _driveFollower(follower, fCtx);
       expect(f.reports.whereType<AllocationReady>(), hasLength(1));
       expect(
@@ -486,6 +503,9 @@ void main() {
         reason: 'the rendezvous rode the bus: probe → lease → dispatch',
       );
       expect(lessor.runner.isRunning, isTrue, reason: 'the follower launched');
+      expect(lessor.launcher.lastSpec?.followerDevice, 'order-device');
+      expect(lessor.launcher.lastSpec?.harnessDirectory, '/order/harness');
+      expect(lessor.launcher.lastSpec?.leonardDrive, '/order/leonard');
 
       // The endpoint handoff: the follower's ready payload threads to the host as
       // a sibling result (D-5 — pull-free, never through the bus).
@@ -652,6 +672,23 @@ void main() {
       expect(lessor.runner.isRunning, isFalse);
       await f.alloc.dispose(); // no grant held → no release
       expect(lessor.station.countWith('release'), 0);
+    });
+
+    test('missing ambient ORDER bead fails before follower dispatch', () async {
+      final lessor = _lessor();
+      final follower = BurnFollowerCapability(
+        peers: [FollowerPeer(id: 'studio', client: lessor.station)],
+        launchSpec: _spec,
+      );
+      final ctx = _ctx(nodePath: _followerPath, includeBead: false);
+      final f = await _driveFollower(follower, ctx);
+
+      expect(
+        (f.reports.single as AllocationFailed).reason,
+        'burn-follower requires ambient work bead tg-burn',
+      );
+      expect(lessor.launcher.launches, 0);
+      await f.alloc.dispose();
     });
 
     test(

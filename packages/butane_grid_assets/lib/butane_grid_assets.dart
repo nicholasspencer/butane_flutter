@@ -28,6 +28,8 @@
 library;
 
 export 'src/burn/burn_capabilities.dart';
+export 'src/burn/burn_order_inputs.dart';
+export 'src/burn/burn_preflight.dart';
 export 'src/burn/burn_dispatch_handler.dart';
 export 'src/burn/burn_report.dart';
 export 'src/burn/burn_scenario.dart';

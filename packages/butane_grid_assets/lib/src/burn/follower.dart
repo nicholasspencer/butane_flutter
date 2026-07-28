@@ -20,6 +20,8 @@ import 'package:grid_runtime/grid_runtime.dart'
     show GroupTerminateResult, ProcessGroupController, terminateGroup;
 import 'package:meta/meta.dart';
 
+import 'burn_order_inputs.dart';
+
 /// What the host asks the follower to launch (ADR-0011 D9) — the butane domain's
 /// dispatch payload, serialized into the kind-agnostic federation bus envelope.
 @immutable
@@ -33,6 +35,9 @@ class LaunchSpec {
     required this.target,
     this.role = 'peripheral',
     this.scenario = '',
+    this.followerDevice = '',
+    this.harnessDirectory = '',
+    this.leonardDrive = '',
   });
 
   /// The app-under-test provisioned from the butane substation (e.g.
@@ -50,12 +55,24 @@ class LaunchSpec {
   /// An optional scenario hint carried to the follower (the host owns the drive).
   final String scenario;
 
+  /// The iOS follower device selected by the ORDER bead.
+  final String followerDevice;
+
+  /// The harness working directory selected by the ORDER bead.
+  final String harnessDirectory;
+
+  /// The leonard-drive executable selected by the ORDER bead.
+  final String leonardDrive;
+
   /// JSON form (the opaque bus dispatch payload).
   Map<String, dynamic> toJson() => {
         'app': app,
         'target': target,
         'role': role,
         if (scenario.isNotEmpty) 'scenario': scenario,
+        if (followerDevice.isNotEmpty) 'followerDevice': followerDevice,
+        if (harnessDirectory.isNotEmpty) 'harnessDirectory': harnessDirectory,
+        if (leonardDrive.isNotEmpty) 'leonardDrive': leonardDrive,
       };
 
   /// Parses [j] (a missing role defaults to `peripheral` — the burn's
@@ -65,6 +82,20 @@ class LaunchSpec {
         target: j['target'] as String,
         role: (j['role'] as String?) ?? 'peripheral',
         scenario: (j['scenario'] as String?) ?? '',
+        followerDevice: (j['followerDevice'] as String?) ?? '',
+        harnessDirectory: (j['harnessDirectory'] as String?) ?? '',
+        leonardDrive: (j['leonardDrive'] as String?) ?? '',
+      );
+
+  /// Returns this launch request carrying the resolved ORDER burn inputs.
+  LaunchSpec withBurnInputs(BurnOrderInputs inputs) => LaunchSpec(
+        app: app,
+        target: target,
+        role: role,
+        scenario: scenario,
+        followerDevice: inputs.followerDevice,
+        harnessDirectory: inputs.harnessDirectory,
+        leonardDrive: inputs.leonardDrive,
       );
 }
 
