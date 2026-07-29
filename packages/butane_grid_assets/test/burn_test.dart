@@ -228,12 +228,14 @@ class _ScriptedLeonardDrive implements LeonardDrive {
   _ScriptedLeonardDrive({
     this.observeResponses = const {},
     this.invokeResponses = const {},
+    this.attachError,
     this.attachGate,
     this.observeGate,
   });
 
   final Map<String, String> observeResponses;
   final Map<String, String> invokeResponses;
+  final Object? attachError;
   final _CancellationGate<void>? attachGate;
   final _CancellationGate<String>? observeGate;
   final List<String> calls = [];
@@ -244,6 +246,8 @@ class _ScriptedLeonardDrive implements LeonardDrive {
   Future<void> attach(FollowerEndpoint endpoint) async {
     attachedTo = endpoint.vmServiceUri;
     calls.add('attach:${endpoint.vmServiceUri}');
+    final error = attachError;
+    if (error != null) throw error;
     await attachGate?.wait();
   }
 
@@ -272,6 +276,36 @@ class _ScriptedLeonardDrive implements LeonardDrive {
         (call) => call.startsWith('observe:') || call.startsWith('invoke:'),
       )
       .length;
+}
+
+class _FakeHostHarnessLaunch implements HostHarnessLaunch {
+  _FakeHostHarnessLaunch({
+    this.endpoint = const FollowerEndpoint(
+      vmServiceUri: 'ws://yoga-win:6000/central/ws',
+      station: 'windows-host',
+    ),
+    this.launchError,
+    this.launchGate,
+  });
+
+  final FollowerEndpoint endpoint;
+  final Object? launchError;
+  final _CancellationGate<FollowerEndpoint>? launchGate;
+  int launches = 0;
+  int teardowns = 0;
+
+  @override
+  Future<FollowerEndpoint> launch(LaunchSpec spec) async {
+    launches++;
+    final error = launchError;
+    if (error != null) throw error;
+    return launchGate?.wait() ?? endpoint;
+  }
+
+  @override
+  Future<void> teardown() async {
+    teardowns++;
+  }
 }
 
 // --- helpers -----------------------------------------------------------------
@@ -1394,11 +1428,175 @@ void main() {
         );
         final out = await host.run(hCtx.context, hCtx.args);
         expect(out, isA<Failed>());
-        expect((out as Failed).reason, contains('local harness launch'));
+        expect(
+          (out as Failed).reason,
+          'local harness launch failed: Bad state: launch failed',
+        );
 
         // Teardown after the failure path is safe (nothing launched → no-op).
         await host.teardown(hCtx.args);
         expect(await localRunner.teardown(), GroupTerminateResult.alreadyGone);
+      });
+
+      test('generic launch failure uses the central label and suppresses the '
+          'local receipt', () async {
+        final logs = <String>[];
+        final launch = _FakeHostHarnessLaunch(
+          launchError: StateError('launch failed'),
+        );
+        final centralDrive = _ScriptedLeonardDrive();
+        final host = BurnHostCapability(
+          drive: _passingDrive(),
+          scenario: _passingScenario(),
+          hostLaunch: launch,
+          localSpec: const LaunchSpec(
+            app: 'butane_windows_example',
+            target: 'windows',
+            role: 'central',
+          ),
+          localDrive: centralDrive,
+          onLog: logs.add,
+        );
+        final hCtx = _ctx(
+          nodePath: _hostPath,
+          siblings: SiblingView(results: {_followerPath: published}),
+        );
+
+        final outcome = await host.run(hCtx.context, hCtx.args);
+        expect(outcome, isA<Failed>());
+        expect(
+          (outcome as Failed).reason,
+          'central harness launch failed: Bad state: launch failed',
+        );
+        await host.teardown(hCtx.args);
+        expect(launch.teardowns, 1);
+        expect(centralDrive.closed, isTrue);
+        expect(logs, contains('teardown-receipt: central drive closed'));
+        expect(logs, isNot(contains('teardown-receipt: local drive closed')));
+      });
+
+      test('generic central attach failure is loud and teardown owns both '
+          'channels', () async {
+        final launch = _FakeHostHarnessLaunch();
+        final followerDrive = _passingDrive();
+        final centralDrive = _ScriptedLeonardDrive(
+          attachError: StateError('central attach failed'),
+        );
+        final host = BurnHostCapability(
+          drive: followerDrive,
+          scenario: _passingScenario(),
+          hostLaunch: launch,
+          localSpec: const LaunchSpec(
+            app: 'butane_windows_example',
+            target: 'windows',
+            role: 'central',
+          ),
+          localDrive: centralDrive,
+        );
+        final hCtx = _ctx(
+          nodePath: _hostPath,
+          siblings: SiblingView(results: {_followerPath: published}),
+        );
+
+        await expectLater(
+          host.run(hCtx.context, hCtx.args),
+          throwsA(isA<StateError>()),
+        );
+        expect(followerDrive.scenarioCalls, 0);
+        expect(centralDrive.scenarioCalls, 0);
+        await host.teardown(hCtx.args);
+        expect(followerDrive.closed, isTrue);
+        expect(centralDrive.closed, isTrue);
+        expect(launch.teardowns, 1);
+      });
+
+      test(
+        'generic central launch cancellation skips attach and scenario',
+        () async {
+          final cancel = CancelToken();
+          final gate = _CancellationGate<FollowerEndpoint>();
+          const endpoint = FollowerEndpoint(
+            vmServiceUri: 'ws://yoga-win:6000/central/ws',
+            station: 'windows-host',
+          );
+          final launch = _FakeHostHarnessLaunch(
+            endpoint: endpoint,
+            launchGate: gate,
+          );
+          final followerDrive = _passingDrive();
+          final centralDrive = _ScriptedLeonardDrive();
+          final host = BurnHostCapability(
+            drive: followerDrive,
+            scenario: _passingScenario(),
+            hostLaunch: launch,
+            localSpec: const LaunchSpec(
+              app: 'butane_windows_example',
+              target: 'windows',
+              role: 'central',
+            ),
+            localDrive: centralDrive,
+          );
+          final hCtx = _ctx(
+            nodePath: _hostPath,
+            cancel: cancel,
+            siblings: SiblingView(results: {_followerPath: published}),
+          );
+
+          final pending = host.run(hCtx.context, hCtx.args);
+          await gate.entered.future;
+          cancel.cancel();
+          gate.completeAfterCancellation(cancel, endpoint);
+          expect(await pending, const Failed('cancelled'));
+          expect(
+            centralDrive.calls.where((call) => call.startsWith('attach:')),
+            isEmpty,
+          );
+          expect(followerDrive.scenarioCalls, 0);
+          expect(centralDrive.scenarioCalls, 0);
+          await host.teardown(hCtx.args);
+          expect(followerDrive.closed, isTrue);
+          expect(centralDrive.closed, isTrue);
+          expect(launch.teardowns, 1);
+        },
+      );
+
+      test('generic central attach cancellation skips scenario', () async {
+        final cancel = CancelToken();
+        final gate = _CancellationGate<void>();
+        final launch = _FakeHostHarnessLaunch();
+        final followerDrive = _passingDrive();
+        final centralDrive = _ScriptedLeonardDrive(attachGate: gate);
+        final host = BurnHostCapability(
+          drive: followerDrive,
+          scenario: _passingScenario(),
+          hostLaunch: launch,
+          localSpec: const LaunchSpec(
+            app: 'butane_windows_example',
+            target: 'windows',
+            role: 'central',
+          ),
+          localDrive: centralDrive,
+        );
+        final hCtx = _ctx(
+          nodePath: _hostPath,
+          cancel: cancel,
+          siblings: SiblingView(results: {_followerPath: published}),
+        );
+
+        final pending = host.run(hCtx.context, hCtx.args);
+        await gate.entered.future;
+        cancel.cancel();
+        gate.completeAfterCancellation(cancel, null);
+        expect(await pending, const Failed('cancelled'));
+        expect(centralDrive.calls.where((call) => call.startsWith('attach:')), [
+          'attach:ws://yoga-win:6000/central/ws',
+        ]);
+        expect(followerDrive.scenarioCalls, 0);
+        expect(centralDrive.scenarioCalls, 0);
+        await host.teardown(hCtx.args);
+        expect(followerDrive.closed, isTrue);
+        expect(centralDrive.closed, isTrue);
+        expect(launch.teardowns, 1);
       });
     },
   );
@@ -1425,5 +1623,5 @@ class _FakeLocalLauncher implements FollowerLauncher {
 class _ThrowingLauncher implements FollowerLauncher {
   @override
   Future<LaunchedDaemon> launch(LaunchSpec spec) async =>
-      throw StateError('flutter build exploded');
+      throw StateError('launch failed');
 }
