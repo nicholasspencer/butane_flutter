@@ -41,11 +41,13 @@ class _FakeLeonardDrive implements LeonardDrive {
 }
 
 class _FakeHostHarnessLaunch implements HostHarnessLaunch {
+  final specs = <LaunchSpec>[];
   var launches = 0;
   var teardowns = 0;
 
   @override
   Future<FollowerEndpoint> launch(LaunchSpec spec) async {
+    specs.add(spec);
     launches++;
     return const FollowerEndpoint(
       vmServiceUri: 'ws://yoga-win:6000/central/ws',
@@ -365,6 +367,10 @@ void main() {
 
     expect(outcome, isA<Ok>());
     expect(remote.launches, 1);
+    expect(remote.specs, hasLength(1));
+    expect(remote.specs.single.app, 'butane_harness');
+    expect(remote.specs.single.target, 'windows');
+    expect(remote.specs.single.role, 'central');
     expect(drives, hasLength(2));
     await host.teardown(hostArgs);
     expect(remote.teardowns, 1);
