@@ -30,8 +30,12 @@ bead metadata below:
 
 The corresponding environment fallbacks are `BURN_CENTRAL_TARGET`,
 `BUTANE_WINDOWS_HOST`, `BUTANE_WINDOWS_REPO`, and `BUTANE_WINDOWS_FLUTTER`.
-SSH owns only the Windows example's launch and process-tree reap. Both Leonard
-channels remain direct point-to-point LAN connections; they are not SSH tunnels.
+SSH owns the Windows harness launch and process-tree reap. Because the Windows
+Dart VM service binds loopback, SSH also owns a local `-L` forward from the
+resident Mac's `127.0.0.1:<localPort>` to the Windows host's
+`127.0.0.1:<vmServicePort>`; the central drive receives the Mac-loopback URI.
+The follower Leonard channel remains direct point-to-point and no VM-service
+URI rewrites loopback to the Windows hostname.
 
 ## File a burn
 

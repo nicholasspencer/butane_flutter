@@ -49,12 +49,14 @@ class _FakeHostHarnessLaunch implements HostHarnessLaunch {
   });
 
   final FollowerEndpoint endpoint;
+  final specs = <LaunchSpec>[];
   var launches = 0;
   var teardowns = 0;
   LaunchSpec? lastSpec;
 
   @override
   Future<FollowerEndpoint> launch(LaunchSpec spec) async {
+    specs.add(spec);
     launches++;
     lastSpec = spec;
     return endpoint;
@@ -372,6 +374,10 @@ void main() {
 
     expect(outcome, isA<Ok>());
     expect(remote.launches, 1);
+    expect(remote.specs, hasLength(1));
+    expect(remote.specs.single.app, 'butane_harness');
+    expect(remote.specs.single.target, 'windows');
+    expect(remote.specs.single.role, 'central');
     expect(drives, hasLength(2));
     await host.teardown(hostArgs);
     expect(remote.teardowns, 1);

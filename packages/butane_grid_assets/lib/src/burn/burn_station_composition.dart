@@ -335,7 +335,7 @@ final class _ResidentBurnHostCapability extends BurnHostCapability {
           scenario: kSmokeScenario,
           hostLaunch: windowsHostFactory(inputs, log.call),
           localSpec: LaunchSpec(
-            app: 'butane_windows_example',
+            app: 'butane_harness',
             target: 'windows',
             role: 'central',
             scenario: kSmokeScenario.name,

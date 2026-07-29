@@ -17,9 +17,47 @@ abstract interface class HostHarnessLaunch {
 typedef SshProcessStarter =
     Future<Process> Function(String executable, List<String> arguments);
 
+/// Allocates an unused local TCP port for the VM-service tunnel.
+typedef LocalPortAllocator = Future<int> Function();
+
+/// Waits until an SSH tunnel is accepting connections on [port].
+typedef TunnelReadyWaiter =
+    Future<void> Function(int port, Process process, Duration timeout);
+
 void _noLog(String _) {}
 
-/// Launches the central example on Windows over SSH.
+Future<int> _allocateLoopbackPort() async {
+  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = socket.port;
+  await socket.close();
+  return port;
+}
+
+Future<void> _waitForTunnel(int port, Process process, Duration timeout) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    final connected =
+        await Socket.connect(
+          InternetAddress.loopbackIPv4,
+          port,
+          timeout: const Duration(milliseconds: 100),
+        ).then((socket) async {
+          await socket.close();
+          return true;
+        }, onError: (_) => false);
+    if (connected) return;
+    final exited = await Future.any<Object?>([
+      process.exitCode.then<Object?>((code) => code),
+      Future<Object?>.delayed(const Duration(milliseconds: 50)),
+    ]);
+    if (exited is int) {
+      throw StateError('Windows VM-service tunnel exited with code $exited');
+    }
+  }
+  throw TimeoutException('Windows VM-service tunnel was not ready', timeout);
+}
+
+/// Launches the central harness on Windows over SSH.
 final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
   RemoteWindowsHostLaunch({
     required this.host,
@@ -28,8 +66,12 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
     this.station = 'windows-host',
     this.readyTimeout = const Duration(minutes: 5),
     SshProcessStarter starter = Process.start,
+    LocalPortAllocator allocatePort = _allocateLoopbackPort,
+    TunnelReadyWaiter waitForTunnelReady = _waitForTunnel,
     void Function(String)? onLog,
   }) : _starter = starter,
+       _allocatePort = allocatePort,
+       _waitForTunnelReady = waitForTunnelReady,
        _onLog = onLog ?? _noLog;
 
   final String host;
@@ -38,8 +80,11 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
   final String station;
   final Duration readyTimeout;
   final SshProcessStarter _starter;
+  final LocalPortAllocator _allocatePort;
+  final TunnelReadyWaiter _waitForTunnelReady;
   final void Function(String) _onLog;
   int? _remotePid;
+  Process? _tunnelProcess;
   bool _teardownStarted = false;
 
   static const _sshOptions = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15'];
@@ -76,16 +121,29 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
         Future.any<Object>([pidReady.future, exitFailure]),
         Future.any<Object>([uriFuture, exitFailure]),
       ]).timeout(readyTimeout);
-      final uri = Uri.parse(values[1] as String);
-      if ((uri.scheme != 'ws' && uri.scheme != 'wss') || uri.host.isEmpty) {
-        throw FormatException('invalid VM service WebSocket URI', uri);
+      final remoteUri = Uri.parse(values[1] as String);
+      if ((remoteUri.scheme != 'ws' && remoteUri.scheme != 'wss') ||
+          (remoteUri.host != '127.0.0.1' && remoteUri.host != 'localhost') ||
+          remoteUri.port == 0) {
+        throw FormatException(
+          'invalid loopback VM service WebSocket URI',
+          remoteUri,
+        );
       }
-      final published = uri
-          .replace(
-            host: uri.host == '127.0.0.1' || uri.host == 'localhost'
-                ? host
-                : uri.host,
-          )
+      final localPort = await _allocatePort();
+      final tunnel = await _starter('ssh', [
+        ..._sshOptions,
+        '-o',
+        'ExitOnForwardFailure=yes',
+        '-N',
+        '-L',
+        '127.0.0.1:$localPort:127.0.0.1:${remoteUri.port}',
+        host,
+      ]);
+      _tunnelProcess = tunnel;
+      await _waitForTunnelReady(localPort, tunnel, readyTimeout);
+      final published = remoteUri
+          .replace(host: '127.0.0.1', port: localPort)
           .toString();
       return FollowerEndpoint(vmServiceUri: published, station: station);
     } on Object {
@@ -96,7 +154,7 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
 
   String _launchCommand(LaunchSpec spec) {
     String ps(String value) => "'${value.replaceAll("'", "''")}'";
-    final example = '$repository/packages/butane_windows/example';
+    final appDirectory = '$repository/packages/${spec.app}';
     final flutterArgs = <String>[
       'run',
       '-d',
@@ -107,7 +165,7 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
     ].map(ps).join(',');
     final script =
         r"$ErrorActionPreference='Stop'; "
-        'Set-Location ${ps(example)}; '
+        'Set-Location ${ps(appDirectory)}; '
         r"$out=[IO.Path]::GetTempFileName(); $err=[IO.Path]::GetTempFileName(); "
         r"$p=Start-Process -FilePath "
         '${ps(flutterExecutable)} -ArgumentList $flutterArgs '
@@ -125,8 +183,21 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
   }
 
   Future<void> _cleanupAfterLaunchFailure() async {
+    await _reapTunnel();
     final pid = _remotePid;
     if (pid != null) await _taskkill(pid);
+  }
+
+  Future<void> _reapTunnel() async {
+    final tunnel = _tunnelProcess;
+    if (tunnel == null) return;
+    _tunnelProcess = null;
+    tunnel.kill(ProcessSignal.sigkill);
+    await tunnel.exitCode;
+    _onLog(
+      'teardown-receipt: remote windows VM-service tunnel reaped '
+      '${tunnel.pid}',
+    );
   }
 
   Future<void> _taskkill(int pid) async {
@@ -147,6 +218,7 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
   Future<void> teardown() async {
     if (_teardownStarted) return;
     _teardownStarted = true;
+    await _reapTunnel();
     final pid = _remotePid;
     if (pid != null) await _taskkill(pid);
   }
