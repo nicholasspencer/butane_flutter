@@ -41,16 +41,23 @@ class _FakeLeonardDrive implements LeonardDrive {
 }
 
 class _FakeHostHarnessLaunch implements HostHarnessLaunch {
+  _FakeHostHarnessLaunch({
+    this.endpoint = const FollowerEndpoint(
+      vmServiceUri: 'ws://yoga-win:6000/central/ws',
+      station: 'windows-host',
+    ),
+  });
+
+  final FollowerEndpoint endpoint;
   var launches = 0;
   var teardowns = 0;
+  LaunchSpec? lastSpec;
 
   @override
   Future<FollowerEndpoint> launch(LaunchSpec spec) async {
     launches++;
-    return const FollowerEndpoint(
-      vmServiceUri: 'ws://yoga-win:6000/central/ws',
-      station: 'windows-host',
-    );
+    lastSpec = spec;
+    return endpoint;
   }
 
   @override
@@ -368,6 +375,72 @@ void main() {
     expect(drives, hasLength(2));
     await host.teardown(hostArgs);
     expect(remote.teardowns, 1);
+    await allocation.dispose();
+  });
+
+  test('macOS metadata selects local central and two drives', () async {
+    final local = _FakeHostHarnessLaunch(
+      endpoint: const FollowerEndpoint(
+        vmServiceUri: 'ws://mac:6123/central/ws',
+        station: 'macos-central',
+      ),
+    );
+    final drives = <_FakeLeonardDrive>[];
+    final notes = <String>[];
+    final registry = buildBurnStationRegistry(
+      appendNote: (_, line) async => notes.add(line),
+      driveFactory: (_) {
+        final drive = _FakeLeonardDrive();
+        drives.add(drive);
+        return drive;
+      },
+      macosHostFactory: (_, _) => local,
+      burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+    );
+    final follower = _capability(registry, 0) as ProcessCapability;
+    final host = _capability(registry, 1) as BurnHostCapability;
+    final bead = _order({
+      ..._metadata,
+      BurnOrderInputs.centralTargetKey: 'macos',
+    });
+    final transport = _TranscriptRuntimeProvider();
+    final reports = <AllocationReport>[];
+    final allocation = follower.createAllocation(
+      _allocationContext(transport: transport, reports: reports, bead: bead),
+    );
+    await allocation.startOrAdopt();
+
+    final hostArgs = stepArgs('order-1/$kBurnHostStep');
+    final outcome = await host.run(
+      _hostContext(const {
+        'endpoint': 'ws://ios:5000/follower/ws',
+        'station': 'mac',
+        'lease': 'local',
+        'target': 'ios',
+      }, bead),
+      hostArgs,
+    );
+
+    expect(outcome, isA<Ok>());
+    expect(local.launches, 1);
+    expect(drives, hasLength(2));
+    expect(drives[0].calls, contains('attach:ws://ios:5000/follower/ws'));
+    expect(drives[1].calls, contains('attach:ws://mac:6123/central/ws'));
+    expect(local.lastSpec?.app, 'butane_harness');
+    expect(local.lastSpec?.target, 'macos');
+    expect(local.lastSpec?.role, 'central');
+    expect(local.lastSpec?.scenario, kSmokeScenario.name);
+    expect(local.lastSpec?.harnessDirectory, '/harness/from/bead');
+    expect(local.lastSpec?.leonardDrive, '/drive/from/bead');
+    expect(
+      notes,
+      contains(
+        'operator action: macOS may prompt for Bluetooth access to '
+        'butane_harness; the first-run grant is required once',
+      ),
+    );
+    await host.teardown(hostArgs);
+    expect(local.teardowns, 1);
     await allocation.dispose();
   });
 }
