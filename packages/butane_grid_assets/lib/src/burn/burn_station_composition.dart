@@ -15,12 +15,11 @@ import 'package:grid_engine/grid_engine.dart'
         AllocationContext,
         AllocationFailed,
         AllocationReady,
+        AllocationState,
+        Capability,
         Failed,
-        ProcessAllocation,
-        ProcessCapability,
         StepArgs,
-        StepOutcome,
-        StepSignal;
+        StepOutcome;
 import 'package:grid_runtime/grid_runtime.dart'
     show
         ActivityChanged,
@@ -149,7 +148,7 @@ final class _OrderLeonardDrive implements LeonardDrive {
 
 const _publishedPrefix = 'burn-follower-published ';
 
-final class _ResidentBurnFollowerCapability extends ProcessCapability {
+final class _ResidentBurnFollowerCapability extends Capability {
   _ResidentBurnFollowerCapability({
     required this.drive,
     required this.environment,
@@ -162,7 +161,6 @@ final class _ResidentBurnFollowerCapability extends ProcessCapability {
   final _BeadNoteLog log;
   final String entrypoint;
 
-  @override
   RuntimeConfig spawn(TreeContext context, StepArgs args) {
     log.bind(args.beadId);
     final bead = context.getInheritedSeedOfExactType<Bead>();
@@ -195,48 +193,57 @@ final class _ResidentBurnFollowerCapability extends ProcessCapability {
   }
 
   @override
-  StepSignal interpretEvent(RuntimeEvent event) => switch (event) {
-    Exited() || Died() => StepSignal.failed,
-    SessionStarted() || Respawned() || ActivityChanged() => StepSignal.none,
-  };
-
-  @override
   Allocation createAllocation(AllocationContext context) =>
-      _PublishedFollowerProcessAllocation(this, context, log);
+      _PublishedFollowerAllocation(this, context, log);
 }
 
-final class _PublishedFollowerProcessAllocation extends ProcessAllocation {
-  _PublishedFollowerProcessAllocation(
-    super.capability,
-    super.context,
-    this.log,
-  );
+final class _PublishedFollowerAllocation extends Allocation {
+  _PublishedFollowerAllocation(this.capability, super.context, this.log);
 
+  final _ResidentBurnFollowerCapability capability;
   final _BeadNoteLog log;
-  StreamSubscription<RuntimeEvent>? _startedSubscription;
+  StreamSubscription<RuntimeEvent>? _eventSubscription;
   StreamSubscription<String>? _outputSubscription;
-  bool _published = false;
+  bool _started = false;
+  bool _terminal = false;
 
   @override
   Future<void> startOrAdopt() async {
     final name = address.providerName;
-    _startedSubscription = context.transport.events
-        .where((event) => event.name == name && event is SessionStarted)
-        .listen((_) {
-          _outputSubscription ??= context.transport.output(name).listen(_line);
-        });
-    await super.startOrAdopt();
+    try {
+      final base = capability.spawn(context.treeContext, context.args);
+      final config = base.copyWith(env: {...base.env, ...context.env});
+      _eventSubscription = context.transport.events
+          .where((event) => event.name == name)
+          .listen(_event);
+      _outputSubscription = context.transport.output(name).listen(_line);
+      _started = true;
+      await context.transport.start(name, config);
+      state = AllocationState.live;
+    } on Object catch (error) {
+      _fail('resident burn follower failed to start: $error');
+    }
+  }
+
+  void _event(RuntimeEvent event) {
+    switch (event) {
+      case Exited() || Died():
+        _fail('resident burn follower exited before publishing its endpoint');
+      case SessionStarted() || Respawned() || ActivityChanged():
+        return;
+    }
   }
 
   void _line(String line) {
-    if (_published || !line.startsWith(_publishedPrefix)) return;
+    if (_terminal || !line.startsWith(_publishedPrefix)) return;
     final uri = line.substring(_publishedPrefix.length).trim();
     final parsed = Uri.tryParse(uri);
     if (parsed == null || !{'ws', 'wss'}.contains(parsed.scheme)) {
-      context.sink(AllocationFailed('invalid burn follower endpoint: $uri'));
+      _fail('invalid burn follower endpoint: $uri');
       return;
     }
-    _published = true;
+    _terminal = true;
+    state = AllocationState.ready;
     log.call('resident burn-receipt: follower published $uri');
     context.sink(
       AllocationReady({
@@ -248,11 +255,20 @@ final class _PublishedFollowerProcessAllocation extends ProcessAllocation {
     );
   }
 
+  void _fail(String reason) {
+    if (_terminal) return;
+    _terminal = true;
+    state = AllocationState.gone;
+    context.sink(AllocationFailed(reason));
+  }
+
   @override
   Future<void> dispose() async {
-    await _startedSubscription?.cancel();
+    state = AllocationState.dying;
+    await _eventSubscription?.cancel();
     await _outputSubscription?.cancel();
-    await super.dispose();
+    if (_started) await context.transport.stop(address.providerName);
+    state = AllocationState.gone;
     log.call('teardown-receipt: resident follower supervisor stopped');
     await log.flush();
   }

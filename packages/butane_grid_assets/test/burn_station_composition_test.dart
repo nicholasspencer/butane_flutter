@@ -184,7 +184,7 @@ void main() {
     });
   });
 
-  test('registry exposes a process follower and service host', () {
+  test('registry exposes a direct follower capability and service host', () {
     final registry = buildBurnStationRegistry(
       appendNote: (_, _) async {},
       driveFactory: (_) => _FakeLeonardDrive(),
@@ -192,7 +192,8 @@ void main() {
     );
 
     expect(identical(registry.circuit('burn'), kBurnCircuit), isTrue);
-    expect(_capability(registry, 0), isA<ProcessCapability>());
+    expect(_capability(registry, 0), isA<Capability>());
+    expect(_capability(registry, 0), isNot(isA<ProcessCapability>()));
     expect(_capability(registry, 1), isA<BurnHostCapability>());
   });
 
@@ -211,7 +212,7 @@ void main() {
         'LEONARD_DRIVE': '/drive/from/env',
       },
     );
-    final follower = _capability(registry, 0) as ProcessCapability;
+    final follower = _capability(registry, 0);
     final host = _capability(registry, 1) as BurnHostCapability;
     final transport = _TranscriptRuntimeProvider();
     final reports = <AllocationReport>[];
@@ -239,8 +240,6 @@ void main() {
       '--leonard-drive',
       '/drive/from/bead',
     ]);
-    transport.emit(SessionStarted(name: name, pid: 5150, pgid: 5150));
-    await Future<void>.delayed(Duration.zero);
     transport.emitOutput(
       name,
       'burn-follower-published ${_endpoint.vmServiceUri}',
@@ -307,7 +306,7 @@ void main() {
         driveFactory: (_) => _FakeLeonardDrive(),
         burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
       );
-      final follower = _capability(registry, 0) as ProcessCapability;
+      final follower = _capability(registry, 0);
       final transport = _TranscriptRuntimeProvider();
       final reports = <AllocationReport>[];
       final allocation = follower.createAllocation(
@@ -320,8 +319,6 @@ void main() {
 
       await allocation.startOrAdopt();
       final name = allocation.address.providerName;
-      transport.emit(SessionStarted(name: name, pid: 5150, pgid: 5150));
-      await Future<void>.delayed(Duration.zero);
       transport.emitOutput(name, 'burn-follower-published http://127.0.0.1/ws');
       await Future<void>.delayed(Duration.zero);
 
@@ -329,6 +326,42 @@ void main() {
       expect(reports.whereType<AllocationReady>(), isEmpty);
       await allocation.dispose();
       await Future<void>.delayed(Duration.zero);
+      expect(transport.stopped, [name]);
+    },
+  );
+
+  test(
+    'follower exit before publication fails and cannot become ready',
+    () async {
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        driveFactory: (_) => _FakeLeonardDrive(),
+        burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+      );
+      final follower = _capability(registry, 0);
+      final transport = _TranscriptRuntimeProvider();
+      final reports = <AllocationReport>[];
+      final allocation = follower.createAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: reports,
+          bead: _order(_metadata),
+        ),
+      );
+
+      await allocation.startOrAdopt();
+      final name = allocation.address.providerName;
+      transport.emit(Exited(name: name, exitCode: 1));
+      await Future<void>.delayed(Duration.zero);
+      transport.emitOutput(
+        name,
+        'burn-follower-published ${_endpoint.vmServiceUri}',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(reports.whereType<AllocationFailed>(), hasLength(1));
+      expect(reports.whereType<AllocationReady>(), isEmpty);
+      await allocation.dispose();
       expect(transport.stopped, [name]);
     },
   );
@@ -346,7 +379,7 @@ void main() {
       windowsHostFactory: (_, _) => remote,
       burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
     );
-    final follower = _capability(registry, 0) as ProcessCapability;
+    final follower = _capability(registry, 0);
     final host = _capability(registry, 1) as BurnHostCapability;
     final metadata = {
       ..._metadata,
@@ -403,7 +436,7 @@ void main() {
       macosHostFactory: (_, _) => local,
       burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
     );
-    final follower = _capability(registry, 0) as ProcessCapability;
+    final follower = _capability(registry, 0);
     final host = _capability(registry, 1) as BurnHostCapability;
     final bead = _order({
       ..._metadata,
