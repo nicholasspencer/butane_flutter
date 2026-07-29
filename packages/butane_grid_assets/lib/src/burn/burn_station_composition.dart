@@ -54,7 +54,10 @@ final class _BeadNoteLog {
   _BeadNoteLog(this._append);
 
   final NoteAppender _append;
+  final List<String> _lines = [];
   String? _beadId;
+  Object? _firstError;
+  StackTrace? _firstStackTrace;
   Future<void> _pending = Future<void>.value();
 
   void bind(String beadId) => _beadId = beadId;
@@ -64,10 +67,36 @@ final class _BeadNoteLog {
     if (beadId == null) {
       throw StateError('resident burn log emitted before StepArgs binding');
     }
-    _pending = _pending.then((_) => _append(beadId, line));
+    _lines.add(line);
+    _pending = _pending.then((_) async {
+      try {
+        await _append(beadId, line);
+      } on Object catch (error, stackTrace) {
+        _firstError ??= error;
+        _firstStackTrace ??= stackTrace;
+      }
+    });
   }
 
-  Future<void> flush() => _pending;
+  Future<void> flush() async {
+    await _pending;
+    final error = _firstError;
+    if (error != null) {
+      Error.throwWithStackTrace(error, _firstStackTrace ?? StackTrace.empty);
+    }
+  }
+
+  Future<StepOutcome> flushOutcome(StepOutcome outcome) async {
+    try {
+      await flush();
+      return outcome;
+    } on Object catch (error) {
+      return Failed(
+        'note append failed: $error\n'
+        'buffered notes:\n${_lines.join('\n')}',
+      );
+    }
+  }
 }
 
 final class _OrderLeonardDrive implements LeonardDrive {
@@ -138,23 +167,22 @@ final class _ResidentBurnFollowerCapability extends ServiceCapability {
       ).withBurnInputs(inputs),
     );
     if (args.cancel.isCancelled) {
-      await log.flush();
-      return const Failed('cancelled');
+      return log.flushOutcome(const Failed('cancelled'));
     }
     if (!endpoint.isPublished) {
-      await log.flush();
-      return const Failed('follower published no endpoint');
+      return log.flushOutcome(const Failed('follower published no endpoint'));
     }
     log.call(
       'resident burn-receipt: follower published ${endpoint.vmServiceUri}',
     );
-    await log.flush();
-    return Ok({
-      'endpoint': endpoint.vmServiceUri,
-      'station': endpoint.station,
-      'lease': endpoint.leaseId,
-      'target': 'ios',
-    });
+    return log.flushOutcome(
+      Ok({
+        'endpoint': endpoint.vmServiceUri,
+        'station': endpoint.station,
+        'lease': endpoint.leaseId,
+        'target': 'ios',
+      }),
+    );
   }
 
   @override
@@ -177,8 +205,7 @@ final class _ResidentBurnHostCapability extends BurnHostCapability {
   Future<StepOutcome> run(TreeContext context, StepArgs args) async {
     log.bind(args.beadId);
     final outcome = await super.run(context, args);
-    await log.flush();
-    return outcome;
+    return log.flushOutcome(outcome);
   }
 
   @override
