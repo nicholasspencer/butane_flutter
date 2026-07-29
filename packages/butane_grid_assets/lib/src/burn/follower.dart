@@ -154,6 +154,7 @@ class LaunchedDaemon {
     required this.pid,
     required this.pgid,
     required this.endpoint,
+    this.exited,
     this.onReap,
   });
 
@@ -166,6 +167,9 @@ class LaunchedDaemon {
 
   /// The endpoint the launched app published.
   final FollowerEndpoint endpoint;
+
+  /// Completes when the launched child is known to have died.
+  final Future<void>? exited;
 
   /// Extra teardown run once, after the pgid reap (exception-isolated by the
   /// runner). Null for the desktop path (the process group IS the whole
@@ -221,6 +225,9 @@ class ButaneFollowerRunner {
 
   /// Whether a launched follower daemon is currently running (un-reaped).
   bool get isRunning => _daemon != null;
+
+  /// Death notification for the currently owned daemon.
+  Future<void>? get residentExit => _daemon?.exited;
 
   /// Provisions + builds + launches [spec], publishing the follower endpoint.
   /// (An act.) A second launch while one is already running reaps the prior

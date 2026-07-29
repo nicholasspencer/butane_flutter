@@ -12,15 +12,22 @@ const _endpoint = FollowerEndpoint(
 );
 
 class _FakeFollowerLauncher implements FollowerLauncher {
-  _FakeFollowerLauncher({this.error});
+  _FakeFollowerLauncher({
+    this.error,
+    List<Future<LaunchedDaemon> Function()>? launches,
+  }) : launches = launches ?? <Future<LaunchedDaemon> Function()>[];
 
   final Object? error;
+  final List<Future<LaunchedDaemon> Function()> launches;
+  var launchCalls = 0;
   LaunchSpec? spec;
 
   @override
   Future<LaunchedDaemon> launch(LaunchSpec spec) async {
+    launchCalls++;
     this.spec = spec;
     if (error case final error?) throw error;
+    if (launches.isNotEmpty) return launches.removeAt(0)();
     return const LaunchedDaemon(pid: 4242, pgid: 4242, endpoint: _endpoint);
   }
 }
@@ -126,8 +133,121 @@ void main() {
 
     expect(result, 1);
     expect(published, isEmpty);
-    expect(logs.single, contains('launch failed'));
+    expect(
+      logs.first,
+      allOf(
+        startsWith('burn follower supervisor failed:'),
+        contains('launch failed'),
+      ),
+    );
+    expect(logs.last, 'teardown-receipt: burn follower daemon reaped');
     await runner.teardown();
     expect(processes.signals, isEmpty);
+  });
+
+  test(
+    'launch and teardown deadlines settle, receipt once, and permit runner reuse',
+    () async {
+      Future<void> exercise(
+        Future<LaunchedDaemon> Function() firstLaunch,
+      ) async {
+        final launcher = _FakeFollowerLauncher(
+          launches: <Future<LaunchedDaemon> Function()>[
+            firstLaunch,
+            () async => const LaunchedDaemon(
+              pid: 4242,
+              pgid: 4242,
+              endpoint: _endpoint,
+            ),
+          ],
+        );
+        final processes = _FakeProcessGroupController();
+        final runner = ButaneFollowerRunner(
+          launcher: launcher,
+          processes: processes,
+          reapGrace: Duration.zero,
+        );
+        final logs = <String>[];
+        final stopwatch = Stopwatch()..start();
+
+        final run = runBurnFollowerDaemon(
+          inputs: _inputs,
+          runner: runner,
+          terminate: const Stream<void>.empty(),
+          publish: (_) {},
+          onLog: logs.add,
+          launchTimeout: const Duration(milliseconds: 30),
+          teardownTimeout: const Duration(milliseconds: 30),
+        );
+
+        expect(await run, 1);
+        expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
+        expect(
+          logs.where((line) => line.startsWith('teardown-receipt:')),
+          hasLength(1),
+        );
+        expect(runner.isRunning, isFalse);
+
+        final endpoint = await runner.launch(
+          const LaunchSpec(app: 'butane_harness', target: 'ios'),
+        );
+        expect(endpoint, _endpoint);
+        await runner.teardown();
+      }
+
+      await exercise(() => Completer<LaunchedDaemon>().future);
+      await exercise(
+        () async => LaunchedDaemon(
+          pid: 4242,
+          pgid: 4242,
+          endpoint: _endpoint,
+          onReap: () => Completer<void>().future,
+        ),
+      );
+    },
+  );
+
+  test('resident hold has no wall-clock deadline', () async {
+    final exited = Completer<void>();
+    final launcher = _FakeFollowerLauncher(
+      launches: <Future<LaunchedDaemon> Function()>[
+        () async => LaunchedDaemon(
+          pid: 4242,
+          pgid: 4242,
+          endpoint: _endpoint,
+          exited: exited.future,
+        ),
+      ],
+    );
+    final processes = _FakeProcessGroupController();
+    final runner = ButaneFollowerRunner(
+      launcher: launcher,
+      processes: processes,
+      reapGrace: Duration.zero,
+    );
+    final terminate = StreamController<void>.broadcast();
+    final logs = <String>[];
+    var completed = false;
+
+    final run = runBurnFollowerDaemon(
+      inputs: _inputs,
+      runner: runner,
+      terminate: terminate.stream,
+      publish: (_) {},
+      onLog: logs.add,
+      launchTimeout: const Duration(milliseconds: 30),
+    ).whenComplete(() => completed = true);
+
+    await Future<void>.delayed(const Duration(milliseconds: 70));
+    expect(completed, isFalse);
+    terminate.add(null);
+    expect(await run, 0);
+    expect(
+      logs.where(
+        (line) => line == 'teardown-receipt: burn follower daemon reaped',
+      ),
+      hasLength(1),
+    );
+    await terminate.close();
   });
 }
