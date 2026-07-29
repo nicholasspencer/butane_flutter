@@ -415,4 +415,61 @@ void main() {
       expect(remote.teardowns, 1);
     },
   );
+
+  test(
+    'unsupported central target fails before Windows launch or drive attach',
+    () async {
+      final drives = <_FakeLeonardDrive>[];
+      var factoryCalls = 0;
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        followerLauncher: _FakeFollowerLauncher(),
+        driveFactory: (_) {
+          final drive = _FakeLeonardDrive();
+          drives.add(drive);
+          return drive;
+        },
+        windowsHostFactory: (_, _) {
+          factoryCalls++;
+          return _FakeHostHarnessLaunch();
+        },
+        processes: _FakeProcessGroupController(),
+      );
+      final host =
+          (registry.host(_mount(kBurnCircuit.steps[1] as CapabilityStep))
+                      as CapabilityHost)
+                  .capability
+              as ServiceCapability;
+      final context = FakeTreeContext(
+        values: {
+          Bead: _order({
+            ..._metadata,
+            BurnOrderInputs.centralTargetKey: 'linux',
+          }),
+          SiblingView: const SiblingView(
+            results: {
+              'order-1/burn-follower': {
+                'endpoint': 'ws://ios:5000/follower/ws',
+                'station': 'mac',
+                'lease': 'lease-1',
+                'target': 'ios',
+              },
+            },
+          ),
+        },
+      );
+
+      final outcome = await host.run(
+        context,
+        stepArgs('order-1/$kBurnHostStep'),
+      );
+      expect(outcome, isA<Failed>());
+      expect(
+        (outcome as Failed).reason,
+        'unsupported burn central target "linux"',
+      );
+      expect(factoryCalls, 0);
+      expect(drives, isEmpty);
+    },
+  );
 }
