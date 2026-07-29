@@ -42,6 +42,46 @@ void _noLog(String _) {}
 /// The device and harness directory selected for one iOS launch.
 typedef IosLaunchInputs = ({String deviceId, String harnessDirectory});
 
+/// One iOS VM-service endpoint advertised through mDNS.
+typedef IosMdnsCandidate = ({String ip, int port, String authCode});
+
+/// Parses one `dns-sd -L` transcript and its matching `dns-sd -G v4`
+/// transcript into every usable address/port combination.
+@visibleForTesting
+List<IosMdnsCandidate> resolveIosMdnsCandidates({
+  required String lookupOutput,
+  required String addressOutput,
+}) {
+  final pairs = RegExp(
+    r'reached at (\S+):(\d+)[\s\S]*?authCode=(\S+)',
+  ).allMatches(lookupOutput);
+  final byPort = <int, ({int port, String authCode})>{};
+  for (final match in pairs) {
+    final port = int.parse(match.group(2)!);
+    byPort[port] = (port: port, authCode: match.group(3)!);
+  }
+
+  final addressRow = RegExp(
+    r'\bAdd\b\s+\d+\s+\d+\s+\S+\s+'
+    r'(\d{1,3}(?:\.\d{1,3}){3})\s+\d+\s*$',
+  );
+  final addresses = <String>{};
+  for (final line in addressOutput.split('\n')) {
+    if (line.contains('No Such Record')) continue;
+    final address = addressRow.firstMatch(line)?.group(1);
+    if (address == null || address == '0.0.0.0') continue;
+    final octets = address.split('.').map(int.parse);
+    if (octets.any((octet) => octet > 255)) continue;
+    addresses.add(address);
+  }
+
+  return <IosMdnsCandidate>[
+    for (final pair in byPort.values)
+      for (final ip in addresses)
+        (ip: ip, port: pair.port, authCode: pair.authCode),
+  ];
+}
+
 /// The loopback relay, run by the LAN-exempt `python3`. Written to a temp file
 /// at launch so the launcher is self-contained (a Dart relay can't work — it
 /// would hit the same Local Network gate).
@@ -252,7 +292,7 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// app answers `getVM` before `ext.exploration.*` registers. A suspended
   /// iOS app tears its service extensions down (handshake → -32601), so
   /// "handshake is registered" is exactly the readiness + freshness signal.
-  Future<_DeviceEndpoint> _discoverReachable(DateTime deadline) async {
+  Future<IosMdnsCandidate> _discoverReachable(DateTime deadline) async {
     while (DateTime.now().isBefore(deadline)) {
       final candidates = await _resolveCandidates();
       for (final c in candidates) {
@@ -276,35 +316,27 @@ class IosFollowerLauncher implements FollowerLauncher {
 
   /// One mDNS resolve → ALL advertised (port, authCode) records (a relaunch
   /// leaves the old SRV cached alongside the new), each paired with the
-  /// device IPv4. The caller probes each for exploration-readiness.
-  Future<List<_DeviceEndpoint>> _resolveCandidates() async {
-    final l = await _boundedOutput('dns-sd', [
+  /// device IPv4 addresses. The caller probes each for exploration-readiness.
+  Future<List<IosMdnsCandidate>> _resolveCandidates() async {
+    final lookupOutput = await _boundedOutput('dns-sd', [
       '-L',
       bundleId,
       '_dartVmService._tcp',
       'local.',
     ], const Duration(seconds: 3));
-    // Each resolution is "reached at HOST:PORT …" followed by its
-    // "authCode=…" TXT line; pair each port with the authCode that follows.
-    final pairs = RegExp(
-      r'reached at (\S+):(\d+)[\s\S]*?authCode=(\S+)',
-    ).allMatches(l).toList();
-    if (pairs.isEmpty) return const [];
-    final host = pairs.first.group(1)!;
-    final g = await _boundedOutput('dns-sd', [
+    final host = RegExp(
+      r'reached at (\S+):\d+',
+    ).firstMatch(lookupOutput)?.group(1);
+    if (host == null) return const [];
+    final addressOutput = await _boundedOutput('dns-sd', [
       '-G',
       'v4',
       host,
     ], const Duration(seconds: 3));
-    final ip = RegExp(r'(\d+\.\d+\.\d+\.\d+)').firstMatch(g)?.group(1);
-    if (ip == null) return const [];
-    // De-dup by port, newest last (later records supersede).
-    final byPort = <int, _DeviceEndpoint>{};
-    for (final m in pairs) {
-      final port = int.parse(m.group(2)!);
-      byPort[port] = _DeviceEndpoint(ip: ip, port: port, authCode: m.group(3)!);
-    }
-    return byPort.values.toList();
+    return resolveIosMdnsCandidates(
+      lookupOutput: lookupOutput,
+      addressOutput: addressOutput,
+    );
   }
 
   /// Whether the butane exploration host is registered at [base]
@@ -412,7 +444,7 @@ class IosFollowerLauncher implements FollowerLauncher {
 
   /// Writes the embedded relay to a temp file and starts it under python3,
   /// waiting for its RELAY_READY line, then curl-verifying the loopback.
-  Future<Process> _startRelay(_DeviceEndpoint device) async {
+  Future<Process> _startRelay(IosMdnsCandidate device) async {
     final scriptFile = File(
       '${Directory.systemTemp.path}/butane_vm_relay_$relayPort.py',
     )..writeAsStringSync(_kRelayScript);
@@ -464,17 +496,4 @@ class IosFollowerLauncher implements FollowerLauncher {
     await err.cancel();
     return buf.toString();
   }
-}
-
-/// A resolved, reachable device VM-service endpoint.
-class _DeviceEndpoint {
-  const _DeviceEndpoint({
-    required this.ip,
-    required this.port,
-    required this.authCode,
-  });
-
-  final String ip;
-  final int port;
-  final String authCode;
 }
