@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:args/args.dart';
 
 import 'follower.dart';
@@ -29,33 +31,62 @@ final class BurnFollowerDaemonInputs {
   }
 }
 
-/// Runs one follower until [terminate] fires, then reaps it exactly once.
+/// Runs one follower until termination, bounding lifecycle and teardown.
 Future<int> runBurnFollowerDaemon({
   required BurnFollowerDaemonInputs inputs,
   required ButaneFollowerRunner runner,
   required Stream<void> terminate,
   required void Function(String) publish,
   void Function(String)? onLog,
+  Duration lifecycleTimeout = const Duration(minutes: 15),
+  Duration teardownTimeout = const Duration(seconds: 30),
 }) async {
+  var result = 1;
   try {
-    final endpoint = await runner.launch(
-      LaunchSpec(
-        app: 'butane_harness',
-        target: 'ios',
-        role: 'peripheral',
-        scenario: kSmokeScenario.name,
-        followerDevice: inputs.device,
-        harnessDirectory: inputs.harnessDirectory,
-        leonardDrive: inputs.leonardDrive,
-      ),
-    );
-    publish('burn-follower-published ${endpoint.vmServiceUri}');
-    await terminate.first;
-    return 0;
+    result =
+        await (() async {
+          final endpoint = await runner.launch(
+            LaunchSpec(
+              app: 'butane_harness',
+              target: 'ios',
+              role: 'peripheral',
+              scenario: kSmokeScenario.name,
+              followerDevice: inputs.device,
+              harnessDirectory: inputs.harnessDirectory,
+              leonardDrive: inputs.leonardDrive,
+            ),
+          );
+          publish('burn-follower-published ${endpoint.vmServiceUri}');
+          await terminate.first;
+          return 0;
+        })().timeout(
+          lifecycleTimeout,
+          onTimeout: () => throw TimeoutException(
+            'burn follower lifecycle timed out after '
+            '${lifecycleTimeout.inMilliseconds}ms',
+            lifecycleTimeout,
+          ),
+        );
   } on Object catch (error) {
     onLog?.call('burn follower supervisor failed: $error');
-    return 1;
-  } finally {
-    await runner.teardown();
+    result = 1;
   }
+
+  try {
+    await runner.teardown().timeout(
+      teardownTimeout,
+      onTimeout: () => throw TimeoutException(
+        'burn follower teardown timed out after '
+        '${teardownTimeout.inMilliseconds}ms',
+        teardownTimeout,
+      ),
+    );
+    onLog?.call('teardown-receipt: burn follower daemon reaped');
+  } on Object catch (error) {
+    onLog?.call(
+      'teardown-receipt: burn follower daemon teardown failed: $error',
+    );
+    result = 1;
+  }
+  return result;
 }
