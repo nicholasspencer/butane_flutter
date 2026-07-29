@@ -130,6 +130,49 @@ Then `ssh yoga-win` from the Mac.
       anywhere in this repo yet
 - [ ] Scaffold the `butane_windows` platform package
 
+### Butane interactive central scheduled task
+
+The bench operator must remain logged on locally while the Windows central
+harness runs. The scheduled task runs only with that user's interactive token;
+it does not run in the OpenSSH service session. The repository path embedded in
+the task action must equal the burn configuration's `windowsRepo`.
+
+For the current `C:\repo` checkout, register the task from elevated
+PowerShell:
+
+```powershell
+$taskName = 'Butane\InteractiveCentralHarness'
+$payload = 'C:\repo\.grid\remote_windows_host_launch.ps1'
+$action = New-ScheduledTaskAction `
+  -Execute 'powershell.exe' `
+  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$payload`""
+$principal = New-ScheduledTaskPrincipal `
+  -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
+  -RunOnlyIfNetworkAvailable
+Register-ScheduledTask `
+  -TaskName $taskName `
+  -Action $action `
+  -Principal $principal `
+  -Settings $settings `
+  -Force
+```
+
+For the attended rendering check, log on locally, start the resident
+Windows-central burn, and confirm that the `butane_harness` window is visible
+on the box. Then run:
+
+```bash
+ssh -o BatchMode=yes yoga-win "powershell.exe -NoProfile -NonInteractive -Command Get-Content C:/repo/.grid/remote_windows_host_launch.log"
+```
+
+The output must contain `GRID_VM_URI=ws://` and must contain none of
+`EGL Error`, `Surface creation failed`, or `SwapChain`. Absence of a logged-on
+interactive user is a hard precondition failure and never falls back to
+OpenSSH session 0.
+
 ## Gotchas — the things that fail *silently*
 
 ### 1. Admin accounts ignore `~/.ssh/authorized_keys`
