@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/src/butane_leonard_extension.dart';
-import '../lib/src/command_registry.dart';
-import '../lib/src/config.dart';
+import 'package:butane_harness/src/butane_leonard_extension.dart';
+import 'package:butane_harness/src/command_registry.dart';
+import 'package:butane_harness/src/config.dart';
 
 void main() {
   test('role-only config feeds the Leonard registry frontend', () async {
