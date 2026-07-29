@@ -575,6 +575,7 @@ void main() {
       );
       expect(logs.where((line) => line.startsWith('teardown-receipt:')), [
         'teardown-receipt: follower drive closed',
+        'teardown-receipt: central drive closed',
         'teardown-receipt: local drive closed',
         'teardown-receipt: resident follower reaped',
         'teardown-receipt: follower lease released burn-lease-0',
@@ -679,6 +680,7 @@ void main() {
       );
       expect(logs.where((line) => line.startsWith('teardown-receipt:')), [
         'teardown-receipt: follower drive closed',
+        'teardown-receipt: central drive closed',
         'teardown-receipt: local drive closed',
         'teardown-receipt: resident follower reaped',
         'teardown-receipt: follower lease released burn-lease-0',

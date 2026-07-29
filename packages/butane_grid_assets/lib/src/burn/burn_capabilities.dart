@@ -39,6 +39,7 @@ import 'burn_report.dart';
 import 'burn_order_inputs.dart';
 import 'burn_scenario.dart';
 import 'follower.dart';
+import 'remote_windows_host_launch.dart';
 
 /// The burn resource-asset kind label — what a `burn-follower` order leases. The
 /// federation core treats `kind` as an opaque, equality-checked string; this is
@@ -307,7 +308,7 @@ class _HostHold {
 }
 
 /// One reusable in-process follower launch/reap lifecycle.
-final class LocalFollowerLaunch {
+final class LocalFollowerLaunch implements HostHarnessLaunch {
   /// Creates the lifecycle over the existing guaranteed-reap [runner].
   LocalFollowerLaunch({required this.runner, void Function(String)? onLog})
     : _onLog = onLog ?? _noLog;
@@ -317,9 +318,11 @@ final class LocalFollowerLaunch {
   final void Function(String) _onLog;
 
   /// Launches [spec] in process and returns its published endpoint.
+  @override
   Future<FollowerEndpoint> launch(LaunchSpec spec) => runner.launch(spec);
 
   /// Reaps the launched process group once and emits the resident receipt.
+  @override
   Future<void> teardown() async {
     await runner.teardown();
     _onLog('teardown-receipt: resident follower reaped');
@@ -351,26 +354,28 @@ class BurnHostCapability extends ServiceCapability {
     required this.drive,
     required this.scenario,
     this.followerStep = kBurnFollowerStep,
+    HostHarnessLaunch? hostLaunch,
     this.localRunner,
     this.localSpec,
     this.localDrive,
     void Function(String)? onLog,
-  }) : _onLog = onLog ?? _noLog {
+  }) : hostLaunch =
+           hostLaunch ??
+           (localRunner == null
+               ? null
+               : LocalFollowerLaunch(runner: localRunner, onLog: onLog)),
+       _onLog = onLog ?? _noLog {
     final given = [
-      localRunner,
+      this.hostLaunch,
       localSpec,
       localDrive,
     ].where((p) => p != null).length;
     if (given != 0 && given != 3) {
       throw ArgumentError(
-        'two-drive burn-host needs localRunner + localSpec + localDrive '
+        'two-drive burn-host needs hostLaunch + localSpec + localDrive '
         'together (got $given of 3)',
       );
     }
-    final runner = localRunner;
-    _localFollower = runner == null
-        ? null
-        : LocalFollowerLaunch(runner: runner, onLog: _onLog);
   }
 
   /// The direct perception channel to the FOLLOWER (`leonard_drive`; a
@@ -387,14 +392,16 @@ class BurnHostCapability extends ServiceCapability {
   /// follower-only burn.
   final ButaneFollowerRunner? localRunner;
 
-  /// What the local harness boots as (conventionally `role: central`).
+  /// Launches and reaps the central harness.
+  final HostHarnessLaunch? hostLaunch;
+
+  /// What the central harness boots as (conventionally `role: central`).
   final LaunchSpec? localSpec;
 
   /// The perception channel to the LOCAL harness.
   final LeonardDrive? localDrive;
 
   final void Function(String) _onLog;
-  late final LocalFollowerLaunch? _localFollower;
 
   static final Expando<_HostHold> _holds = Expando<_HostHold>(
     'grid-burn-host-hold',
@@ -421,9 +428,9 @@ class BurnHostCapability extends ServiceCapability {
     if (followerTarget == null || followerTarget.isEmpty) {
       return const Failed('follower rendezvous published no target');
     }
-    final localFollower = _localFollower;
+    final centralLaunch = hostLaunch;
     final centralTarget = localSpec?.target ?? '';
-    if (localFollower != null && centralTarget.isEmpty) {
+    if (centralLaunch != null && centralTarget.isEmpty) {
       return const Failed('two-drive burn published no central target');
     }
     final endpoint = FollowerEndpoint(
@@ -442,18 +449,21 @@ class BurnHostCapability extends ServiceCapability {
     // TWO-DRIVE burn: launch the host's own local harness (the central) and
     // attach the second drive. A local launch failure fails the order —
     // teardown still reaps whatever launched (the runner is once-only).
-    if (localFollower != null) {
-      final FollowerEndpoint localEndpoint;
+    if (centralLaunch != null) {
+      final FollowerEndpoint centralEndpoint;
       try {
-        localEndpoint = await localFollower.launch(localSpec!);
+        centralEndpoint = await centralLaunch.launch(localSpec!);
       } on Object catch (e) {
-        return Failed('local harness launch failed: $e');
+        final label = centralLaunch is LocalFollowerLaunch
+            ? 'local'
+            : 'central';
+        return Failed('$label harness launch failed: $e');
       }
       if (args.cancel.isCancelled) return const Failed('cancelled');
-      await localDrive!.attach(localEndpoint);
+      await localDrive!.attach(centralEndpoint);
       if (args.cancel.isCancelled) return const Failed('cancelled');
       _onLog(
-        'host attached local leonard_drive to ${localEndpoint.vmServiceUri}',
+        'host attached central leonard_drive to ${centralEndpoint.vmServiceUri}',
       );
     }
 
@@ -503,10 +513,14 @@ class BurnHostCapability extends ServiceCapability {
     final localDrive = this.localDrive;
     if (localDrive != null) {
       await localDrive.close();
-      _onLog('local drive closed');
-      _onLog('teardown-receipt: local drive closed');
+      _onLog('central drive closed');
+      _onLog('teardown-receipt: central drive closed');
+      if (hostLaunch is LocalFollowerLaunch) {
+        _onLog('local drive closed');
+        _onLog('teardown-receipt: local drive closed');
+      }
     }
-    await _localFollower?.teardown();
+    await hostLaunch?.teardown();
     _holds[args] = null;
   }
 }

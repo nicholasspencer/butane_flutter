@@ -43,5 +43,6 @@ export 'src/burn/ios_follower_launcher.dart';
 export 'src/burn/launch_scrape.dart';
 export 'src/burn/local_follower_launcher.dart';
 export 'src/burn/process_leonard_drive.dart';
+export 'src/burn/remote_windows_host_launch.dart';
 export 'src/burn/rig.dart';
 export 'src/burn/scenarios.dart';
