@@ -31,42 +31,51 @@ final class BurnFollowerDaemonInputs {
   }
 }
 
-/// Runs one follower until termination, bounding lifecycle and teardown.
+/// Runs one follower until termination, bounding launch and teardown.
 Future<int> runBurnFollowerDaemon({
   required BurnFollowerDaemonInputs inputs,
   required ButaneFollowerRunner runner,
   required Stream<void> terminate,
   required void Function(String) publish,
   void Function(String)? onLog,
-  Duration lifecycleTimeout = const Duration(minutes: 15),
+  Duration launchTimeout = const Duration(minutes: 15),
   Duration teardownTimeout = const Duration(seconds: 30),
 }) async {
   var result = 1;
   try {
-    result =
-        await (() async {
-          final endpoint = await runner.launch(
-            LaunchSpec(
-              app: 'butane_harness',
-              target: 'ios',
-              role: 'peripheral',
-              scenario: kSmokeScenario.name,
-              followerDevice: inputs.device,
-              harnessDirectory: inputs.harnessDirectory,
-              leonardDrive: inputs.leonardDrive,
-            ),
-          );
-          publish('burn-follower-published ${endpoint.vmServiceUri}');
-          await terminate.first;
-          return 0;
-        })().timeout(
-          lifecycleTimeout,
+    final endpoint = await runner
+        .launch(
+          LaunchSpec(
+            app: 'butane_harness',
+            target: 'ios',
+            role: 'peripheral',
+            scenario: kSmokeScenario.name,
+            followerDevice: inputs.device,
+            harnessDirectory: inputs.harnessDirectory,
+            leonardDrive: inputs.leonardDrive,
+          ),
+        )
+        .timeout(
+          launchTimeout,
           onTimeout: () => throw TimeoutException(
-            'burn follower lifecycle timed out after '
-            '${lifecycleTimeout.inMilliseconds}ms',
-            lifecycleTimeout,
+            'burn follower launch timed out after '
+            '${launchTimeout.inMilliseconds}ms',
+            launchTimeout,
           ),
         );
+    publish('burn-follower-published ${endpoint.vmServiceUri}');
+    final residentExit = runner.residentExit;
+    if (residentExit == null) {
+      await terminate.first;
+    } else {
+      await Future.any<void>([
+        terminate.first,
+        residentExit.then<void>(
+          (_) => throw StateError('burn follower child exited while resident'),
+        ),
+      ]);
+    }
+    result = 0;
   } on Object catch (error) {
     onLog?.call('burn follower supervisor failed: $error');
     result = 1;

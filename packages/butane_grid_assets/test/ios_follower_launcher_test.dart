@@ -25,7 +25,7 @@ class _IosProcessFixture {
 
   final String source;
   final _processes = <Process>[];
-  final _exited = <Process, bool>{};
+  final _controller = const SystemProcessGroupController();
   Directory? _directory;
 
   Future<Process> start(
@@ -41,29 +41,32 @@ class _IosProcessFixture {
     await script.writeAsString(source);
     final process = await Process.start(Platform.resolvedExecutable, <String>[
       script.path,
-    ], mode: ProcessStartMode.normal);
+    ], mode: mode);
     _processes.add(process);
-    _exited[process] = false;
-    unawaited(process.exitCode.then((_) => _exited[process] = true));
     return process;
   }
 
   Future<bool> get allChildrenExited async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
-    return _processes.every((process) => _exited[process] ?? false);
+    return _processes.every(
+      (process) => !_controller.processAlive(process.pid),
+    );
   }
 
   Future<void> dispose() async {
     for (final process in _processes) {
-      if (!(_exited[process] ?? false)) {
+      if (_controller.processAlive(process.pid)) {
         Process.killPid(process.pid, ProcessSignal.sigkill);
       }
     }
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (_processes.any((process) => _controller.processAlive(process.pid)) &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
     for (final process in _processes) {
-      try {
-        await process.exitCode.timeout(const Duration(seconds: 2));
-      } on Object {
-        // The test assertion reports leaked children; disposal stays best effort.
+      if (_controller.processAlive(process.pid)) {
+        Process.killPid(process.pid, ProcessSignal.sigkill);
       }
     }
     final directory = _directory;
@@ -186,7 +189,7 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
   });
 
   test(
-    'nonzero flutter exit fails immediately with output tail and reaps',
+    'detached nonzero flutter exit fails with output tail and reaps',
     () async {
       final fixture = _IosProcessFixture(nonzeroHelper);
       addTearDown(fixture.dispose);
@@ -203,7 +206,11 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
         launcher.launch(const LaunchSpec(app: 'butane_harness', target: 'ios')),
         throwsA(
           isA<StateError>()
-              .having((error) => '$error', 'exit', contains('exited 1'))
+              .having(
+                (error) => '$error',
+                'exit',
+                contains('flutter exited before readiness'),
+              )
               .having(
                 (error) => '$error',
                 'pub tail',
@@ -339,5 +346,95 @@ void main() async {
     );
     expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
     expect(await fixture.allChildrenExited, isTrue);
+  });
+
+  test('detached child death ends resident hold promptly and reaps', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serving = server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      if (request.uri.path.endsWith('/getVM')) {
+        request.response.write(
+          jsonEncode(<String, Object>{
+            'isolates': <Object>[
+              <String, String>{'id': 'isolates/42'},
+            ],
+          }),
+        );
+      } else if (request.uri.path.endsWith('/getIsolate')) {
+        request.response.write(
+          jsonEncode(<String, Object>{
+            'extensionRPCs': <String>['ext.exploration.butane'],
+          }),
+        );
+      }
+      await request.response.close();
+    });
+    addTearDown(() async {
+      await server.close(force: true);
+      await serving.cancel();
+    });
+    final fixture = _IosProcessFixture('''
+import 'dart:async';
+void main() async {
+  print(
+    "A Dart VM Service on Test Device is available at: "
+    "http://127.0.0.1:${server.port}/auth/",
+  );
+  await Future<void>.delayed(const Duration(milliseconds: 80));
+}
+''');
+    addTearDown(fixture.dispose);
+    final launcher = IosFollowerLauncher(
+      deviceId: 'device',
+      harnessDirectory: Directory.current.path,
+      processStarter: fixture.start,
+      preLaunchCleanup: (_) async {},
+      processes: const SystemProcessGroupController(),
+      launchTimeout: const Duration(seconds: 1),
+      readyTimeout: const Duration(seconds: 1),
+      lifecycleTimeout: const Duration(seconds: 2),
+    );
+    final runner = ButaneFollowerRunner(
+      launcher: launcher,
+      processes: const SystemProcessGroupController(),
+      reapGrace: Duration.zero,
+    );
+    final logs = <String>[];
+    final published = Completer<void>();
+    final terminate = StreamController<void>();
+    addTearDown(terminate.close);
+
+    final run = runBurnFollowerDaemon(
+      inputs: BurnFollowerDaemonInputs(
+        device: 'device',
+        harnessDirectory: Directory.current.path,
+        leonardDrive: '/drive',
+      ),
+      runner: runner,
+      terminate: terminate.stream,
+      publish: (_) => published.complete(),
+      onLog: logs.add,
+    );
+
+    await published.future;
+    final stopwatch = Stopwatch()..start();
+    expect(await run, 1);
+    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
+    expect(
+      logs,
+      contains(contains('burn follower child exited while resident')),
+    );
+    expect(
+      logs.where((line) => line.startsWith('teardown-receipt:')),
+      hasLength(1),
+    );
+    expect(await fixture.allChildrenExited, isTrue);
+    expect(runner.isRunning, isFalse);
+
+    final second = runner.launch(
+      const LaunchSpec(app: 'butane_harness', target: 'ios'),
+    );
+    await expectLater(second, completes);
+    await runner.teardown();
   });
 }

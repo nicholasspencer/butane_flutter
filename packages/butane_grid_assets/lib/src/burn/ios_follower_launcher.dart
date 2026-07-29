@@ -339,6 +339,7 @@ class IosFollowerLauncher implements FollowerLauncher {
         .listen(rememberAndScrape, cancelOnError: false);
     final stdoutDone = stdoutSubscription.asFuture<void>();
     final stderrDone = stderrSubscription.asFuture<void>();
+    final flutterStreamsDone = Future.wait<void>([stdoutDone, stderrDone]);
 
     Process? relay;
     try {
@@ -347,12 +348,7 @@ class IosFollowerLauncher implements FollowerLauncher {
         launchTimeout,
         Future.any<_IosReadyEndpoint>([
           _discoverEndpoint(DateTime.now().add(launchTimeout), forwarded),
-          _flutterExitFailure(
-            flutter,
-            stdoutDone,
-            stderrDone,
-            flutterOutputTail,
-          ),
+          _flutterExitFailure(flutterStreamsDone, flutterOutputTail),
         ]),
       );
       relay = ready.relay;
@@ -369,6 +365,7 @@ class IosFollowerLauncher implements FollowerLauncher {
         pid: flutter.pid,
         pgid: pgid,
         endpoint: FollowerEndpoint(vmServiceUri: endpointUri, station: station),
+        exited: flutterStreamsDone,
         onReap: () async {
           if (relayPid != null) {
             Process.killPid(relayPid, ProcessSignal.sigkill);
@@ -393,7 +390,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     } on Object catch (error, stack) {
       // Ready never arrived: reap what we started so nothing leaks.
       relay?.kill(ProcessSignal.sigkill);
-      await _reapFailedFlutter(flutter, stdoutDone, stderrDone);
+      await _reapFailedFlutter(flutter, flutterStreamsDone);
       Error.throwWithStackTrace(error, stack);
     }
   }
@@ -415,22 +412,12 @@ class IosFollowerLauncher implements FollowerLauncher {
   );
 
   Future<Never> _flutterExitFailure(
-    Process flutter,
-    Future<void> stdoutDone,
-    Future<void> stderrDone,
+    Future<void> flutterStreamsDone,
     List<String> outputTail,
   ) async {
-    int? code;
-    try {
-      code = await flutter.exitCode;
-    } on StateError {
-      // detachedWithStdio preserves the launch process group but Dart does not
-      // expose its exit status. Closed stdout+stderr remains a death signal.
-    }
-    await Future.wait<void>([stdoutDone, stderrDone]);
+    await flutterStreamsDone;
     throw StateError(
-      'ios launcher: flutter exited ${code ?? '(code unavailable)'} '
-      'before readiness\n'
+      'ios launcher: flutter exited before readiness\n'
       'output tail:\n${outputTail.join('\n')}',
     );
   }
@@ -444,19 +431,11 @@ class IosFollowerLauncher implements FollowerLauncher {
 
   Future<void> _reapFailedFlutter(
     Process flutter,
-    Future<void> stdoutDone,
-    Future<void> stderrDone,
+    Future<void> flutterStreamsDone,
   ) async {
     Process.killPid(flutter.pid, ProcessSignal.sigkill);
     try {
-      try {
-        await flutter.exitCode.timeout(const Duration(seconds: 2));
-      } on StateError {
-        await Future.wait<void>([
-          stdoutDone,
-          stderrDone,
-        ]).timeout(const Duration(seconds: 2));
-      }
+      await flutterStreamsDone.timeout(const Duration(seconds: 2));
     } on Object {
       _onLog('ios launcher: flutter pid ${flutter.pid} reap did not confirm');
     }
