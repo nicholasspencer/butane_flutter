@@ -5,12 +5,21 @@ import 'package:grid_runtime/grid_runtime.dart';
 
 Future<void> main(List<String> arguments) async {
   final inputs = BurnFollowerDaemonInputs.parse(arguments);
-  final runner = ButaneFollowerRunner(
-    launcher: IosFollowerLauncher(
+  final FollowerLauncher launcher = switch (inputs.target) {
+    'ios' => IosFollowerLauncher(
       deviceId: inputs.device,
       harnessDirectory: inputs.harnessDirectory,
       onLog: stderr.writeln,
     ),
+    'macos' => MacosFollowerLauncher(onLog: stderr.writeln),
+    final target => throw ArgumentError.value(
+      target,
+      'target',
+      'supported burn follower targets are ios and macos',
+    ),
+  };
+  final runner = ButaneFollowerRunner(
+    launcher: launcher,
     processes: const SystemProcessGroupController(),
     onLog: stderr.writeln,
   );

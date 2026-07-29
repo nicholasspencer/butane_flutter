@@ -161,7 +161,10 @@ final class _ResidentBurnFollowerCapability extends Capability {
   final _BeadNoteLog log;
   final String entrypoint;
 
-  RuntimeConfig spawn(TreeContext context, StepArgs args) {
+  ({RuntimeConfig config, String followerTarget}) spawn(
+    TreeContext context,
+    StepArgs args,
+  ) {
     log.bind(args.beadId);
     final bead = context.getInheritedSeedOfExactType<Bead>();
     if (bead == null) {
@@ -175,20 +178,25 @@ final class _ResidentBurnFollowerCapability extends Capability {
       onLog: log.call,
     );
     drive.select(inputs.leonardDrive);
-    return RuntimeConfig(
-      workDir: Directory(entrypoint).parent.parent.path,
-      command: Platform.resolvedExecutable,
-      args: [
-        'run',
-        entrypoint,
-        '--device',
-        inputs.followerDevice,
-        '--harness-dir',
-        inputs.harnessDirectory,
-        '--leonard-drive',
-        inputs.leonardDrive,
-      ],
-      lifecycle: Lifecycle.longLived,
+    return (
+      config: RuntimeConfig(
+        workDir: Directory(entrypoint).parent.parent.path,
+        command: Platform.resolvedExecutable,
+        args: [
+          'run',
+          entrypoint,
+          '--target',
+          inputs.followerTarget,
+          '--device',
+          inputs.followerDevice,
+          '--harness-dir',
+          inputs.harnessDirectory,
+          '--leonard-drive',
+          inputs.leonardDrive,
+        ],
+        lifecycle: Lifecycle.longLived,
+      ),
+      followerTarget: inputs.followerTarget,
     );
   }
 
@@ -206,13 +214,17 @@ final class _PublishedFollowerAllocation extends Allocation {
   StreamSubscription<String>? _outputSubscription;
   bool _started = false;
   bool _terminal = false;
+  String _followerTarget = 'ios';
 
   @override
   Future<void> startOrAdopt() async {
     final name = address.providerName;
     try {
       final base = capability.spawn(context.treeContext, context.args);
-      final config = base.copyWith(env: {...base.env, ...context.env});
+      _followerTarget = base.followerTarget;
+      final config = base.config.copyWith(
+        env: {...base.config.env, ...context.env},
+      );
       _eventSubscription = context.transport.events
           .where((event) => event.name == name)
           .listen(_event);
@@ -248,9 +260,11 @@ final class _PublishedFollowerAllocation extends Allocation {
     context.sink(
       AllocationReady({
         'endpoint': uri,
-        'station': 'butane-ios-follower',
+        'station': _followerTarget == 'macos'
+            ? 'butane-macos-follower'
+            : 'butane-ios-follower',
         'lease': 'local',
-        'target': 'ios',
+        'target': _followerTarget,
       }),
     );
   }

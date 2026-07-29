@@ -54,6 +54,7 @@ class _FakeProcessGroupController implements ProcessGroupController {
 }
 
 const _inputs = BurnFollowerDaemonInputs(
+  target: 'ios',
   device: 'device-1',
   harnessDirectory: '/harness',
   leonardDrive: '/drive',
@@ -63,14 +64,18 @@ void main() {
   test('parses required supervisor arguments', () {
     expect(
       BurnFollowerDaemonInputs.parse([
+        '--target',
+        ' ios ',
         '--device',
         ' device-1 ',
         '--harness-dir',
         ' /harness ',
         '--leonard-drive',
         ' /drive ',
-      ]).device,
-      'device-1',
+      ]),
+      isA<BurnFollowerDaemonInputs>()
+          .having((inputs) => inputs.target, 'target', 'ios')
+          .having((inputs) => inputs.device, 'device', 'device-1'),
     );
   });
 
@@ -101,6 +106,8 @@ void main() {
     expect(launcher.spec!.followerDevice, 'device-1');
     expect(launcher.spec!.harnessDirectory, '/harness');
     expect(launcher.spec!.leonardDrive, '/drive');
+    expect(launcher.spec!.target, 'ios');
+    expect(launcher.spec!.role, 'peripheral');
 
     terminate.add(null);
     expect(await run, 0);
@@ -110,6 +117,32 @@ void main() {
       hasLength(1),
     );
     await terminate.close();
+  });
+
+  test('threads macos target and peripheral role through launch', () async {
+    final launcher = _FakeFollowerLauncher();
+    final runner = ButaneFollowerRunner(
+      launcher: launcher,
+      processes: _FakeProcessGroupController(),
+      reapGrace: Duration.zero,
+    );
+
+    expect(
+      await runBurnFollowerDaemon(
+        inputs: const BurnFollowerDaemonInputs(
+          target: 'macos',
+          device: 'unused',
+          harnessDirectory: '/harness',
+          leonardDrive: '/drive',
+        ),
+        runner: runner,
+        terminate: Stream<void>.value(null),
+        publish: (_) {},
+      ),
+      0,
+    );
+    expect(launcher.spec!.target, 'macos');
+    expect(launcher.spec!.role, 'peripheral');
   });
 
   test('launch failure returns nonzero without publishing', () async {

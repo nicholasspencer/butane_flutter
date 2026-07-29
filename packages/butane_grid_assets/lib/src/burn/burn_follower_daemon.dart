@@ -8,22 +8,26 @@ import 'scenarios.dart';
 /// Arguments accepted by the burn-follower supervisor process.
 final class BurnFollowerDaemonInputs {
   const BurnFollowerDaemonInputs({
+    required this.target,
     required this.device,
     required this.harnessDirectory,
     required this.leonardDrive,
   });
 
+  final String target;
   final String device;
   final String harnessDirectory;
   final String leonardDrive;
 
   static BurnFollowerDaemonInputs parse(List<String> arguments) {
     final parser = ArgParser()
+      ..addOption('target', mandatory: true)
       ..addOption('device', mandatory: true)
       ..addOption('harness-dir', mandatory: true)
       ..addOption('leonard-drive', mandatory: true);
     final result = parser.parse(arguments);
     return BurnFollowerDaemonInputs(
+      target: result.option('target')!.trim(),
       device: result.option('device')!.trim(),
       harnessDirectory: result.option('harness-dir')!.trim(),
       leonardDrive: result.option('leonard-drive')!.trim(),
@@ -47,7 +51,7 @@ Future<int> runBurnFollowerDaemon({
         .launch(
           LaunchSpec(
             app: 'butane_harness',
-            target: 'ios',
+            target: inputs.target,
             role: 'peripheral',
             scenario: kSmokeScenario.name,
             followerDevice: inputs.device,

@@ -406,6 +406,7 @@ void main() async {
 
     final run = runBurnFollowerDaemon(
       inputs: BurnFollowerDaemonInputs(
+        target: 'ios',
         device: 'device',
         harnessDirectory: Directory.current.path,
         leonardDrive: '/drive',
