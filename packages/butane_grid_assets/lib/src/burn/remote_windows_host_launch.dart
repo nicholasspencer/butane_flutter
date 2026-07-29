@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'follower.dart';
@@ -85,9 +86,108 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
   final void Function(String) _onLog;
   int? _remotePid;
   Process? _tunnelProcess;
+  Process? _logTailProcess;
   bool _teardownStarted = false;
 
   static const _sshOptions = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15'];
+  static const _scheduledTaskName = r'\Butane\InteractiveCentralHarness';
+  static const _payloadFileName = 'remote_windows_host_launch.ps1';
+  static const _logFileName = 'remote_windows_host_launch.log';
+
+  String get _gridDirectory => '$repository/.grid';
+  String get _payloadPath => '$_gridDirectory/$_payloadFileName';
+  String get _logPath => '$_gridDirectory/$_logFileName';
+
+  Future<String> _runCheckedSsh(String command, String operation) async {
+    final process = await _starter('ssh', [..._sshOptions, host, command]);
+    final outputFuture = process.stdout.transform(utf8.decoder).join();
+    final errorFuture = process.stderr.transform(utf8.decoder).join();
+    final code = await process.exitCode;
+    final output = await outputFuture;
+    final error = await errorFuture;
+    if (code != 0) {
+      throw StateError(
+        'remote Windows $operation exited with code $code: ${error.trim()}',
+      );
+    }
+    return output;
+  }
+
+  Future<void> _requireInteractiveSession() async {
+    final output = await _runCheckedSsh(
+      r'''powershell.exe -NoProfile -NonInteractive -Command "'''
+          r'''$line = quser 2>$null | Select-String '''
+          r''''^\s*>\S+\s+(?:console\s+)?\d+\s+Active\s+' | Select-Object -First 1; '''
+          r'''if ($null -eq $line) { exit 23 }; $line.Line"''',
+      'interactive-session query',
+    );
+    if (!RegExp(
+      r'^\s*>\S+\s+(?:console\s+)?\d+\s+Active\s+',
+      multiLine: true,
+    ).hasMatch(output)) {
+      throw StateError(
+        'remote Windows host has no active interactive console session; '
+        'log on at the bench before launching the central harness',
+      );
+    }
+  }
+
+  String _payload(LaunchSpec spec) {
+    String ps(String value) => "'${value.replaceAll("'", "''")}'";
+    final appDirectory = '$repository/packages/${spec.app}';
+    final arguments = <String>[
+      'run',
+      '-d',
+      'windows',
+      '--profile',
+      '--dart-define=BUTANE_ROLE=${spec.role}',
+      '--dart-define=BUTANE_SCENARIO=${spec.scenario}',
+    ].map(ps).join(', ');
+    return '''
+\$ErrorActionPreference = 'Stop'
+Set-Location ${ps(appDirectory)}
+Set-Content -LiteralPath ${ps(_logPath)} -Value "GRID_REMOTE_PID=\$PID"
+& ${ps(flutterExecutable)} @($arguments) *>> ${ps(_logPath)}
+exit \$LASTEXITCODE
+''';
+  }
+
+  Future<void> _preparePayload(LaunchSpec spec) async {
+    final encoded = base64Encode(utf8.encode(_payload(spec)));
+    String ps(String value) => "'${value.replaceAll("'", "''")}'";
+    final script =
+        r"$ErrorActionPreference='Stop'; "
+        'New-Item -ItemType Directory -Force -Path ${ps(_gridDirectory)} '
+        '| Out-Null; '
+        r'$text=[Text.Encoding]::UTF8.GetString('
+        '[Convert]::FromBase64String(${ps(encoded)})); '
+        '[IO.File]::WriteAllText(${ps(_payloadPath)}, \$text); '
+        'Remove-Item -LiteralPath ${ps(_logPath)} -Force '
+        '-ErrorAction SilentlyContinue';
+    await _runCheckedSsh(
+      'powershell.exe -NoProfile -NonInteractive -Command ${ps(script)}',
+      'scheduled-task payload preparation',
+    );
+  }
+
+  Future<void> _runScheduledTask() => _runCheckedSsh(
+    'schtasks /run /tn "$_scheduledTaskName"',
+    'scheduled task launch',
+  ).then((_) {});
+
+  Future<Process> _startLogTail() async {
+    String ps(String value) => "'${value.replaceAll("'", "''")}'";
+    final script =
+        r"$ErrorActionPreference='Stop'; "
+        'while (-not (Test-Path -LiteralPath ${ps(_logPath)})) '
+        '{ Start-Sleep -Milliseconds 100 }; '
+        'Get-Content -LiteralPath ${ps(_logPath)} -Wait';
+    return _starter('ssh', [
+      ..._sshOptions,
+      host,
+      'powershell.exe -NoProfile -NonInteractive -Command ${ps(script)}',
+    ]);
+  }
 
   @override
   Future<FollowerEndpoint> launch(LaunchSpec spec) async {
@@ -98,12 +198,15 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
         'remote Windows host only supports windows',
       );
     }
-    final pidReady = Completer<int>();
-    final command = _launchCommand(spec);
-    final process = await _starter('ssh', [..._sshOptions, host, command]);
     try {
+      await _requireInteractiveSession();
+      await _preparePayload(spec);
+      await _runScheduledTask();
+      final pidReady = Completer<int>();
+      final tail = await _startLogTail();
+      _logTailProcess = tail;
       final uriFuture = scrapeVmServiceWsUri(
-        process,
+        tail,
         onLine: (line) {
           _onLog(line);
           final match = RegExp(r'GRID_REMOTE_PID=(\d+)').firstMatch(line);
@@ -114,12 +217,14 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
           }
         },
       );
-      final exitFailure = process.exitCode.then<Object>((code) {
-        throw StateError('remote Windows SSH exited with code $code');
+      final tailExitFailure = tail.exitCode.then<Object>((code) {
+        throw StateError(
+          'remote Windows launch-log tail exited with code $code before readiness',
+        );
       });
       final values = await Future.wait<Object>([
-        Future.any<Object>([pidReady.future, exitFailure]),
-        Future.any<Object>([uriFuture, exitFailure]),
+        Future.any<Object>([pidReady.future, tailExitFailure]),
+        Future.any<Object>([uriFuture, tailExitFailure]),
       ]).timeout(readyTimeout);
       final remoteUri = Uri.parse(values[1] as String);
       if ((remoteUri.scheme != 'ws' && remoteUri.scheme != 'wss') ||
@@ -152,40 +257,22 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
     }
   }
 
-  String _launchCommand(LaunchSpec spec) {
-    String ps(String value) => "'${value.replaceAll("'", "''")}'";
-    final appDirectory = '$repository/packages/${spec.app}';
-    final flutterArgs = <String>[
-      'run',
-      '-d',
-      'windows',
-      '--profile',
-      '--dart-define=BUTANE_ROLE=${spec.role}',
-      '--dart-define=BUTANE_SCENARIO=${spec.scenario}',
-    ].map(ps).join(',');
-    final script =
-        r"$ErrorActionPreference='Stop'; "
-        'Set-Location ${ps(appDirectory)}; '
-        r"$out=[IO.Path]::GetTempFileName(); $err=[IO.Path]::GetTempFileName(); "
-        r"$p=Start-Process -FilePath "
-        '${ps(flutterExecutable)} -ArgumentList $flutterArgs '
-        r"-RedirectStandardOutput $out -RedirectStandardError $err -PassThru; "
-        r'Write-Output "GRID_REMOTE_PID=$($p.Id)"; '
-        r"$positions=@{ $out=0; $err=0 }; do { "
-        r"foreach($f in @($out,$err)) { $lines=@(Get-Content $f); "
-        r"for($i=$positions[$f]; $i -lt $lines.Count; $i++) { $lines[$i] }; "
-        r"$positions[$f]=$lines.Count }; if(-not $p.HasExited) { "
-        r"Start-Sleep -Milliseconds 100 } } while(-not $p.HasExited); "
-        r"$p.WaitForExit(); foreach($f in @($out,$err)) { "
-        r"$lines=@(Get-Content $f); for($i=$positions[$f]; "
-        r"$i -lt $lines.Count; $i++) { $lines[$i] } }; exit $p.ExitCode";
-    return 'powershell.exe -NoProfile -NonInteractive -Command ${ps(script)}';
-  }
-
   Future<void> _cleanupAfterLaunchFailure() async {
     await _reapTunnel();
+    await _reapLogTail();
     final pid = _remotePid;
     if (pid != null) await _taskkill(pid);
+  }
+
+  Future<void> _reapLogTail() async {
+    final tail = _logTailProcess;
+    if (tail == null) return;
+    _logTailProcess = null;
+    tail.kill(ProcessSignal.sigkill);
+    await tail.exitCode;
+    _onLog(
+      'teardown-receipt: remote windows launch-log tail reaped ${tail.pid}',
+    );
   }
 
   Future<void> _reapTunnel() async {
@@ -219,6 +306,7 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
     if (_teardownStarted) return;
     _teardownStarted = true;
     await _reapTunnel();
+    await _reapLogTail();
     final pid = _remotePid;
     if (pid != null) await _taskkill(pid);
   }
