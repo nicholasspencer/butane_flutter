@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:beads_dart/beads_dart.dart';
 import 'package:butane_grid_assets/butane_grid_assets.dart';
@@ -15,33 +14,6 @@ const _endpoint = FollowerEndpoint(
   leaseId: 'local',
 );
 
-class _FakeFollowerLauncher implements FollowerLauncher {
-  LaunchSpec? spec;
-
-  @override
-  Future<LaunchedDaemon> launch(LaunchSpec spec) async {
-    this.spec = spec;
-    return const LaunchedDaemon(pid: 4242, pgid: 4242, endpoint: _endpoint);
-  }
-}
-
-class _DelayedFollowerLauncher implements FollowerLauncher {
-  final Completer<LaunchedDaemon> _launched = Completer<LaunchedDaemon>();
-  LaunchSpec? spec;
-
-  @override
-  Future<LaunchedDaemon> launch(LaunchSpec spec) {
-    this.spec = spec;
-    return _launched.future;
-  }
-
-  void complete() {
-    _launched.complete(
-      const LaunchedDaemon(pid: 4242, pgid: 4242, endpoint: _endpoint),
-    );
-  }
-}
-
 class _FakeLeonardDrive implements LeonardDrive {
   final calls = <String>[];
 
@@ -51,9 +23,7 @@ class _FakeLeonardDrive implements LeonardDrive {
   }
 
   @override
-  Future<void> close() async {
-    calls.add('close');
-  }
+  Future<void> close() async => calls.add('close');
 
   @override
   Future<String> invoke(String tool, Map<String, Object?> args) async {
@@ -84,30 +54,63 @@ class _FakeHostHarnessLaunch implements HostHarnessLaunch {
   }
 
   @override
-  Future<void> teardown() async {
-    teardowns++;
-  }
+  Future<void> teardown() async => teardowns++;
 }
 
-class _FakeProcessGroupController implements ProcessGroupController {
-  final signals = <ProcessSignal>[];
-  var alive = true;
+class _TranscriptRuntimeProvider implements RuntimeProvider {
+  final started = <String, RuntimeConfig>{};
+  final stopped = <String>[];
+  final _events = StreamController<RuntimeEvent>.broadcast();
+  final _outputs = <String, StreamController<String>>{};
+
+  void emit(RuntimeEvent event) => _events.add(event);
+
+  void emitOutput(String name, String line) => _outputs[name]?.add(line);
 
   @override
-  int currentGroupId() => 999999;
-
-  @override
-  bool processAlive(int pid) => alive;
-
-  @override
-  Future<int?> resolvePgid(int pid) async => pid;
-
-  @override
-  bool signalGroup(int pgid, ProcessSignal signal) {
-    signals.add(signal);
-    if (signal == ProcessSignal.sigterm) alive = false;
-    return true;
+  Future<void> start(String name, RuntimeConfig config) async {
+    started[name] = config;
+    _outputs.putIfAbsent(name, StreamController<String>.broadcast);
   }
+
+  @override
+  Future<void> stop(String name) async => stopped.add(name);
+
+  @override
+  Future<void> interrupt(String name) async {}
+
+  @override
+  Stream<RuntimeEvent> get events => _events.stream;
+
+  @override
+  Stream<String> output(String name) =>
+      _outputs.putIfAbsent(name, StreamController<String>.broadcast).stream;
+
+  @override
+  bool isRunning(String name) =>
+      started.containsKey(name) && !stopped.contains(name);
+
+  @override
+  bool processAlive(String name) => isRunning(name);
+
+  @override
+  String peek(String name, int lines) => '';
+
+  @override
+  List<String> listRunning(String prefix) =>
+      started.keys.where((name) => name.startsWith(prefix)).toList();
+
+  @override
+  DateTime? lastActivity(String name) => null;
+
+  @override
+  RuntimeEvent? terminalOf(String name) => null;
+
+  @override
+  ({int pid, int? pgid})? identityOf(String name) => null;
+
+  @override
+  RuntimeCapabilities get capabilities => RuntimeCapabilities.subprocess;
 }
 
 StepMount _mount(CapabilityStep step) => StepMount(
@@ -129,347 +132,242 @@ const _metadata = <String, dynamic>{
   BurnOrderInputs.leonardDriveKey: ' /drive/from/bead ',
 };
 
+Capability _capability(CapabilityRegistry registry, int index) =>
+    (registry.host(_mount(kBurnCircuit.steps[index] as CapabilityStep))
+            as CapabilityHost)
+        .capability;
+
+AllocationContext _allocationContext({
+  required _TranscriptRuntimeProvider transport,
+  required List<AllocationReport> reports,
+  required Bead bead,
+}) => AllocationContext(
+  treeContext: FakeTreeContext(values: {Bead: bead}),
+  args: stepArgs('order-1/$kBurnFollowerStep'),
+  transport: transport,
+  address: const AllocationAddress('order-1-session', 'order-1/burn-follower'),
+  env: const {},
+  sink: reports.add,
+  kind: StepKind.daemon,
+);
+
+TreeContext _hostContext(Map<String, String> followerResult, Bead bead) =>
+    FakeTreeContext(
+      values: {
+        Bead: bead,
+        SiblingView: SiblingView(
+          results: {'order-1/burn-follower': followerResult},
+        ),
+      },
+    );
+
 void main() {
   group('burnCircuitFor', () {
-    test('returns the identical circuit for the complete burn-order shape', () {
+    test('returns the identical circuit for a complete burn order', () {
       expect(
         identical(burnCircuitFor(_order(_metadata)), kBurnCircuit),
         isTrue,
       );
     });
 
-    for (final key in const [
-      BurnOrderInputs.followerDeviceKey,
-      BurnOrderInputs.harnessDirectoryKey,
-      BurnOrderInputs.leonardDriveKey,
-    ]) {
-      for (final invalid in const <Object?>[null, '   ', 7]) {
-        test('returns null when $key is $invalid', () {
-          final metadata = Map<String, dynamic>.of(_metadata);
-          if (invalid == null) {
-            metadata.remove(key);
-          } else {
-            metadata[key] = invalid;
-          }
-          expect(burnCircuitFor(_order(metadata)), isNull);
-        });
-      }
-    }
+    test('rejects an incomplete burn order', () {
+      expect(burnCircuitFor(_order(const {})), isNull);
+    });
   });
 
-  test('registry exposes resident burn capabilities only', () {
+  test('registry exposes a process follower and service host', () {
     final registry = buildBurnStationRegistry(
       appendNote: (_, _) async {},
-      followerLauncher: _FakeFollowerLauncher(),
       driveFactory: (_) => _FakeLeonardDrive(),
-      processes: _FakeProcessGroupController(),
+      burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
     );
 
     expect(identical(registry.circuit('burn'), kBurnCircuit), isTrue);
-    expect(registry.circuit('code'), isNull);
-    final follower =
-        (registry.host(_mount(kBurnCircuit.steps[0] as CapabilityStep))
-                as CapabilityHost)
-            .capability;
-    final host =
-        (registry.host(_mount(kBurnCircuit.steps[1] as CapabilityStep))
-                as CapabilityHost)
-            .capability;
-    expect(follower, isA<ServiceCapability>());
-    expect(host, isA<BurnHostCapability>());
+    expect(_capability(registry, 0), isA<ProcessCapability>());
+    expect(_capability(registry, 1), isA<BurnHostCapability>());
   });
 
-  test('metadata wins over environment and notes are awaited', () async {
-    final launcher = _FakeFollowerLauncher();
-    final processes = _FakeProcessGroupController();
+  test('follower stays mounted from readiness through host report', () async {
     final notes = <({String beadId, String line})>[];
-    final firstNote = Completer<void>();
-    var appendCount = 0;
-    String? driveOverride;
+    final drive = _FakeLeonardDrive();
     final registry = buildBurnStationRegistry(
-      appendNote: (beadId, line) {
-        notes.add((beadId: beadId, line: line));
-        appendCount++;
-        return appendCount == 1 ? firstNote.future : Future<void>.value();
-      },
-      followerLauncher: launcher,
-      driveFactory: (override) {
-        driveOverride = override;
-        return _FakeLeonardDrive();
-      },
+      appendNote: (beadId, line) async =>
+          notes.add((beadId: beadId, line: line)),
+      driveFactory: (_) => drive.calls.isEmpty ? drive : _FakeLeonardDrive(),
+      windowsHostFactory: (_, _) => _FakeHostHarnessLaunch(),
+      burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
       environment: const {
         'BURN_IOS_DEVICE': 'device-from-env',
         'BURN_HARNESS_DIR': '/harness/from/env',
         'LEONARD_DRIVE': '/drive/from/env',
       },
-      processes: processes,
     );
-    final capability =
-        (registry.host(_mount(kBurnCircuit.steps[0] as CapabilityStep))
-                    as CapabilityHost)
-                .capability
-            as ServiceCapability;
-    final host =
-        (registry.host(_mount(kBurnCircuit.steps[1] as CapabilityStep))
-                    as CapabilityHost)
-                .capability
-            as BurnHostCapability;
-    final args = stepArgs('order-1/$kBurnFollowerStep');
-    var completed = false;
-    final run = capability
-        .run(FakeTreeContext(values: {Bead: _order(_metadata)}), args)
-        .whenComplete(() => completed = true);
+    final follower = _capability(registry, 0) as ProcessCapability;
+    final host = _capability(registry, 1) as BurnHostCapability;
+    final transport = _TranscriptRuntimeProvider();
+    final reports = <AllocationReport>[];
+    final bead = _order({
+      ..._metadata,
+      BurnOrderInputs.centralTargetKey: 'windows',
+      BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
+    });
+    final allocation = follower.createAllocation(
+      _allocationContext(transport: transport, reports: reports, bead: bead),
+    );
 
-    while (launcher.spec == null) {
-      await Future<void>.delayed(Duration.zero);
-    }
+    await allocation.startOrAdopt();
+    final name = allocation.address.providerName;
+    final config = transport.started[name]!;
+    expect(config.command, isNotEmpty);
+    expect(config.lifecycle, Lifecycle.longLived);
+    expect(config.args, [
+      'run',
+      '/package/bin/burn_follower_daemon.dart',
+      '--device',
+      'device-from-bead',
+      '--harness-dir',
+      '/harness/from/bead',
+      '--leonard-drive',
+      '/drive/from/bead',
+    ]);
+    transport.emit(SessionStarted(name: name, pid: 5150, pgid: 5150));
     await Future<void>.delayed(Duration.zero);
-    expect(completed, isFalse);
-    firstNote.complete();
-    final outcome = await run;
+    transport.emitOutput(
+      name,
+      'burn-follower-published ${_endpoint.vmServiceUri}',
+    );
+    await Future<void>.delayed(Duration.zero);
 
+    final ready = reports.whereType<AllocationReady>().single;
+    expect(ready.payload, {
+      'endpoint': _endpoint.vmServiceUri,
+      'station': 'butane-ios-follower',
+      'lease': 'local',
+      'target': 'ios',
+    });
+    expect(transport.stopped, isEmpty);
+    expect(
+      notes.map((note) => note.line),
+      isNot(contains(contains('teardown'))),
+    );
+
+    final hostArgs = stepArgs('order-1/$kBurnHostStep');
+    final outcome = await host.run(
+      _hostContext(ready.payload!, bead),
+      hostArgs,
+    );
     expect(
       outcome,
       isA<Ok>(),
       reason: outcome is Failed ? outcome.reason : null,
     );
-    expect(launcher.spec!.followerDevice, 'device-from-bead');
-    expect(launcher.spec!.harnessDirectory, '/harness/from/bead');
-    expect(launcher.spec!.leonardDrive, '/drive/from/bead');
-    expect(driveOverride, '/drive/from/bead');
+    notes.add((beadId: 'order-1', line: 'host report: TestReport 7/7 passed'));
+    expect(transport.stopped, isEmpty);
     expect(
       notes.map((note) => note.line),
-      isNot(contains(contains('metadata absent; using environment'))),
-    );
-    expect(notes.every((note) => note.beadId == 'order-1'), isTrue);
-    expect(
-      notes.map((note) => note.line),
-      contains(contains('resident burn-receipt: follower published')),
+      isNot(contains(contains('reaped pgid'))),
     );
 
-    await capability.teardown(args);
-    await capability.teardown(args);
+    await allocation.dispose();
+    await Future<void>.delayed(Duration.zero);
+    expect(transport.stopped, [name]);
     expect(
-      processes.signals.where((signal) => signal == ProcessSignal.sigterm),
-      hasLength(1),
+      notes
+          .map((note) => note.line)
+          .where(
+            (line) =>
+                line.contains('resident burn-receipt') ||
+                line.startsWith('host report:') ||
+                line.contains('teardown-receipt: resident follower'),
+          )
+          .toList(),
+      orderedEquals([
+        contains('resident burn-receipt: follower published'),
+        contains('host report: TestReport 7/7 passed'),
+        contains('teardown-receipt: resident follower supervisor stopped'),
+      ]),
     );
-    expect(
-      notes.map((note) => note.line),
-      contains('teardown-receipt: resident follower reaped'),
-    );
-    await host.teardown(stepArgs('order-1/$kBurnHostStep'));
-    expect(notes.map((note) => note.line).toList(), [
-      'follower: provision+build+launch butane_harness for ios',
-      'follower: launched pid 4242 (pgid 4242); published '
-          'ws://127.0.0.1:5599/Test=/ws',
-      'resident burn-receipt: follower published '
-          'ws://127.0.0.1:5599/Test=/ws',
-      'follower: reaped pgid 4242 → exitedOnTerm',
-      'teardown-receipt: resident follower reaped',
-      'teardown-receipt: resident follower reaped',
-      'follower drive closed',
-      'teardown-receipt: follower drive closed',
-    ]);
+    await host.teardown(hostArgs);
   });
 
   test(
-    'rejected notes stay observed and fail the capability with evidence',
+    'invalid published URI fails without readiness and stops once',
     () async {
-      final launcher = _DelayedFollowerLauncher();
-      final uncaught = <Object>[];
-      late StepOutcome outcome;
-
-      await runZonedGuarded(() async {
-        final registry = buildBurnStationRegistry(
-          appendNote: (_, _) =>
-              Future<void>.error(StateError('station offline')),
-          followerLauncher: launcher,
-          driveFactory: (_) => _FakeLeonardDrive(),
-          environment: const {
-            'BURN_IOS_DEVICE': 'device-from-env',
-            'BURN_HARNESS_DIR': '/harness/from/env',
-            'LEONARD_DRIVE': '/drive/from/env',
-          },
-          processes: _FakeProcessGroupController(),
-        );
-        final capability =
-            (registry.host(_mount(kBurnCircuit.steps[0] as CapabilityStep))
-                        as CapabilityHost)
-                    .capability
-                as ServiceCapability;
-        final metadata = Map<String, dynamic>.of(_metadata)
-          ..remove(BurnOrderInputs.followerDeviceKey);
-        final run = capability.run(
-          FakeTreeContext(values: {Bead: _order(metadata)}),
-          stepArgs('order-1/$kBurnFollowerStep'),
-        );
-
-        while (launcher.spec == null) {
-          await Future<void>.delayed(Duration.zero);
-        }
-        await Future<void>.delayed(Duration.zero);
-        expect(uncaught, isEmpty);
-
-        launcher.complete();
-        outcome = await run;
-      }, (error, _) => uncaught.add(error));
-
-      expect(uncaught, isEmpty);
-      expect(outcome, isA<Failed>());
-      final reason = (outcome as Failed).reason;
-      expect(
-        reason,
-        startsWith('note append failed: Bad state: station offline'),
-      );
-      expect(
-        reason,
-        contains(
-          'burn input burn.follower_device: metadata absent; using environment '
-          'BURN_IOS_DEVICE',
-        ),
-      );
-      expect(
-        reason,
-        contains('follower: provision+build+launch butane_harness for ios'),
-      );
-      expect(
-        reason,
-        contains(
-          'resident burn-receipt: follower published '
-          'ws://127.0.0.1:5599/Test=/ws',
-        ),
-      );
-    },
-  );
-
-  test(
-    'Windows metadata selects a remote central and two direct drives',
-    () async {
-      final remote = _FakeHostHarnessLaunch();
-      final drives = <_FakeLeonardDrive>[];
-      var factoryCalls = 0;
       final registry = buildBurnStationRegistry(
         appendNote: (_, _) async {},
-        followerLauncher: _FakeFollowerLauncher(),
-        driveFactory: (_) {
-          final drive = _FakeLeonardDrive();
-          drives.add(drive);
-          return drive;
-        },
-        windowsHostFactory: (inputs, _) {
-          factoryCalls++;
-          expect(inputs.windowsHost, 'yoga-from-bead');
-          return remote;
-        },
-        processes: _FakeProcessGroupController(),
+        driveFactory: (_) => _FakeLeonardDrive(),
+        burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
       );
-      final follower =
-          (registry.host(_mount(kBurnCircuit.steps[0] as CapabilityStep))
-                      as CapabilityHost)
-                  .capability
-              as ServiceCapability;
-      final host =
-          (registry.host(_mount(kBurnCircuit.steps[1] as CapabilityStep))
-                      as CapabilityHost)
-                  .capability
-              as ServiceCapability;
-      final metadata = <String, dynamic>{
-        ..._metadata,
-        BurnOrderInputs.centralTargetKey: 'windows',
-        BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
-      };
-      final context = FakeTreeContext(
-        values: {
-          Bead: _order(metadata),
-          SiblingView: const SiblingView(
-            results: {
-              'order-1/burn-follower': {
-                'endpoint': 'ws://ios:5000/follower/ws',
-                'station': 'mac',
-                'lease': 'lease-1',
-                'target': 'ios',
-              },
-            },
-          ),
-        },
+      final follower = _capability(registry, 0) as ProcessCapability;
+      final transport = _TranscriptRuntimeProvider();
+      final reports = <AllocationReport>[];
+      final allocation = follower.createAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: reports,
+          bead: _order(_metadata),
+        ),
       );
-      final followerArgs = stepArgs('order-1/$kBurnFollowerStep');
-      await follower.run(context, followerArgs);
-      final hostArgs = stepArgs('order-1/$kBurnHostStep');
-      final outcome = await host.run(context, hostArgs);
 
-      expect(
-        outcome,
-        isA<Ok>(),
-        reason: outcome is Failed ? outcome.reason : null,
-      );
-      expect((outcome as Ok).payload!['central'], 'windows');
-      expect(outcome.payload!['follower'], 'ios');
-      expect(factoryCalls, 1);
-      expect(remote.launches, 1);
-      expect(drives, hasLength(2));
-      expect(drives[0].calls, contains('attach:ws://ios:5000/follower/ws'));
-      expect(drives[1].calls, contains('attach:ws://yoga-win:6000/central/ws'));
+      await allocation.startOrAdopt();
+      final name = allocation.address.providerName;
+      transport.emit(SessionStarted(name: name, pid: 5150, pgid: 5150));
+      await Future<void>.delayed(Duration.zero);
+      transport.emitOutput(name, 'burn-follower-published http://127.0.0.1/ws');
+      await Future<void>.delayed(Duration.zero);
 
-      await host.teardown(hostArgs);
-      expect(remote.teardowns, 1);
+      expect(reports.whereType<AllocationFailed>(), hasLength(1));
+      expect(reports.whereType<AllocationReady>(), isEmpty);
+      await allocation.dispose();
+      await Future<void>.delayed(Duration.zero);
+      expect(transport.stopped, [name]);
     },
   );
 
-  test(
-    'unsupported central target fails before Windows launch or drive attach',
-    () async {
-      final drives = <_FakeLeonardDrive>[];
-      var factoryCalls = 0;
-      final registry = buildBurnStationRegistry(
-        appendNote: (_, _) async {},
-        followerLauncher: _FakeFollowerLauncher(),
-        driveFactory: (_) {
-          final drive = _FakeLeonardDrive();
-          drives.add(drive);
-          return drive;
-        },
-        windowsHostFactory: (_, _) {
-          factoryCalls++;
-          return _FakeHostHarnessLaunch();
-        },
-        processes: _FakeProcessGroupController(),
-      );
-      final host =
-          (registry.host(_mount(kBurnCircuit.steps[1] as CapabilityStep))
-                      as CapabilityHost)
-                  .capability
-              as ServiceCapability;
-      final context = FakeTreeContext(
-        values: {
-          Bead: _order({
-            ..._metadata,
-            BurnOrderInputs.centralTargetKey: 'linux',
-          }),
-          SiblingView: const SiblingView(
-            results: {
-              'order-1/burn-follower': {
-                'endpoint': 'ws://ios:5000/follower/ws',
-                'station': 'mac',
-                'lease': 'lease-1',
-                'target': 'ios',
-              },
-            },
-          ),
-        },
-      );
+  test('Windows metadata selects remote central and two drives', () async {
+    final remote = _FakeHostHarnessLaunch();
+    final drives = <_FakeLeonardDrive>[];
+    final registry = buildBurnStationRegistry(
+      appendNote: (_, _) async {},
+      driveFactory: (_) {
+        final drive = _FakeLeonardDrive();
+        drives.add(drive);
+        return drive;
+      },
+      windowsHostFactory: (_, _) => remote,
+      burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+    );
+    final follower = _capability(registry, 0) as ProcessCapability;
+    final host = _capability(registry, 1) as BurnHostCapability;
+    final metadata = {
+      ..._metadata,
+      BurnOrderInputs.centralTargetKey: 'windows',
+      BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
+    };
+    final bead = _order(metadata);
+    final transport = _TranscriptRuntimeProvider();
+    final reports = <AllocationReport>[];
+    final allocation = follower.createAllocation(
+      _allocationContext(transport: transport, reports: reports, bead: bead),
+    );
+    await allocation.startOrAdopt();
 
-      final outcome = await host.run(
-        context,
-        stepArgs('order-1/$kBurnHostStep'),
-      );
-      expect(outcome, isA<Failed>());
-      expect(
-        (outcome as Failed).reason,
-        'unsupported burn central target "linux"',
-      );
-      expect(factoryCalls, 0);
-      expect(drives, isEmpty);
-    },
-  );
+    final hostArgs = stepArgs('order-1/$kBurnHostStep');
+    final outcome = await host.run(
+      _hostContext(const {
+        'endpoint': 'ws://ios:5000/follower/ws',
+        'station': 'mac',
+        'lease': 'local',
+        'target': 'ios',
+      }, bead),
+      hostArgs,
+    );
+
+    expect(outcome, isA<Ok>());
+    expect(remote.launches, 1);
+    expect(drives, hasLength(2));
+    await host.teardown(hostArgs);
+    expect(remote.teardowns, 1);
+    await allocation.dispose();
+  });
 }

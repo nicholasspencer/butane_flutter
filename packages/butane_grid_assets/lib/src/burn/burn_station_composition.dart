@@ -1,7 +1,8 @@
 /// Resident, in-process composition for a station that executes burn orders.
 library;
 
-import 'dart:io' show Platform;
+import 'dart:async';
+import 'dart:io' show Directory, Platform;
 
 import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart' show TreeContext;
@@ -10,27 +11,33 @@ import 'package:grid_engine/grid_engine.dart'
         CapabilityRegistry,
         Circuit,
         DefaultCapabilityRegistry,
+        Allocation,
+        AllocationContext,
+        AllocationFailed,
+        AllocationReady,
         Failed,
-        Ok,
-        ServiceCapability,
+        ProcessAllocation,
+        ProcessCapability,
         StepArgs,
-        StepOutcome;
+        StepOutcome,
+        StepSignal;
 import 'package:grid_runtime/grid_runtime.dart'
-    show ProcessGroupController, SystemProcessGroupController;
+    show
+        ActivityChanged,
+        Died,
+        Exited,
+        Lifecycle,
+        Respawned,
+        RuntimeConfig,
+        RuntimeEvent,
+        SessionStarted;
 
 import 'burn_capabilities.dart'
-    show
-        BurnHostCapability,
-        LocalFollowerLaunch,
-        kBurnCircuit,
-        kBurnFollowerStep,
-        kBurnHostStep;
+    show BurnHostCapability, kBurnCircuit, kBurnFollowerStep, kBurnHostStep;
 import 'burn_order_inputs.dart' show BurnOrderInputs;
 import 'burn_report.dart' show TestReport;
 import 'burn_scenario.dart' show LeonardDrive;
-import 'follower.dart'
-    show ButaneFollowerRunner, FollowerEndpoint, FollowerLauncher, LaunchSpec;
-import 'ios_follower_launcher.dart' show IosFollowerLauncher;
+import 'follower.dart' show FollowerEndpoint, LaunchSpec;
 import 'process_leonard_drive.dart' show ProcessLeonardDrive;
 import 'remote_windows_host_launch.dart'
     show HostHarnessLaunch, RemoteWindowsHostLaunch;
@@ -133,25 +140,27 @@ final class _OrderLeonardDrive implements LeonardDrive {
   Future<void> close() => _configured.close();
 }
 
-final class _ResidentBurnFollowerCapability extends ServiceCapability {
+const _publishedPrefix = 'burn-follower-published ';
+
+final class _ResidentBurnFollowerCapability extends ProcessCapability {
   _ResidentBurnFollowerCapability({
-    required this.follower,
     required this.drive,
     required this.environment,
     required this.log,
+    required this.entrypoint,
   });
 
-  final LocalFollowerLaunch follower;
   final _OrderLeonardDrive drive;
   final Map<String, String> environment;
   final _BeadNoteLog log;
+  final String entrypoint;
 
   @override
-  Future<StepOutcome> run(TreeContext context, StepArgs args) async {
+  RuntimeConfig spawn(TreeContext context, StepArgs args) {
     log.bind(args.beadId);
     final bead = context.getInheritedSeedOfExactType<Bead>();
     if (bead == null) {
-      return Failed(
+      throw StateError(
         'resident burn-follower requires ambient work bead ${args.beadId}',
       );
     }
@@ -161,37 +170,83 @@ final class _ResidentBurnFollowerCapability extends ServiceCapability {
       onLog: log.call,
     );
     drive.select(inputs.leonardDrive);
-    final endpoint = await follower.launch(
-      LaunchSpec(
-        app: 'butane_harness',
-        target: 'ios',
-        role: 'peripheral',
-        scenario: kSmokeScenario.name,
-      ).withBurnInputs(inputs),
+    return RuntimeConfig(
+      workDir: Directory(entrypoint).parent.parent.path,
+      command: Platform.resolvedExecutable,
+      args: [
+        'run',
+        entrypoint,
+        '--device',
+        inputs.followerDevice,
+        '--harness-dir',
+        inputs.harnessDirectory,
+        '--leonard-drive',
+        inputs.leonardDrive,
+      ],
+      lifecycle: Lifecycle.longLived,
     );
-    if (args.cancel.isCancelled) {
-      return log.flushOutcome(const Failed('cancelled'));
+  }
+
+  @override
+  StepSignal interpretEvent(RuntimeEvent event) => switch (event) {
+    Exited() || Died() => StepSignal.failed,
+    SessionStarted() || Respawned() || ActivityChanged() => StepSignal.none,
+  };
+
+  @override
+  Allocation createAllocation(AllocationContext context) =>
+      _PublishedFollowerProcessAllocation(this, context, log);
+}
+
+final class _PublishedFollowerProcessAllocation extends ProcessAllocation {
+  _PublishedFollowerProcessAllocation(
+    super.capability,
+    super.context,
+    this.log,
+  );
+
+  final _BeadNoteLog log;
+  StreamSubscription<RuntimeEvent>? _startedSubscription;
+  StreamSubscription<String>? _outputSubscription;
+  bool _published = false;
+
+  @override
+  Future<void> startOrAdopt() async {
+    final name = address.providerName;
+    _startedSubscription = context.transport.events
+        .where((event) => event.name == name && event is SessionStarted)
+        .listen((_) {
+          _outputSubscription ??= context.transport.output(name).listen(_line);
+        });
+    await super.startOrAdopt();
+  }
+
+  void _line(String line) {
+    if (_published || !line.startsWith(_publishedPrefix)) return;
+    final uri = line.substring(_publishedPrefix.length).trim();
+    final parsed = Uri.tryParse(uri);
+    if (parsed == null || !{'ws', 'wss'}.contains(parsed.scheme)) {
+      context.sink(AllocationFailed('invalid burn follower endpoint: $uri'));
+      return;
     }
-    if (!endpoint.isPublished) {
-      return log.flushOutcome(const Failed('follower published no endpoint'));
-    }
-    log.call(
-      'resident burn-receipt: follower published ${endpoint.vmServiceUri}',
-    );
-    return log.flushOutcome(
-      Ok({
-        'endpoint': endpoint.vmServiceUri,
-        'station': endpoint.station,
-        'lease': endpoint.leaseId,
+    _published = true;
+    log.call('resident burn-receipt: follower published $uri');
+    context.sink(
+      AllocationReady({
+        'endpoint': uri,
+        'station': 'butane-ios-follower',
+        'lease': 'local',
         'target': 'ios',
       }),
     );
   }
 
   @override
-  Future<void> teardown(StepArgs args) async {
-    log.bind(args.beadId);
-    await follower.teardown();
+  Future<void> dispose() async {
+    await _startedSubscription?.cancel();
+    await _outputSubscription?.cancel();
+    await super.dispose();
+    log.call('teardown-receipt: resident follower supervisor stopped');
     await log.flush();
   }
 }
@@ -289,11 +344,10 @@ final class _ResidentBurnHostCapability extends BurnHostCapability {
 CapabilityRegistry buildBurnStationRegistry({
   required NoteAppender appendNote,
   DateTime Function()? clock,
-  FollowerLauncher? followerLauncher,
+  String? burnFollowerEntrypoint,
   LeonardDrive Function(String executableOverride)? driveFactory,
   WindowsHostLaunchFactory? windowsHostFactory,
   Map<String, String>? environment,
-  ProcessGroupController processes = const SystemProcessGroupController(),
 }) {
   final log = _BeadNoteLog(appendNote);
   final resolvedDriveFactory =
@@ -303,23 +357,15 @@ CapabilityRegistry buildBurnStationRegistry({
         onLog: log.call,
       );
   final orderDrive = _OrderLeonardDrive(resolvedDriveFactory);
-  final follower = LocalFollowerLaunch(
-    runner: ButaneFollowerRunner(
-      launcher:
-          followerLauncher ??
-          IosFollowerLauncher(processes: processes, onLog: log.call),
-      processes: processes,
-      onLog: log.call,
-    ),
-    onLog: log.call,
-  );
   return DefaultCapabilityRegistry(
     capabilities: {
       kBurnFollowerStep: _ResidentBurnFollowerCapability(
-        follower: follower,
         drive: orderDrive,
         environment: environment ?? Platform.environment,
         log: log,
+        entrypoint:
+            burnFollowerEntrypoint ??
+            '${Directory.current.path}/bin/burn_follower_daemon.dart',
       ),
       kBurnHostStep: _ResidentBurnHostCapability(
         drive: orderDrive,
