@@ -25,6 +25,23 @@ class _FakeFollowerLauncher implements FollowerLauncher {
   }
 }
 
+class _DelayedFollowerLauncher implements FollowerLauncher {
+  final Completer<LaunchedDaemon> _launched = Completer<LaunchedDaemon>();
+  LaunchSpec? spec;
+
+  @override
+  Future<LaunchedDaemon> launch(LaunchSpec spec) {
+    this.spec = spec;
+    return _launched.future;
+  }
+
+  void complete() {
+    _launched.complete(
+      const LaunchedDaemon(pid: 4242, pgid: 4242, endpoint: _endpoint),
+    );
+  }
+}
+
 class _FakeLeonardDrive implements LeonardDrive {
   final calls = <String>[];
 
@@ -216,9 +233,87 @@ void main() {
       contains('teardown-receipt: resident follower reaped'),
     );
     await host.teardown(stepArgs('order-1/$kBurnHostStep'));
-    expect(
-      notes.map((note) => note.line),
-      contains('teardown-receipt: follower drive closed'),
-    );
+    expect(notes.map((note) => note.line).toList(), [
+      'follower: provision+build+launch butane_harness for ios',
+      'follower: launched pid 4242 (pgid 4242); published '
+          'ws://127.0.0.1:5599/Test=/ws',
+      'resident burn-receipt: follower published '
+          'ws://127.0.0.1:5599/Test=/ws',
+      'follower: reaped pgid 4242 → exitedOnTerm',
+      'teardown-receipt: resident follower reaped',
+      'teardown-receipt: resident follower reaped',
+      'follower drive closed',
+      'teardown-receipt: follower drive closed',
+    ]);
   });
+
+  test(
+    'rejected notes stay observed and fail the capability with evidence',
+    () async {
+      final launcher = _DelayedFollowerLauncher();
+      final uncaught = <Object>[];
+      late StepOutcome outcome;
+
+      await runZonedGuarded(() async {
+        final registry = buildBurnStationRegistry(
+          appendNote: (_, _) =>
+              Future<void>.error(StateError('station offline')),
+          followerLauncher: launcher,
+          driveFactory: (_) => _FakeLeonardDrive(),
+          environment: const {
+            'BURN_IOS_DEVICE': 'device-from-env',
+            'BURN_HARNESS_DIR': '/harness/from/env',
+            'LEONARD_DRIVE': '/drive/from/env',
+          },
+          processes: _FakeProcessGroupController(),
+        );
+        final capability =
+            (registry.host(_mount(kBurnCircuit.steps[0] as CapabilityStep))
+                        as CapabilityHost)
+                    .capability
+                as ServiceCapability;
+        final metadata = Map<String, dynamic>.of(_metadata)
+          ..remove(BurnOrderInputs.followerDeviceKey);
+        final run = capability.run(
+          FakeTreeContext(values: {Bead: _order(metadata)}),
+          stepArgs('order-1/$kBurnFollowerStep'),
+        );
+
+        while (launcher.spec == null) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        await Future<void>.delayed(Duration.zero);
+        expect(uncaught, isEmpty);
+
+        launcher.complete();
+        outcome = await run;
+      }, (error, _) => uncaught.add(error));
+
+      expect(uncaught, isEmpty);
+      expect(outcome, isA<Failed>());
+      final reason = (outcome as Failed).reason;
+      expect(
+        reason,
+        startsWith('note append failed: Bad state: station offline'),
+      );
+      expect(
+        reason,
+        contains(
+          'burn input burn.follower_device: metadata absent; using environment '
+          'BURN_IOS_DEVICE',
+        ),
+      );
+      expect(
+        reason,
+        contains('follower: provision+build+launch butane_harness for ios'),
+      );
+      expect(
+        reason,
+        contains(
+          'resident burn-receipt: follower published '
+          'ws://127.0.0.1:5599/Test=/ws',
+        ),
+      );
+    },
+  );
 }
