@@ -113,18 +113,18 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
     return output;
   }
 
+  // Win32_ComputerSystem.UserName, not quser: quser.exe does not exist on
+  // Windows Home editions, while the CIM console-user query answers the same
+  // question (who is logged on at the interactive console) on every edition
+  // without elevation. Empty output = nobody at the console.
   Future<void> _requireInteractiveSession() async {
     final output = await _runCheckedSsh(
       r'''powershell.exe -NoProfile -NonInteractive -Command "'''
-          r'''$line = quser 2>$null | Select-String '''
-          r''''^\s*>\S+\s+(?:console\s+)?\d+\s+Active\s+' | Select-Object -First 1; '''
-          r'''if ($null -eq $line) { exit 23 }; $line.Line"''',
+          r'''$user = (Get-CimInstance Win32_ComputerSystem).UserName; '''
+          r'''if ([string]::IsNullOrWhiteSpace($user)) { exit 23 }; $user"''',
       'interactive-session query',
     );
-    if (!RegExp(
-      r'^\s*>\S+\s+(?:console\s+)?\d+\s+Active\s+',
-      multiLine: true,
-    ).hasMatch(output)) {
+    if (output.trim().isEmpty) {
       throw StateError(
         'remote Windows host has no active interactive console session; '
         'log on at the bench before launching the central harness',
