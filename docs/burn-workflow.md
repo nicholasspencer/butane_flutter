@@ -12,12 +12,26 @@ flowchart LR
   circuit -->|federation bus: lease + rendezvous| follower["follower lessor + harness"]
   circuit --> host["host capability"]
   host -->|direct Leonard channel| follower
-  host -->|direct Leonard channel| local["local central harness"]
+  host -->|direct Leonard channel| central["host central harness"]
+  central -. "local process or SSH lifecycle" .-> host
 ```
 
 The two channels are orthogonal: the federation bus owns rendezvous and
 lifecycle, while Leonard drives each harness directly. Perception is never
 tunnelled through the bus.
+
+The default central is macOS. A Windows central is selected with the optional
+bead metadata below:
+
+    burn.central_target=windows
+    burn.windows_host=yoga-win
+    burn.windows_repo=C:/Users/nicks/butane_flutter
+    burn.windows_flutter=C:/Users/nicks/fvm/versions/stable/bin/flutter.bat
+
+The corresponding environment fallbacks are `BURN_CENTRAL_TARGET`,
+`BUTANE_WINDOWS_HOST`, `BUTANE_WINDOWS_REPO`, and `BUTANE_WINDOWS_FLUTTER`.
+SSH owns only the Windows example's launch and process-tree reap. Both Leonard
+channels remain direct point-to-point LAN connections; they are not SSH tunnels.
 
 ## File a burn
 

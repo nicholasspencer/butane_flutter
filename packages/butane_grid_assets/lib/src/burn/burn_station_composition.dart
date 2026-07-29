@@ -26,11 +26,14 @@ import 'burn_capabilities.dart'
         kBurnFollowerStep,
         kBurnHostStep;
 import 'burn_order_inputs.dart' show BurnOrderInputs;
+import 'burn_report.dart' show TestReport;
 import 'burn_scenario.dart' show LeonardDrive;
 import 'follower.dart'
     show ButaneFollowerRunner, FollowerEndpoint, FollowerLauncher, LaunchSpec;
 import 'ios_follower_launcher.dart' show IosFollowerLauncher;
 import 'process_leonard_drive.dart' show ProcessLeonardDrive;
+import 'remote_windows_host_launch.dart'
+    show HostHarnessLaunch, RemoteWindowsHostLaunch;
 import 'scenarios.dart' show kSmokeScenario;
 
 /// Appends one station observation to the work bead named by [beadId].
@@ -193,27 +196,93 @@ final class _ResidentBurnFollowerCapability extends ServiceCapability {
   }
 }
 
+/// Builds the lifecycle used to launch a Windows central.
+typedef WindowsHostLaunchFactory =
+    HostHarnessLaunch Function(
+      BurnOrderInputs inputs,
+      void Function(String) log,
+    );
+
 final class _ResidentBurnHostCapability extends BurnHostCapability {
   _ResidentBurnHostCapability({
     required _OrderLeonardDrive drive,
+    required this.driveFactory,
+    required this.environment,
+    required this.windowsHostFactory,
     required this.log,
   }) : super(drive: drive, scenario: kSmokeScenario, onLog: log.call);
 
   final _BeadNoteLog log;
+  final LeonardDrive Function(String executableOverride) driveFactory;
+  final Map<String, String> environment;
+  final WindowsHostLaunchFactory windowsHostFactory;
+  final Expando<BurnHostCapability> _delegates = Expando();
 
   @override
   Future<StepOutcome> run(TreeContext context, StepArgs args) async {
     log.bind(args.beadId);
-    final outcome = await super.run(context, args);
+    final bead = context.getInheritedSeedOfExactType<Bead>();
+    if (bead == null) {
+      return Failed(
+        'resident burn-host requires ambient work bead ${args.beadId}',
+      );
+    }
+    final inputs = BurnOrderInputs.resolve(
+      metadata: bead.metadata,
+      environment: environment,
+      onLog: log.call,
+    );
+    final BurnHostCapability delegate;
+    switch (inputs.centralTarget) {
+      case 'macos':
+        delegate = BurnHostCapability(
+          drive: drive,
+          scenario: kSmokeScenario,
+          onLog: log.call,
+        );
+      case 'windows':
+        final centralDrive = _OrderLeonardDrive(driveFactory)
+          ..select(inputs.leonardDrive);
+        delegate = BurnHostCapability(
+          drive: drive,
+          scenario: kSmokeScenario,
+          hostLaunch: windowsHostFactory(inputs, log.call),
+          localSpec: LaunchSpec(
+            app: 'butane_windows_example',
+            target: 'windows',
+            role: 'central',
+            scenario: kSmokeScenario.name,
+            harnessDirectory: inputs.harnessDirectory,
+            leonardDrive: inputs.leonardDrive,
+          ),
+          localDrive: centralDrive,
+          onLog: log.call,
+        );
+      default:
+        return log.flushOutcome(
+          Failed('unsupported burn central target "${inputs.centralTarget}"'),
+        );
+    }
+    _delegates[args] = delegate;
+    final outcome = await delegate.run(context, args);
     return log.flushOutcome(outcome);
   }
 
   @override
   Future<void> teardown(StepArgs args) async {
     log.bind(args.beadId);
-    await super.teardown(args);
+    final delegate = _delegates[args];
+    _delegates[args] = null;
+    if (delegate == null) {
+      await super.teardown(args);
+    } else {
+      await delegate.teardown(args);
+    }
     await log.flush();
   }
+
+  @override
+  TestReport? reportFor(StepArgs args) => _delegates[args]?.reportFor(args);
 }
 
 /// Builds the local, single-process burn registry for a resident station.
@@ -222,17 +291,18 @@ CapabilityRegistry buildBurnStationRegistry({
   DateTime Function()? clock,
   FollowerLauncher? followerLauncher,
   LeonardDrive Function(String executableOverride)? driveFactory,
+  WindowsHostLaunchFactory? windowsHostFactory,
   Map<String, String>? environment,
   ProcessGroupController processes = const SystemProcessGroupController(),
 }) {
   final log = _BeadNoteLog(appendNote);
-  final orderDrive = _OrderLeonardDrive(
-    driveFactory ??
-        (executableOverride) => ProcessLeonardDrive(
-          executableOverride: executableOverride,
-          onLog: log.call,
-        ),
-  );
+  final resolvedDriveFactory =
+      driveFactory ??
+      (executableOverride) => ProcessLeonardDrive(
+        executableOverride: executableOverride,
+        onLog: log.call,
+      );
+  final orderDrive = _OrderLeonardDrive(resolvedDriveFactory);
   final follower = LocalFollowerLaunch(
     runner: ButaneFollowerRunner(
       launcher:
@@ -251,7 +321,20 @@ CapabilityRegistry buildBurnStationRegistry({
         environment: environment ?? Platform.environment,
         log: log,
       ),
-      kBurnHostStep: _ResidentBurnHostCapability(drive: orderDrive, log: log),
+      kBurnHostStep: _ResidentBurnHostCapability(
+        drive: orderDrive,
+        driveFactory: resolvedDriveFactory,
+        environment: environment ?? Platform.environment,
+        windowsHostFactory:
+            windowsHostFactory ??
+            (inputs, onLog) => RemoteWindowsHostLaunch(
+              host: inputs.windowsHost,
+              repository: inputs.windowsRepo,
+              flutterExecutable: inputs.windowsFlutter,
+              onLog: onLog,
+            ),
+        log: log,
+      ),
     },
     circuits: const {'burn': kBurnCircuit},
     clock: clock,

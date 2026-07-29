@@ -58,13 +58,34 @@ class _FakeLeonardDrive implements LeonardDrive {
   @override
   Future<String> invoke(String tool, Map<String, Object?> args) async {
     calls.add('invoke:$tool');
+    if (tool == 'butane.check_state') return '{"state":"poweredOn"}';
     return '{"matched":true,"added":true,"advertising":true}';
   }
 
   @override
   Future<String> observe(String path) async {
     calls.add('observe:$path');
+    if (path.endsWith('.role')) return 'central';
     return 'BURN-LIVE';
+  }
+}
+
+class _FakeHostHarnessLaunch implements HostHarnessLaunch {
+  var launches = 0;
+  var teardowns = 0;
+
+  @override
+  Future<FollowerEndpoint> launch(LaunchSpec spec) async {
+    launches++;
+    return const FollowerEndpoint(
+      vmServiceUri: 'ws://yoga-win:6000/central/ws',
+      station: 'windows-host',
+    );
+  }
+
+  @override
+  Future<void> teardown() async {
+    teardowns++;
   }
 }
 
@@ -207,7 +228,11 @@ void main() {
     firstNote.complete();
     final outcome = await run;
 
-    expect(outcome, isA<Ok>());
+    expect(
+      outcome,
+      isA<Ok>(),
+      reason: outcome is Failed ? outcome.reason : null,
+    );
     expect(launcher.spec!.followerDevice, 'device-from-bead');
     expect(launcher.spec!.harnessDirectory, '/harness/from/bead');
     expect(launcher.spec!.leonardDrive, '/drive/from/bead');
@@ -314,6 +339,137 @@ void main() {
           'ws://127.0.0.1:5599/Test=/ws',
         ),
       );
+    },
+  );
+
+  test(
+    'Windows metadata selects a remote central and two direct drives',
+    () async {
+      final remote = _FakeHostHarnessLaunch();
+      final drives = <_FakeLeonardDrive>[];
+      var factoryCalls = 0;
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        followerLauncher: _FakeFollowerLauncher(),
+        driveFactory: (_) {
+          final drive = _FakeLeonardDrive();
+          drives.add(drive);
+          return drive;
+        },
+        windowsHostFactory: (inputs, _) {
+          factoryCalls++;
+          expect(inputs.windowsHost, 'yoga-from-bead');
+          return remote;
+        },
+        processes: _FakeProcessGroupController(),
+      );
+      final follower =
+          (registry.host(_mount(kBurnCircuit.steps[0] as CapabilityStep))
+                      as CapabilityHost)
+                  .capability
+              as ServiceCapability;
+      final host =
+          (registry.host(_mount(kBurnCircuit.steps[1] as CapabilityStep))
+                      as CapabilityHost)
+                  .capability
+              as ServiceCapability;
+      final metadata = <String, dynamic>{
+        ..._metadata,
+        BurnOrderInputs.centralTargetKey: 'windows',
+        BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
+      };
+      final context = FakeTreeContext(
+        values: {
+          Bead: _order(metadata),
+          SiblingView: const SiblingView(
+            results: {
+              'order-1/burn-follower': {
+                'endpoint': 'ws://ios:5000/follower/ws',
+                'station': 'mac',
+                'lease': 'lease-1',
+                'target': 'ios',
+              },
+            },
+          ),
+        },
+      );
+      final followerArgs = stepArgs('order-1/$kBurnFollowerStep');
+      await follower.run(context, followerArgs);
+      final hostArgs = stepArgs('order-1/$kBurnHostStep');
+      final outcome = await host.run(context, hostArgs);
+
+      expect(
+        outcome,
+        isA<Ok>(),
+        reason: outcome is Failed ? outcome.reason : null,
+      );
+      expect((outcome as Ok).payload!['central'], 'windows');
+      expect(outcome.payload!['follower'], 'ios');
+      expect(factoryCalls, 1);
+      expect(remote.launches, 1);
+      expect(drives, hasLength(2));
+      expect(drives[0].calls, contains('attach:ws://ios:5000/follower/ws'));
+      expect(drives[1].calls, contains('attach:ws://yoga-win:6000/central/ws'));
+
+      await host.teardown(hostArgs);
+      expect(remote.teardowns, 1);
+    },
+  );
+
+  test(
+    'unsupported central target fails before Windows launch or drive attach',
+    () async {
+      final drives = <_FakeLeonardDrive>[];
+      var factoryCalls = 0;
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        followerLauncher: _FakeFollowerLauncher(),
+        driveFactory: (_) {
+          final drive = _FakeLeonardDrive();
+          drives.add(drive);
+          return drive;
+        },
+        windowsHostFactory: (_, _) {
+          factoryCalls++;
+          return _FakeHostHarnessLaunch();
+        },
+        processes: _FakeProcessGroupController(),
+      );
+      final host =
+          (registry.host(_mount(kBurnCircuit.steps[1] as CapabilityStep))
+                      as CapabilityHost)
+                  .capability
+              as ServiceCapability;
+      final context = FakeTreeContext(
+        values: {
+          Bead: _order({
+            ..._metadata,
+            BurnOrderInputs.centralTargetKey: 'linux',
+          }),
+          SiblingView: const SiblingView(
+            results: {
+              'order-1/burn-follower': {
+                'endpoint': 'ws://ios:5000/follower/ws',
+                'station': 'mac',
+                'lease': 'lease-1',
+                'target': 'ios',
+              },
+            },
+          ),
+        },
+      );
+
+      final outcome = await host.run(
+        context,
+        stepArgs('order-1/$kBurnHostStep'),
+      );
+      expect(outcome, isA<Failed>());
+      expect(
+        (outcome as Failed).reason,
+        'unsupported burn central target "linux"',
+      );
+      expect(factoryCalls, 0);
+      expect(drives, isEmpty);
     },
   );
 }
