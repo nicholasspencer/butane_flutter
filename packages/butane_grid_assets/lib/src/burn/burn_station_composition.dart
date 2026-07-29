@@ -30,14 +30,21 @@ import 'package:grid_runtime/grid_runtime.dart'
         Respawned,
         RuntimeConfig,
         RuntimeEvent,
-        SessionStarted;
+        SessionStarted,
+        SystemProcessGroupController;
 
 import 'burn_capabilities.dart'
-    show BurnHostCapability, kBurnCircuit, kBurnFollowerStep, kBurnHostStep;
+    show
+        BurnHostCapability,
+        LocalFollowerLaunch,
+        kBurnCircuit,
+        kBurnFollowerStep,
+        kBurnHostStep;
 import 'burn_order_inputs.dart' show BurnOrderInputs;
 import 'burn_report.dart' show TestReport;
 import 'burn_scenario.dart' show LeonardDrive;
-import 'follower.dart' show FollowerEndpoint, LaunchSpec;
+import 'follower.dart' show ButaneFollowerRunner, FollowerEndpoint, LaunchSpec;
+import 'macos_central_launcher.dart' show MacosCentralLauncher;
 import 'process_leonard_drive.dart' show ProcessLeonardDrive;
 import 'remote_windows_host_launch.dart'
     show HostHarnessLaunch, RemoteWindowsHostLaunch;
@@ -258,11 +265,19 @@ typedef WindowsHostLaunchFactory =
       void Function(String) log,
     );
 
+/// Builds the lifecycle used to launch a macOS central.
+typedef MacosHostLaunchFactory =
+    HostHarnessLaunch Function(
+      BurnOrderInputs inputs,
+      void Function(String) log,
+    );
+
 final class _ResidentBurnHostCapability extends BurnHostCapability {
   _ResidentBurnHostCapability({
     required _OrderLeonardDrive drive,
     required this.driveFactory,
     required this.environment,
+    required this.macosHostFactory,
     required this.windowsHostFactory,
     required this.log,
   }) : super(drive: drive, scenario: kSmokeScenario, onLog: log.call);
@@ -270,6 +285,7 @@ final class _ResidentBurnHostCapability extends BurnHostCapability {
   final _BeadNoteLog log;
   final LeonardDrive Function(String executableOverride) driveFactory;
   final Map<String, String> environment;
+  final MacosHostLaunchFactory macosHostFactory;
   final WindowsHostLaunchFactory windowsHostFactory;
   final Expando<BurnHostCapability> _delegates = Expando();
 
@@ -290,9 +306,25 @@ final class _ResidentBurnHostCapability extends BurnHostCapability {
     final BurnHostCapability delegate;
     switch (inputs.centralTarget) {
       case 'macos':
+        log.call(
+          'operator action: macOS may prompt for Bluetooth access to '
+          'butane_harness; the first-run grant is required once',
+        );
+        final centralDrive = _OrderLeonardDrive(driveFactory)
+          ..select(inputs.leonardDrive);
         delegate = BurnHostCapability(
           drive: drive,
           scenario: kSmokeScenario,
+          hostLaunch: macosHostFactory(inputs, log.call),
+          localSpec: LaunchSpec(
+            app: 'butane_harness',
+            target: 'macos',
+            role: 'central',
+            scenario: kSmokeScenario.name,
+            harnessDirectory: inputs.harnessDirectory,
+            leonardDrive: inputs.leonardDrive,
+          ),
+          localDrive: centralDrive,
           onLog: log.call,
         );
       case 'windows':
@@ -303,7 +335,7 @@ final class _ResidentBurnHostCapability extends BurnHostCapability {
           scenario: kSmokeScenario,
           hostLaunch: windowsHostFactory(inputs, log.call),
           localSpec: LaunchSpec(
-            app: 'butane_windows_example',
+            app: 'butane_harness',
             target: 'windows',
             role: 'central',
             scenario: kSmokeScenario.name,
@@ -346,6 +378,7 @@ CapabilityRegistry buildBurnStationRegistry({
   DateTime Function()? clock,
   String? burnFollowerEntrypoint,
   LeonardDrive Function(String executableOverride)? driveFactory,
+  MacosHostLaunchFactory? macosHostFactory,
   WindowsHostLaunchFactory? windowsHostFactory,
   Map<String, String>? environment,
 }) {
@@ -371,6 +404,16 @@ CapabilityRegistry buildBurnStationRegistry({
         drive: orderDrive,
         driveFactory: resolvedDriveFactory,
         environment: environment ?? Platform.environment,
+        macosHostFactory:
+            macosHostFactory ??
+            (inputs, onLog) => LocalFollowerLaunch(
+              runner: ButaneFollowerRunner(
+                launcher: MacosCentralLauncher(onLog: onLog),
+                processes: const SystemProcessGroupController(),
+                onLog: onLog,
+              ),
+              onLog: onLog,
+            ),
         windowsHostFactory:
             windowsHostFactory ??
             (inputs, onLog) => RemoteWindowsHostLaunch(
