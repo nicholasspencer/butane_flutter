@@ -30,6 +30,20 @@ bead metadata below:
 
 The corresponding environment fallbacks are `BURN_CENTRAL_TARGET`,
 `BUTANE_WINDOWS_HOST`, `BUTANE_WINDOWS_REPO`, and `BUTANE_WINDOWS_FLUTTER`.
+
+- `burn.follower_target` selects the resident follower launcher. It resolves
+  from bead metadata, then `BURN_FOLLOWER_TARGET`, and defaults to `ios`.
+  Set it to `macos` for a Windows-central + Mac-peripheral burn without an iPad.
+- The macOS follower runs `butane_harness` in profile mode with
+  `ROLE=peripheral`. The station and harness share the Mac; the c15 launch bound
+  and w30 allocation teardown remain unchanged for both burn drives.
+- macOS `CBPeripheralManager` add-service/advertise behavior through
+  `ext.exploration.butane` is a runtime unknown: it has only been proven on the
+  iPad. Harvest requires a bench-attended burn. On first run, the operator must
+  accept the macOS Bluetooth permission prompt, then verify advertising and the
+  Windows-central smoke receipt. Unit tests do not claim this runtime harvest
+  proof.
+
 SSH owns the Windows harness launch and process-tree reap. Because the Windows
 Dart VM service binds loopback, SSH also owns a local `-L` forward from the
 resident Mac's `127.0.0.1:<localPort>` to the Windows host's

@@ -4,6 +4,7 @@ final class BurnOrderInputs {
     required this.followerDevice,
     required this.harnessDirectory,
     required this.leonardDrive,
+    this.followerTarget = 'ios',
     this.centralTarget = 'macos',
     this.windowsHost = 'yoga-win',
     this.windowsRepo = r'C:/Users/nicks/butane_flutter',
@@ -13,6 +14,7 @@ final class BurnOrderInputs {
   static const followerDeviceKey = 'burn.follower_device';
   static const harnessDirectoryKey = 'burn.harness_dir';
   static const leonardDriveKey = 'burn.leonard_drive';
+  static const followerTargetKey = 'burn.follower_target';
   static const centralTargetKey = 'burn.central_target';
   static const windowsHostKey = 'burn.windows_host';
   static const windowsRepoKey = 'burn.windows_repo';
@@ -21,6 +23,7 @@ final class BurnOrderInputs {
   final String followerDevice;
   final String harnessDirectory;
   final String leonardDrive;
+  final String followerTarget;
   final String centralTarget;
   final String windowsHost;
   final String windowsRepo;
@@ -48,6 +51,7 @@ final class BurnOrderInputs {
       followerDevice: read(followerDeviceKey, 'BURN_IOS_DEVICE'),
       harnessDirectory: read(harnessDirectoryKey, 'BURN_HARNESS_DIR'),
       leonardDrive: read(leonardDriveKey, 'LEONARD_DRIVE'),
+      followerTarget: read(followerTargetKey, 'BURN_FOLLOWER_TARGET', 'ios'),
       centralTarget: read(centralTargetKey, 'BURN_CENTRAL_TARGET', 'macos'),
       windowsHost: read(windowsHostKey, 'BUTANE_WINDOWS_HOST', 'yoga-win'),
       windowsRepo: read(

@@ -10,6 +10,7 @@ void main() {
           BurnOrderInputs.followerDeviceKey: ' order-device ',
           BurnOrderInputs.harnessDirectoryKey: ' /order/harness ',
           BurnOrderInputs.leonardDriveKey: ' /order/leonard ',
+          BurnOrderInputs.followerTargetKey: ' macos ',
           BurnOrderInputs.centralTargetKey: ' windows ',
           BurnOrderInputs.windowsHostKey: ' order-host ',
           BurnOrderInputs.windowsRepoKey: ' C:/order/repo ',
@@ -19,6 +20,7 @@ void main() {
           'BURN_IOS_DEVICE': 'environment-device',
           'BURN_HARNESS_DIR': '/environment/harness',
           'LEONARD_DRIVE': '/environment/leonard',
+          'BURN_FOLLOWER_TARGET': 'ios',
           'BURN_CENTRAL_TARGET': 'macos',
           'BUTANE_WINDOWS_HOST': 'environment-host',
           'BUTANE_WINDOWS_REPO': 'C:/environment/repo',
@@ -30,11 +32,27 @@ void main() {
       expect(inputs.followerDevice, 'order-device');
       expect(inputs.harnessDirectory, '/order/harness');
       expect(inputs.leonardDrive, '/order/leonard');
+      expect(inputs.followerTarget, 'macos');
       expect(inputs.centralTarget, 'windows');
       expect(inputs.windowsHost, 'order-host');
       expect(inputs.windowsRepo, 'C:/order/repo');
       expect(inputs.windowsFlutter, 'C:/order/flutter.bat');
       expect(logs, isEmpty);
+    });
+
+    test('empty metadata uses trimmed follower target environment', () {
+      final logs = <String>[];
+      final inputs = BurnOrderInputs.resolve(
+        metadata: const {BurnOrderInputs.followerTargetKey: ' '},
+        environment: const {'BURN_FOLLOWER_TARGET': ' macos '},
+        onLog: logs.add,
+      );
+
+      expect(inputs.followerTarget, 'macos');
+      expect(logs, [
+        'burn input burn.follower_target: metadata absent; '
+            'using environment BURN_FOLLOWER_TARGET',
+      ]);
     });
 
     test('empty metadata uses and logs each matching environment fallback', () {
@@ -76,6 +94,7 @@ void main() {
       expect(inputs.harnessDirectory, isEmpty);
       expect(inputs.leonardDrive, isEmpty);
       expect(inputs.centralTarget, 'macos');
+      expect(inputs.followerTarget, 'ios');
       expect(inputs.windowsHost, 'yoga-win');
       expect(inputs.windowsRepo, r'C:/Users/nicks/butane_flutter');
       expect(

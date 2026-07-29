@@ -233,6 +233,8 @@ void main() {
     expect(config.args, [
       'run',
       '/package/bin/burn_follower_daemon.dart',
+      '--target',
+      'ios',
       '--device',
       'device-from-bead',
       '--harness-dir',
@@ -297,6 +299,49 @@ void main() {
     );
     await host.teardown(hostArgs);
   });
+
+  test(
+    'macOS follower metadata selects daemon and readiness payload',
+    () async {
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        driveFactory: (_) => _FakeLeonardDrive(),
+        burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+      );
+      final follower = _capability(registry, 0);
+      final transport = _TranscriptRuntimeProvider();
+      final reports = <AllocationReport>[];
+      final allocation = follower.createAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: reports,
+          bead: _order({
+            ..._metadata,
+            BurnOrderInputs.followerTargetKey: 'macos',
+          }),
+        ),
+      );
+
+      await allocation.startOrAdopt();
+      final name = allocation.address.providerName;
+      expect(
+        transport.started[name]!.args,
+        containsAllInOrder(['--target', 'macos']),
+      );
+      transport.emitOutput(
+        name,
+        'burn-follower-published ${_endpoint.vmServiceUri}',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(reports.whereType<AllocationReady>().single.payload, {
+        'endpoint': _endpoint.vmServiceUri,
+        'station': 'butane-macos-follower',
+        'lease': 'local',
+        'target': 'macos',
+      });
+      await allocation.dispose();
+    },
+  );
 
   test(
     'invalid published URI fails without readiness and stops once',
