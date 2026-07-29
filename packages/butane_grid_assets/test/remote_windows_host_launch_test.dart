@@ -16,7 +16,7 @@ Future<Process> _shell(String script) =>
     Process.start('/bin/sh', ['-c', script]);
 
 bool _isSessionQuery(List<String> arguments) =>
-    arguments.last.contains('quser 2>');
+    arguments.last.contains('Win32_ComputerSystem');
 bool _isPayloadPreparation(List<String> arguments) =>
     arguments.last.contains('FromBase64String');
 bool _isScheduledTaskRun(List<String> arguments) =>
@@ -39,7 +39,7 @@ String _kind(List<String> arguments) {
 
 Future<Process> _successfulControl(List<String> arguments) {
   if (_isSessionQuery(arguments)) {
-    return _shell("printf '>nico console 1 Active none 7/29/2026 8:00 AM\\n'");
+    return _shell("printf 'NICOSPENCER\\\\nicks\\n'");
   }
   if (_isPayloadPreparation(arguments) ||
       _isScheduledTaskRun(arguments) ||
