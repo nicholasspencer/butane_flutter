@@ -70,3 +70,17 @@ String vmServiceHttpToWs(String httpUri) {
       .replace(scheme: uri.scheme == 'https' ? 'wss' : 'ws', path: path)
       .toString();
 }
+
+/// Returns flutter's mac-side usbmux-forwarded VM-service URI from [output].
+///
+/// App-owned `GRID_VM_URI` sentinels are deliberately ignored because on iOS
+/// they name the device-side, loopback-bound service and carry a different
+/// authentication code.
+String? flutterForwardedVmServiceWsUri(String output) {
+  final match = RegExp(
+    r'(?:A Dart VM Service on|The Flutter DevTools debugger and profiler on)'
+    r'[^\n]*? is available at: (https?://127\.0\.0\.1:\d+/\S*)',
+  ).firstMatch(output);
+  final httpUri = match?.group(1);
+  return httpUri == null ? null : vmServiceHttpToWs(httpUri);
+}

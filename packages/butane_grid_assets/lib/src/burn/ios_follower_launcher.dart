@@ -9,18 +9,13 @@
 ///     FlutterEngine instance in debug mode without Flutter tooling"). So we
 ///     launch with **`flutter run --profile`** — a profile app runs without
 ///     the JIT tooling attached, keeps the Dart VM service, and installs
-///     `LeonardBinding` (kProfileMode). `flutter run` errors on ATTACH (see
-///     #3) but the app launches and stays alive.
-///  2. **The VM-service URI is not on flutter's stdout** (attach failed), so
-///     we discover the device endpoint over mDNS (`dns-sd`), curl-verifying
-///     it because mDNS serves stale records after a relaunch.
-///  3. **macOS Local Network TCC blocks the Dart toolchain** from dialing the
-///     device over the LAN (curl / `python3` are exempt; `dart` /
-///     `leonard_drive` get EHOSTUNREACH). So we run a loopback TCP relay under
-///     the exempt `python3` and publish `ws://127.0.0.1:<relayPort>/…` — which
-///     the burn host's `leonard_drive` reaches without any Local Network
-///     grant. (This assumes the burn HOST runs on the same Mac the device is
-///     tethered to — the realistic iOS topology.)
+///     `LeonardBinding` (kProfileMode).
+///  2. **The device VM service is loopback-bound.** Flutter's stdout supplies
+///     its mac-side usbmux-forwarded loopback URI, which is the primary
+///     endpoint and carries its own authentication code.
+///  3. **Wireless-only fallback uses mDNS.** macOS Local Network TCC blocks the
+///     Dart toolchain from dialing the device over the LAN, so a LAN-exempt
+///     `python3` loopback relay publishes that fallback endpoint.
 ///
 /// Teardown reaps `flutter run`'s process group (the reaper) plus, via the
 /// [LaunchedDaemon.onReap] seam, the relay process and a best-effort
@@ -36,6 +31,7 @@ import 'package:grid_runtime/grid_runtime.dart'
 import 'package:meta/meta.dart';
 
 import 'follower.dart';
+import 'launch_scrape.dart';
 
 void _noLog(String _) {}
 
@@ -44,6 +40,54 @@ typedef IosLaunchInputs = ({String deviceId, String harnessDirectory});
 
 /// One iOS VM-service endpoint advertised through mDNS.
 typedef IosMdnsCandidate = ({String ip, int port, String authCode});
+
+typedef _IosReadyEndpoint = ({String wsUri, Process? relay});
+
+Uri _vmServiceWsToHttpBase(String wsUri) {
+  final uri = Uri.parse(wsUri);
+  final path = uri.path.endsWith('/ws')
+      ? uri.path.substring(0, uri.path.length - 2)
+      : uri.path;
+  return uri.replace(
+    scheme: uri.scheme == 'wss' ? 'https' : 'http',
+    path: path,
+  );
+}
+
+/// Reads one VM-service HTTP [uri].
+typedef IosVmServiceGet = Future<String> Function(Uri uri);
+
+/// Whether the butane exploration extension is registered at [base].
+@visibleForTesting
+Future<bool> isIosExplorationReady(
+  Uri base, {
+  IosVmServiceGet get = _curlVmServiceBody,
+}) async {
+  final vm = await get(base.resolve('getVM'));
+  final ids = RegExp(
+    r'"id"\s*:\s*"isolates\\?/(\d+)"',
+  ).allMatches(vm).map((match) => match.group(1)!).toSet();
+  for (final id in ids) {
+    final isolateUri = base
+        .resolve('getIsolate')
+        .replace(
+          queryParameters: <String, String>{'isolateId': 'isolates/$id'},
+        );
+    final isolate = await get(isolateUri);
+    if (isolate.contains('ext.exploration.butane')) return true;
+  }
+  return false;
+}
+
+Future<String> _curlVmServiceBody(Uri uri) async {
+  final result = await Process.run('curl', <String>[
+    '-s',
+    '-m',
+    '4',
+    uri.toString(),
+  ]);
+  return '${result.stdout}';
+}
 
 /// Parses one `dns-sd -L` transcript and its matching `dns-sd -G v4`
 /// transcript into every usable address/port combination.
@@ -115,9 +159,9 @@ asyncio.run(main())
 class IosFollowerLauncher implements FollowerLauncher {
   /// Creates a launcher for [deviceId] (the device UDID), running
   /// `flutter run` from [harnessDirectory] and publishing under [station].
-  /// [bundleId] is the harness app id looked up over mDNS; [relayPort] is the
-  /// loopback port the Dart-reachable endpoint binds (distinct per concurrent
-  /// follower).
+  /// Flutter's usbmux-forwarded loopback URI is primary. [bundleId] identifies
+  /// the wireless-only mDNS fallback; [relayPort] and [python3] provide its
+  /// Dart-reachable loopback relay.
   IosFollowerLauncher({
     this.deviceId = '',
     this.harnessDirectory = '',
@@ -144,17 +188,17 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// The harness app bundle id (mDNS `_dartVmService._tcp` instance name).
   final String bundleId;
 
-  /// The loopback port the published (Dart-reachable) endpoint binds.
+  /// The loopback port the wireless-only fallback relay binds.
   final int relayPort;
 
   /// The flutter tool.
   final String flutterExecutable;
 
-  /// The LAN-exempt python interpreter that runs the relay.
+  /// The LAN-exempt python interpreter that runs the wireless fallback relay.
   final String python3;
 
-  /// Bounds the wait for a device VM service + a live relay (a profile build
-  /// + install over wireless can be slow).
+  /// Bounds the wait for an exploration-ready VM service (a profile build +
+  /// install can be slow).
   final Duration readyTimeout;
 
   final ProcessGroupController _processes;
@@ -225,41 +269,53 @@ class IosFollowerLauncher implements FollowerLauncher {
       workingDirectory: resolvedHarnessDirectory,
       mode: ProcessStartMode.detachedWithStdio,
     );
-    // Drain flutter's stdio so it never blocks on a full pipe; surface lines.
-    for (final s in [flutter.stdout, flutter.stderr]) {
-      s.listen(
-        (bytes) {
-          final line = String.fromCharCodes(bytes).trim();
-          if (line.isNotEmpty) _onLog('  flutter: ${line.split('\n').last}');
-        },
-        onError: (Object _) {},
-        cancelOnError: false,
-      );
+    final forwarded = Completer<String>();
+    final flutterOutput = StringBuffer();
+    void drainFlutter(Stream<List<int>> stream) {
+      stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+            (line) {
+              if (line.trim().isNotEmpty) _onLog('  flutter: $line');
+              flutterOutput.writeln(line);
+              final uri = flutterForwardedVmServiceWsUri(
+                flutterOutput.toString(),
+              );
+              if (uri != null && !forwarded.isCompleted) {
+                forwarded.complete(uri);
+              }
+            },
+            onError: (Object _) {},
+            cancelOnError: false,
+          );
     }
+
+    drainFlutter(flutter.stdout);
+    drainFlutter(flutter.stderr);
 
     final deadline = DateTime.now().add(readyTimeout);
     Process? relay;
     try {
-      // Discover a curl-reachable device endpoint (mDNS is stale-prone → verify).
-      final device = await _discoverReachable(deadline);
-      _onLog('ios launcher: device VM at ${device.ip}:${device.port}');
-
-      // Stand up the loopback relay under the exempt python3.
-      relay = await _startRelay(device);
-      final endpointUri = 'ws://127.0.0.1:$relayPort/${device.authCode}/ws';
+      final ready = await _discoverEndpoint(deadline, forwarded);
+      relay = ready.relay;
+      final endpointUri = ready.wsUri;
 
       final pgid = await _processes.resolvePgid(flutter.pid) ?? flutter.pid;
-      final relayPid = relay.pid;
+      final relayPid = relay?.pid;
       _onLog(
-        'ios launcher: flutter pid ${flutter.pid} (pgid $pgid), relay pid '
-        '$relayPid; published $endpointUri',
+        'ios launcher: flutter pid ${flutter.pid} (pgid $pgid)'
+        '${relayPid == null ? '' : ', relay pid $relayPid'}; '
+        'published $endpointUri',
       );
       return _last = LaunchedDaemon(
         pid: flutter.pid,
         pgid: pgid,
         endpoint: FollowerEndpoint(vmServiceUri: endpointUri, station: station),
         onReap: () async {
-          Process.killPid(relayPid, ProcessSignal.sigkill);
+          if (relayPid != null) {
+            Process.killPid(relayPid, ProcessSignal.sigkill);
+          }
           // Best-effort on-device terminate (the app else backgrounds/suspends).
           try {
             await Process.run('xcrun', [
@@ -285,19 +341,36 @@ class IosFollowerLauncher implements FollowerLauncher {
     }
   }
 
-  /// Polls mDNS for the device VM service and returns the endpoint whose
-  /// **exploration host is actively registered** — the gate that uniquely
-  /// picks the FRESH FOREGROUND app: mDNS keeps serving dead/stale records
-  /// (an old port after a relaunch, a suspended prior app), and even a fresh
-  /// app answers `getVM` before `ext.exploration.*` registers. A suspended
-  /// iOS app tears its service extensions down (handshake → -32601), so
-  /// "handshake is registered" is exactly the readiness + freshness signal.
-  Future<IosMdnsCandidate> _discoverReachable(DateTime deadline) async {
+  /// Prefers flutter's usbmux-forwarded endpoint, then tries wireless mDNS.
+  Future<_IosReadyEndpoint> _discoverEndpoint(
+    DateTime deadline,
+    Completer<String> forwarded,
+  ) async {
+    final preferenceDeadline = DateTime.now().add(const Duration(seconds: 15));
+    while (!forwarded.isCompleted &&
+        DateTime.now().isBefore(deadline) &&
+        DateTime.now().isBefore(preferenceDeadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+
     while (DateTime.now().isBefore(deadline)) {
+      if (forwarded.isCompleted) {
+        final wsUri = await forwarded.future;
+        if (await isIosExplorationReady(_vmServiceWsToHttpBase(wsUri))) {
+          return (wsUri: wsUri, relay: null);
+        }
+      }
       final candidates = await _resolveCandidates();
-      for (final c in candidates) {
-        if (await _explorationReady('http://${c.ip}:${c.port}/${c.authCode}')) {
-          return c;
+      for (final candidate in candidates) {
+        final base = Uri.parse(
+          'http://${candidate.ip}:${candidate.port}/${candidate.authCode}/',
+        );
+        if (await isIosExplorationReady(base)) {
+          final relay = await _startRelay(candidate);
+          return (
+            wsUri: 'ws://127.0.0.1:$relayPort/${candidate.authCode}/ws',
+            relay: relay,
+          );
         }
       }
       if (candidates.isNotEmpty) {
@@ -309,7 +382,7 @@ class IosFollowerLauncher implements FollowerLauncher {
       await Future<void>.delayed(const Duration(seconds: 3));
     }
     throw StateError(
-      'ios launcher: no exploration-ready device VM service for $bundleId '
+      'ios launcher: no exploration-ready VM service for $bundleId '
       'within ${readyTimeout.inSeconds}s (device unlocked? app foreground?)',
     );
   }
@@ -337,36 +410,6 @@ class IosFollowerLauncher implements FollowerLauncher {
       lookupOutput: lookupOutput,
       addressOutput: addressOutput,
     );
-  }
-
-  /// Whether the butane exploration host is registered at [base]
-  /// (`http://ip:port/auth`). Service extensions are NOT callable over a bare
-  /// HTTP GET (they need the isolate + WS routing), so the readiness signal
-  /// is the isolate's `extensionRPCs` list: getVM → first isolate id →
-  /// getIsolate → the registered method names include `ext.exploration.butane`.
-  /// This is what distinguishes the FRESH FOREGROUND harness (methods
-  /// registered) from a stale/suspended one (methods torn down) and from a
-  /// mid-boot app (VM up, not yet registered).
-  Future<bool> _explorationReady(String base) async {
-    final vm = await _curlBody('$base/getVM');
-    // The VM service escapes the slash in JSON: `"id":"isolates\/1234"` — so
-    // match an optional backslash and capture just the number. Check every
-    // isolate (the exploration host is on the root isolate, usually first).
-    final ids = RegExp(
-      r'"id"\s*:\s*"isolates\\?/(\d+)"',
-    ).allMatches(vm).map((m) => m.group(1)!).toSet();
-    for (final id in ids) {
-      final isolate = await _curlBody(
-        '$base/getIsolate?isolateId=isolates/$id',
-      );
-      if (isolate.contains('ext.exploration.butane')) return true;
-    }
-    return false;
-  }
-
-  Future<String> _curlBody(String url) async {
-    final r = await Process.run('curl', ['-s', '-m', '4', url]);
-    return '${r.stdout}';
   }
 
   /// Best-effort: terminate any running instance of [bundleId]. Maps the
@@ -470,9 +513,8 @@ class IosFollowerLauncher implements FollowerLauncher {
 
     // Confirm the Dart-reachable loopback actually serves the exploration
     // host (not just any TCP forward).
-    if (!await _explorationReady(
-      'http://127.0.0.1:$relayPort/${device.authCode}',
-    )) {
+    final base = Uri.parse('http://127.0.0.1:$relayPort/${device.authCode}/');
+    if (!await isIosExplorationReady(base)) {
       relay.kill(ProcessSignal.sigkill);
       throw StateError('ios launcher: relay loopback not exploration-ready');
     }
