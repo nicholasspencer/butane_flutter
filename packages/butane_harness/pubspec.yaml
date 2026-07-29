@@ -20,6 +20,8 @@ dependencies:
     path: ../butane_core_bluetooth
   butane_android:
     path: ../butane_android
+  butane_windows:
+    path: ../butane_windows
   butane_platform_interface:
     path: ../butane_platform_interface
   cupertino_icons: ^1.0.8

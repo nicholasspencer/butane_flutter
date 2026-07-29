@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Validate the Windows platform implementation on the remote build target.
+# Validate the Windows platform implementation and runtime harness compilation
+# on the remote build target.
 #
 # Run from the Mac. Pushes the current branch to the `windows` remote, then
 # resolves, analyzes, and tests over SSH — including the C++ googletests, which
@@ -7,7 +8,8 @@
 # butane_windows_test target on include_butane_windows_tests).
 #
 # This is the validation_plan for the Windows epic's build children. It covers
-# compile + unit level only; BLE behaviour still needs a human with two radios.
+# compile + unit validation of the platform implementation plus compilation of
+# the Leonard-enabled harness; BLE behaviour still needs a human with two radios.
 #
 # Host comes from BUTANE_WINDOWS_HOST (default: the yoga-win alias documented in
 # docs/windows-dev-environment.md). Remote checkout from BUTANE_WINDOWS_REPO.
@@ -109,6 +111,12 @@ remote "cd '$REPO/packages/butane_windows/example'; \
   \$exe = Get-ChildItem -Path build -Recurse -Filter butane_windows_test.exe -ErrorAction SilentlyContinue | Select-Object -First 1; \
   if (-not \$exe) { Write-Error 'butane_windows_test.exe not found under build/ — the test target did not build. Check that include_butane_windows_tests is set by the example build.'; exit 1 }; \
   & \$exe.FullName; exit \$LASTEXITCODE"
+
+step "flutter analyze (packages/butane_harness)"
+remote "cd '$REPO/packages/butane_harness'; & '$FLUTTER' analyze 2>&1 | Select-Object -Last 20"
+
+step "Building the Leonard-enabled central harness"
+remote "cd '$REPO/packages/butane_harness'; & '$FLUTTER' build windows --debug --dart-define=ROLE=central 2>&1 | Select-Object -Last 20"
 
 echo
 echo "==> validate_windows.sh: PASS ($head_sha on $HOST)"
