@@ -94,8 +94,8 @@ class GattApplication extends DBusObject {
         if (propsResponse is! DBusGetAllPropertiesResponse) continue;
         final propsDict = <DBusValue, DBusValue>{};
         (propsResponse.returnValues.first as DBusDict).children.forEach(
-          (k, v) => propsDict[k] = v,
-        );
+              (k, v) => propsDict[k] = v,
+            );
         interfaces[DBusString(iface.name)] = DBusDict(
           DBusSignature('s'),
           DBusSignature('v'),

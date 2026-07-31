@@ -10,9 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:meta/meta.dart' show immutable, protected, visibleForTesting;
 
 Object? _extractReplyValueOrThrow(
-    List<Object?>? replyList,
-    String channelName, {
-    required bool isNullValid,
+  List<Object?>? replyList,
+  String channelName, {
+  required bool isNullValid,
 }) {
   if (replyList == null) {
     throw PlatformException(
@@ -34,8 +34,8 @@ Object? _extractReplyValueOrThrow(
   return replyList.firstOrNull;
 }
 
-
-List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty = false}) {
+List<Object?> wrapResponse(
+    {Object? result, PlatformException? error, bool empty = false}) {
   if (empty) {
     return <Object?>[];
   }
@@ -44,20 +44,21 @@ List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty
   }
   return <Object?>[error.code, error.message, error.details];
 }
+
 bool _deepEquals(Object? a, Object? b) {
   if (a is List && b is List) {
     return a.length == b.length &&
         a.indexed
-        .every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
+            .every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
   }
   if (a is Map && b is Map) {
-    return a.length == b.length && a.entries.every((MapEntry<Object?, Object?> entry) =>
-        (b as Map<Object?, Object?>).containsKey(entry.key) &&
-        _deepEquals(entry.value, b[entry.key]));
+    return a.length == b.length &&
+        a.entries.every((MapEntry<Object?, Object?> entry) =>
+            (b as Map<Object?, Object?>).containsKey(entry.key) &&
+            _deepEquals(entry.value, b[entry.key]));
   }
   return a == b;
 }
-
 
 enum ClientState {
   unknown,
@@ -86,8 +87,7 @@ enum AttResult {
   unlikelyError,
 }
 
-sealed class Session {
-}
+sealed class Session {}
 
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
 /// [clientIdentifier] that discovered it.
@@ -125,7 +125,8 @@ class ClientSession extends Session {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static ClientSession decode(Object result) {
     result as List<Object?>;
@@ -151,8 +152,7 @@ class ClientSession extends Session {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class PeripheralSession extends Session {
@@ -181,7 +181,8 @@ class PeripheralSession extends Session {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static PeripheralSession decode(Object result) {
     result as List<Object?>;
@@ -207,8 +208,7 @@ class PeripheralSession extends Session {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class PeripheralManagerSession extends Session {
@@ -233,7 +233,8 @@ class PeripheralManagerSession extends Session {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static PeripheralManagerSession decode(Object result) {
     result as List<Object?>;
@@ -247,7 +248,8 @@ class PeripheralManagerSession extends Session {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! PeripheralManagerSession || other.runtimeType != runtimeType) {
+    if (other is! PeripheralManagerSession ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
@@ -258,8 +260,7 @@ class PeripheralManagerSession extends Session {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class Peripheral {
@@ -288,7 +289,8 @@ class Peripheral {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static Peripheral decode(Object result) {
     result as List<Object?>;
@@ -314,8 +316,7 @@ class Peripheral {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class AdvertisementData {
@@ -352,7 +353,8 @@ class AdvertisementData {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static AdvertisementData decode(Object result) {
     result as List<Object?>;
@@ -360,7 +362,8 @@ class AdvertisementData {
       localName: result[0] as String?,
       manufacturerData: result[1] as Uint8List?,
       serviceUuids: (result[2] as List<Object?>?)?.cast<String?>(),
-      serviceData: (result[3] as Map<Object?, Object?>?)?.cast<String?, Uint8List?>(),
+      serviceData:
+          (result[3] as Map<Object?, Object?>?)?.cast<String?, Uint8List?>(),
       txPowerLevel: result[4] as int?,
       isConnectable: result[5] as bool?,
     );
@@ -380,8 +383,7 @@ class AdvertisementData {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class ScanResult {
@@ -402,7 +404,8 @@ class ScanResult {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static ScanResult decode(Object result) {
     result as List<Object?>;
@@ -426,12 +429,10 @@ class ScanResult {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
-sealed class AttributeData {
-}
+sealed class AttributeData {}
 
 class Service extends AttributeData {
   Service({
@@ -451,7 +452,8 @@ class Service extends AttributeData {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static Service decode(Object result) {
     result as List<Object?>;
@@ -475,8 +477,7 @@ class Service extends AttributeData {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class Characteristic extends AttributeData {
@@ -505,7 +506,8 @@ class Characteristic extends AttributeData {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static Characteristic decode(Object result) {
     result as List<Object?>;
@@ -531,8 +533,7 @@ class Characteristic extends AttributeData {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class Descriptor extends AttributeData {
@@ -553,7 +554,8 @@ class Descriptor extends AttributeData {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static Descriptor decode(Object result) {
     result as List<Object?>;
@@ -577,8 +579,7 @@ class Descriptor extends AttributeData {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class CharacteristicProperty {
@@ -631,7 +632,8 @@ class CharacteristicProperty {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static CharacteristicProperty decode(Object result) {
     result as List<Object?>;
@@ -663,8 +665,7 @@ class CharacteristicProperty {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class CharacteristicPermission {
@@ -693,7 +694,8 @@ class CharacteristicPermission {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static CharacteristicPermission decode(Object result) {
     result as List<Object?>;
@@ -708,7 +710,8 @@ class CharacteristicPermission {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! CharacteristicPermission || other.runtimeType != runtimeType) {
+    if (other is! CharacteristicPermission ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
@@ -719,8 +722,7 @@ class CharacteristicPermission {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class AttRequest {
@@ -757,7 +759,8 @@ class AttRequest {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static AttRequest decode(Object result) {
     result as List<Object?>;
@@ -785,8 +788,7 @@ class AttRequest {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class MutableDescriptor {
@@ -807,7 +809,8 @@ class MutableDescriptor {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static MutableDescriptor decode(Object result) {
     result as List<Object?>;
@@ -831,8 +834,7 @@ class MutableDescriptor {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class MutableCharacteristic {
@@ -865,7 +867,8 @@ class MutableCharacteristic {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static MutableCharacteristic decode(Object result) {
     result as List<Object?>;
@@ -892,8 +895,7 @@ class MutableCharacteristic {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
 
 class MutableService {
@@ -918,14 +920,16 @@ class MutableService {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static MutableService decode(Object result) {
     result as List<Object?>;
     return MutableService(
       uuid: result[0]! as String,
       isPrimary: result[1]! as bool,
-      characteristics: (result[2]! as List<Object?>).cast<MutableCharacteristic?>(),
+      characteristics:
+          (result[2]! as List<Object?>).cast<MutableCharacteristic?>(),
     );
   }
 
@@ -943,10 +947,8 @@ class MutableService {
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => Object.hashAll(_toList())
-;
+  int get hashCode => Object.hashAll(_toList());
 }
-
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -955,58 +957,58 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    }    else if (value is ClientState) {
+    } else if (value is ClientState) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is ConnectionState) {
+    } else if (value is ConnectionState) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    }    else if (value is AttResult) {
+    } else if (value is AttResult) {
       buffer.putUint8(131);
       writeValue(buffer, value.index);
-    }    else if (value is ClientSession) {
+    } else if (value is ClientSession) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is PeripheralSession) {
+    } else if (value is PeripheralSession) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is PeripheralManagerSession) {
+    } else if (value is PeripheralManagerSession) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is Peripheral) {
+    } else if (value is Peripheral) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is AdvertisementData) {
+    } else if (value is AdvertisementData) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is ScanResult) {
+    } else if (value is ScanResult) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is Service) {
+    } else if (value is Service) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is Characteristic) {
+    } else if (value is Characteristic) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is Descriptor) {
+    } else if (value is Descriptor) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is CharacteristicProperty) {
+    } else if (value is CharacteristicProperty) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    }    else if (value is CharacteristicPermission) {
+    } else if (value is CharacteristicPermission) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    }    else if (value is AttRequest) {
+    } else if (value is AttRequest) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    }    else if (value is MutableDescriptor) {
+    } else if (value is MutableDescriptor) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    }    else if (value is MutableCharacteristic) {
+    } else if (value is MutableCharacteristic) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    }    else if (value is MutableService) {
+    } else if (value is MutableService) {
       buffer.putUint8(146);
       writeValue(buffer, value.encode());
     } else {
@@ -1068,9 +1070,11 @@ class ButaneHostApi {
   /// Constructor for [ButaneHostApi].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
-  ButaneHostApi({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
+  ButaneHostApi(
+      {BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
       : pigeonVar_binaryMessenger = binaryMessenger,
-        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+        pigeonVar_messageChannelSuffix =
+            messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
   final BinaryMessenger? pigeonVar_binaryMessenger;
 
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
@@ -1079,514 +1083,611 @@ class ButaneHostApi {
 
   /// "Central" APIs.
   Future<ClientState> state({ClientSession? session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.state$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.state$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as ClientState;
   }
 
   /// Scans for peripherals that are advertising services.
   Future<void> scan({ClientSession? session, List<String>? forServices}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.scan$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.scan$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, forServices]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, forServices]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> cancelScan({ClientSession? session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.cancelScan$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.cancelScan$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   /// A list of known peripherals optionally filtered by their identifiers.
-  Future<List<Peripheral>> peripherals({ClientSession? session, List<String> peripheralIdentifiers = const []}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.peripherals$pigeonVar_messageChannelSuffix';
+  Future<List<Peripheral>> peripherals(
+      {ClientSession? session,
+      List<String> peripheralIdentifiers = const []}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.peripherals$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, peripheralIdentifiers]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, peripheralIdentifiers]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return (pigeonVar_replyValue! as List<Object?>).cast<Peripheral>();
   }
 
   /// A list of connected peripherals identified by an offered service.
-  Future<List<Peripheral>> connectedPeripherals({ClientSession? session, List<String> serviceUuids = const []}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectedPeripherals$pigeonVar_messageChannelSuffix';
+  Future<List<Peripheral>> connectedPeripherals(
+      {ClientSession? session, List<String> serviceUuids = const []}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectedPeripherals$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuids]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, serviceUuids]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return (pigeonVar_replyValue! as List<Object?>).cast<Peripheral>();
   }
 
   /// Establishes a connection to the peripheral.
   Future<void> connect({required PeripheralSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connect$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connect$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   /// Cancels an active or pending connection to the peripheral.
   Future<void> cancelConnection({required PeripheralSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.cancelConnection$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.cancelConnection$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<ConnectionState> connectionState({required PeripheralSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectionState$pigeonVar_messageChannelSuffix';
+  Future<ConnectionState> connectionState(
+      {required PeripheralSession session}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connectionState$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as ConnectionState;
   }
 
   /// Discovers services offered by the peripheral.
-  Future<void> discoverServices({required PeripheralSession session, List<String>? serviceUuids}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverServices$pigeonVar_messageChannelSuffix';
+  Future<void> discoverServices(
+      {required PeripheralSession session, List<String>? serviceUuids}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverServices$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuids]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, serviceUuids]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<List<Service>> services({required PeripheralSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.services$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.services$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return (pigeonVar_replyValue! as List<Object?>).cast<Service>();
   }
 
   /// Discovers characteristics offered by the service.
-  Future<void> discoverCharacteristics({required PeripheralSession session, required String serviceUuid, List<String>? characteristicUuids, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverCharacteristics$pigeonVar_messageChannelSuffix';
+  Future<void> discoverCharacteristics({
+    required PeripheralSession session,
+    required String serviceUuid,
+    List<String>? characteristicUuids,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverCharacteristics$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid, characteristicUuids]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel
+        .send(<Object?>[session, serviceUuid, characteristicUuids]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<List<Characteristic>> characteristics({required PeripheralSession session, required String serviceUuid}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.characteristics$pigeonVar_messageChannelSuffix';
+  Future<List<Characteristic>> characteristics(
+      {required PeripheralSession session, required String serviceUuid}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.characteristics$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, serviceUuid]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return (pigeonVar_replyValue! as List<Object?>).cast<Characteristic>();
   }
 
   /// Reads the value of the characteristic.
-  Future<Uint8List> readCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readCharacteristic$pigeonVar_messageChannelSuffix';
+  Future<Uint8List> readCharacteristic({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readCharacteristic$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid, characteristicUuid]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel
+        .send(<Object?>[session, serviceUuid, characteristicUuid]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as Uint8List;
   }
 
   /// Writes the value of the characteristic.
-  Future<void> writeCharacteristic({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required Uint8List value, bool withoutResponse = false, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeCharacteristic$pigeonVar_messageChannelSuffix';
+  Future<void> writeCharacteristic({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required Uint8List value,
+    bool withoutResponse = false,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeCharacteristic$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid, characteristicUuid, value, withoutResponse]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel
+        .send(<Object?>[
+      session,
+      serviceUuid,
+      characteristicUuid,
+      value,
+      withoutResponse
+    ]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> observeCharacteristic({bool observe = true, required PeripheralSession session, required String serviceUuid, required String characteristicUuid, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.observeCharacteristic$pigeonVar_messageChannelSuffix';
+  Future<void> observeCharacteristic({
+    bool observe = true,
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.observeCharacteristic$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[observe, session, serviceUuid, characteristicUuid]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel
+        .send(<Object?>[observe, session, serviceUuid, characteristicUuid]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   /// Reads the value of the descriptor.
-  Future<Uint8List> readDescriptor({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required String descriptorUuid, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readDescriptor$pigeonVar_messageChannelSuffix';
+  Future<Uint8List> readDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readDescriptor$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid, characteristicUuid, descriptorUuid]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+        <Object?>[session, serviceUuid, characteristicUuid, descriptorUuid]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as Uint8List;
   }
 
   /// Writes the value of the descriptor.
-  Future<void> writeDescriptor({required PeripheralSession session, required String serviceUuid, required String characteristicUuid, required String descriptorUuid, required Uint8List value, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeDescriptor$pigeonVar_messageChannelSuffix';
+  Future<void> writeDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+    required Uint8List value,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.writeDescriptor$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid, characteristicUuid, descriptorUuid, value]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel
+        .send(<Object?>[
+      session,
+      serviceUuid,
+      characteristicUuid,
+      descriptorUuid,
+      value
+    ]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   /// Requests a read of the RSSI for the peripheral.
   Future<int> readRssi({required PeripheralSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readRssi$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.readRssi$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as int;
   }
 
   /// Requests a MTU size change.
-  Future<int> requestMtu({required PeripheralSession session, required int mtu}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestMtu$pigeonVar_messageChannelSuffix';
+  Future<int> requestMtu(
+      {required PeripheralSession session, required int mtu}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestMtu$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, mtu]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, mtu]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as int;
   }
 
   /// "Peripheral" APIs.
-  Future<ClientState> peripheralManagerState({required PeripheralManagerSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.peripheralManagerState$pigeonVar_messageChannelSuffix';
+  Future<ClientState> peripheralManagerState(
+      {required PeripheralManagerSession session}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.peripheralManagerState$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as ClientState;
   }
 
-  Future<void> startAdvertising({required PeripheralManagerSession session, String? localName, List<String>? serviceUuids, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.startAdvertising$pigeonVar_messageChannelSuffix';
+  Future<void> startAdvertising({
+    required PeripheralManagerSession session,
+    String? localName,
+    List<String>? serviceUuids,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.startAdvertising$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, localName, serviceUuids]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, localName, serviceUuids]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> stopAdvertising({required PeripheralManagerSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.stopAdvertising$pigeonVar_messageChannelSuffix';
+  Future<void> stopAdvertising(
+      {required PeripheralManagerSession session}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.stopAdvertising$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> addService({required PeripheralManagerSession session, required MutableService service}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.addService$pigeonVar_messageChannelSuffix';
+  Future<void> addService(
+      {required PeripheralManagerSession session,
+      required MutableService service}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.addService$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, service]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, service]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> removeService({required PeripheralManagerSession session, required String serviceUuid}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeService$pigeonVar_messageChannelSuffix';
+  Future<void> removeService(
+      {required PeripheralManagerSession session,
+      required String serviceUuid}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeService$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, serviceUuid]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> removeAllServices({required PeripheralManagerSession session}) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeAllServices$pigeonVar_messageChannelSuffix';
+  Future<void> removeAllServices(
+      {required PeripheralManagerSession session}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.removeAllServices$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> respondToRequest({required PeripheralManagerSession session, required int requestId, required AttResult result, Uint8List? value, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.respondToRequest$pigeonVar_messageChannelSuffix';
+  Future<void> respondToRequest({
+    required PeripheralManagerSession session,
+    required int requestId,
+    required AttResult result,
+    Uint8List? value,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.respondToRequest$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, requestId, result, value]);
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session, requestId, result, value]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<bool> updateValue({required PeripheralManagerSession session, required String serviceUuid, required String characteristicUuid, required Uint8List value, }) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.updateValue$pigeonVar_messageChannelSuffix';
+  Future<bool> updateValue({
+    required PeripheralManagerSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required Uint8List value,
+  }) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.updateValue$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[session, serviceUuid, characteristicUuid, value]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel
+        .send(<Object?>[session, serviceUuid, characteristicUuid, value]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 }
@@ -1604,9 +1705,11 @@ abstract class ButaneFlutterApi {
   /// "Peripheral" APIs.
   void onConnectionState(Peripheral peripheral, ConnectionState state);
 
-  void onCharacteristicValue(Peripheral peripheral, Characteristic characteristic, Uint8List value);
+  void onCharacteristicValue(
+      Peripheral peripheral, Characteristic characteristic, Uint8List value);
 
-  void onDescriptorValue(Peripheral peripheral, Descriptor descriptor, Uint8List value);
+  void onDescriptorValue(
+      Peripheral peripheral, Descriptor descriptor, Uint8List value);
 
   /// "Peripheral Manager" APIs.
   void onPeripheralManagerState(String? clientIdentifier, ClientState state);
@@ -1617,17 +1720,25 @@ abstract class ButaneFlutterApi {
 
   void onWriteRequests(List<AttRequest> requests);
 
-  void onCentralSubscribed(String? clientIdentifier, String centralIdentifier, String serviceUuid, String characteristicUuid);
+  void onCentralSubscribed(String? clientIdentifier, String centralIdentifier,
+      String serviceUuid, String characteristicUuid);
 
-  void onCentralUnsubscribed(String? clientIdentifier, String centralIdentifier, String serviceUuid, String characteristicUuid);
+  void onCentralUnsubscribed(String? clientIdentifier, String centralIdentifier,
+      String serviceUuid, String characteristicUuid);
 
   void onReadyToUpdateSubscribers(String? clientIdentifier);
 
-  static void setUp(ButaneFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
-    messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+  static void setUp(
+    ButaneFlutterApi? api, {
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) {
+    messageChannelSuffix =
+        messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onClientState$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onClientState$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1641,15 +1752,17 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onScanResult$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onScanResult$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1662,15 +1775,17 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1684,15 +1799,17 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCharacteristicValue$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCharacteristicValue$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1703,19 +1820,22 @@ abstract class ButaneFlutterApi {
           final Characteristic arg_characteristic = args[1]! as Characteristic;
           final Uint8List arg_value = args[2]! as Uint8List;
           try {
-            api.onCharacteristicValue(arg_peripheral, arg_characteristic, arg_value);
+            api.onCharacteristicValue(
+                arg_peripheral, arg_characteristic, arg_value);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorValue$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onDescriptorValue$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1730,15 +1850,17 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onPeripheralManagerState$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onPeripheralManagerState$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1752,15 +1874,17 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServiceAdded$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onServiceAdded$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1774,15 +1898,17 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadRequest$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadRequest$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1795,36 +1921,41 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onWriteRequests$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onWriteRequests$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           final List<Object?> args = message! as List<Object?>;
-          final List<AttRequest> arg_requests = (args[0]! as List<Object?>).cast<AttRequest>();
+          final List<AttRequest> arg_requests =
+              (args[0]! as List<Object?>).cast<AttRequest>();
           try {
             api.onWriteRequests(arg_requests);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralSubscribed$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralSubscribed$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1836,19 +1967,22 @@ abstract class ButaneFlutterApi {
           final String arg_serviceUuid = args[2]! as String;
           final String arg_characteristicUuid = args[3]! as String;
           try {
-            api.onCentralSubscribed(arg_clientIdentifier, arg_centralIdentifier, arg_serviceUuid, arg_characteristicUuid);
+            api.onCentralSubscribed(arg_clientIdentifier, arg_centralIdentifier,
+                arg_serviceUuid, arg_characteristicUuid);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralUnsubscribed$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onCentralUnsubscribed$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1860,19 +1994,22 @@ abstract class ButaneFlutterApi {
           final String arg_serviceUuid = args[2]! as String;
           final String arg_characteristicUuid = args[3]! as String;
           try {
-            api.onCentralUnsubscribed(arg_clientIdentifier, arg_centralIdentifier, arg_serviceUuid, arg_characteristicUuid);
+            api.onCentralUnsubscribed(arg_clientIdentifier,
+                arg_centralIdentifier, arg_serviceUuid, arg_characteristicUuid);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadyToUpdateSubscribers$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onReadyToUpdateSubscribers$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
@@ -1885,8 +2022,9 @@ abstract class ButaneFlutterApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
