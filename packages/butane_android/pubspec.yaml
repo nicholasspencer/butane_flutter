@@ -1,9 +1,8 @@
 name: butane_android
 description: "Android implementation of Butane Bluetooth Low Energy for Flutter applications."
-version: 0.0.1
+version: 0.1.0
 homepage: https://github.com/nicholasspencer/butane
 repository: https://github.com/nicholasspencer/butane_flutter
-publish_to: none
 resolution: workspace
 
 environment:
@@ -13,8 +12,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  butane_platform_interface:
-    path: ../butane_platform_interface
+  butane_platform_interface: ^0.1.0
 
 dev_dependencies:
   flutter_test:
