@@ -2,6 +2,7 @@ name: butane_dart_bluez
 description: Pure-Dart BlueZ/D-Bus backend for butane_dart (no Flutter).
 version: 0.0.1
 homepage: https://github.com/nicholasspencer/butane
+repository: https://github.com/nicholasspencer/butane_flutter
 publish_to: none
 resolution: workspace
 

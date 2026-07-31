@@ -1,7 +1,8 @@
 name: butane
-description: A new Flutter package project.
+description: A reactive, cross-platform Bluetooth Low Energy API for Flutter applications.
 version: 0.0.1
 homepage: https://github.com/nicholasspencer/butane
+repository: https://github.com/nicholasspencer/butane_flutter
 publish_to: none
 resolution: workspace
 
