@@ -228,9 +228,15 @@ final class _PublishedFollowerAllocation extends Allocation {
       _eventSubscription = context.transport.events
           .where((event) => event.name == name)
           .listen(_event);
-      _outputSubscription = context.transport.output(name).listen(_line);
       _started = true;
       await context.transport.start(name, config);
+      // Subscribe AFTER start: output(name) is the session's transcript,
+      // which exists only once start() registers the session — before that
+      // the provider returns a permanently-empty stream and the publish line
+      // can never arrive (the 2026-07-30 live hang). The publish is minutes
+      // away (harness launch + readiness), so this cannot race it; a crash
+      // in the gap is still caught by the events subscription above.
+      _outputSubscription = context.transport.output(name).listen(_line);
       state = AllocationState.live;
     } on Object catch (error) {
       _fail('resident burn follower failed to start: $error');
