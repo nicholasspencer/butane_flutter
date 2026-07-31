@@ -1,3 +1,3 @@
-## 0.0.1
+## 0.1.0
 
-* TODO: Describe initial release.
+- Initial public release: iOS and macOS implementation over Apple Core Bluetooth (central and peripheral roles).

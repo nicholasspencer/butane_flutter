@@ -1,3 +1,3 @@
-## 0.0.1
+## 0.1.0
 
-* TODO: Describe initial release.
+- Initial public release: the Flutter federated-plugin interface binding `butane` to its platform implementations over `butane_dart`'s contract.
