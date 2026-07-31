@@ -6,9 +6,10 @@ plus the Pigeon-generated method-channel bindings that carry calls and
 events between Dart and native code.
 
 **App developers do not depend on this package directly** — they depend
-on [`butane`](../butane), which re-exports the public types. This
-package exists so that platform implementations can share a single
-contract.
+on [`butane`](https://pub.dev/packages/butane), which re-exports the public
+types. This package exists so that platform implementations can share a
+single contract, implementing `butane_dart`'s `ButanePlatformInterface`
+over Pigeon-generated channels.
 
 ## Pigeon is the source of truth
 
