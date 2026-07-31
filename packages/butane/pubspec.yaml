@@ -16,6 +16,10 @@ dependencies:
     path: ../butane_dart
   butane_platform_interface:
     path: ../butane_platform_interface
+  butane_core_bluetooth:
+    path: ../butane_core_bluetooth
+  butane_android:
+    path: ../butane_android
   butane_bluez:
     path: ../butane_bluez
 
@@ -35,5 +39,3 @@ flutter:
         default_package: butane_core_bluetooth
       linux:
         default_package: butane_bluez
-      windows:
-        default_package: butane_windows
