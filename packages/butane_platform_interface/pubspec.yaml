@@ -1,7 +1,8 @@
 name: butane_platform_interface
-description: A new Flutter package project.
+description: Shared platform interface for Butane's federated Bluetooth Low Energy implementations.
 version: 0.0.1
 homepage: https://github.com/nicholasspencer/butane
+repository: https://github.com/nicholasspencer/butane_flutter
 publish_to: none
 resolution: workspace
 
