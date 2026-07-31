@@ -1,9 +1,8 @@
 name: butane
 description: A reactive, cross-platform Bluetooth Low Energy API for Flutter applications.
-version: 0.0.1
+version: 0.1.0
 homepage: https://github.com/nicholasspencer/butane
 repository: https://github.com/nicholasspencer/butane_flutter
-publish_to: none
 resolution: workspace
 
 environment:
@@ -13,16 +12,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  butane_dart:
-    path: ../butane_dart
-  butane_platform_interface:
-    path: ../butane_platform_interface
-  butane_core_bluetooth:
-    path: ../butane_core_bluetooth
-  butane_android:
-    path: ../butane_android
-  butane_bluez:
-    path: ../butane_bluez
+  butane_dart: ^0.1.0
+  butane_platform_interface: ^0.1.0
+  butane_core_bluetooth: ^0.1.0
+  butane_android: ^0.1.0
+  butane_bluez: ^0.1.0
 
 dev_dependencies:
   flutter_test:
