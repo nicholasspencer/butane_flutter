@@ -36,8 +36,6 @@ This repo is a Dart pub workspace. Packages live under `packages/`:
 ## Getting started
 
 ```bash
-# Reproduce the temporary dependency exceptions documented in
-# docs/windows-dev-environment.md, then resolve the workspace.
 dart pub get
 ```
 

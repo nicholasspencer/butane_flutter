@@ -5,10 +5,9 @@ homepage: https://github.com/nicholasspencer/butane
 publish_to: none
 
 environment:
-  # 3.9 is pub's floor for the temporary grid_assets `git: {tag_pattern:}`
-  # exception documented in docs/windows-dev-environment.md. The override is
-  # declared against this workspace pubspec. butane_grid_assets already
-  # requires ^3.11.0, so this floor does not narrow the effective constraint.
+  # Historical floor from the retired `git: {tag_pattern:}` dependency
+  # exception; harmless to keep — butane_grid_assets already requires
+  # ^3.11.0, so this floor does not narrow the effective constraint.
   sdk: ^3.9.0
 
 workspace:
