@@ -1,7 +1,8 @@
 name: butane_core_bluetooth
-description: "A new Flutter plugin project."
+description: "Darwin implementation of Butane Bluetooth Low Energy for Flutter using Core Bluetooth."
 version: 0.0.1
 homepage: https://github.com/nicholasspencer/butane
+repository: https://github.com/nicholasspencer/butane_flutter
 publish_to: none
 resolution: workspace
 
