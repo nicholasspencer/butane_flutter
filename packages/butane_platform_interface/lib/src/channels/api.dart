@@ -6,38 +6,32 @@ import 'package:meta/meta.dart';
 import 'package:butane_dart/interface.dart';
 import 'api.g.dart' as api;
 
-/// The client session, when supplied, and its latest native client state.
 typedef ClientStateResult = ({
   Session? session,
   api.ClientState state,
 });
 
-/// A peripheral and its latest native connection state.
 typedef ConnectionStateResult = ({
   api.Peripheral peripheral,
   api.ConnectionState state,
 });
 
-/// A characteristic value delivered for a peripheral.
 typedef CharacteristicValueResult = ({
   api.Peripheral peripheral,
   api.Characteristic characteristic,
   Uint8List value,
 });
 
-/// A peripheral and its latest received signal strength indicator.
 typedef RssiResult = ({
   api.Peripheral peripheral,
   int rssi,
 });
 
-/// The UUID and optional native error reported after adding a service.
 typedef ServiceAddedResult = ({
   String serviceUuid,
   String? error,
 });
 
-/// Identifies a central subscription to a local characteristic.
 typedef CentralSubscriptionResult = ({
   String? clientIdentifier,
   String centralIdentifier,
@@ -48,16 +42,13 @@ typedef CentralSubscriptionResult = ({
 /// A default implementation of [ButanePlatformInterface] which uses generated
 /// method channels to call platform-specific code.
 base class ButanePlatform extends ButanePlatformInterface {
-  /// Registers the method-channel implementation as the active backend.
   static void registerWith() {
     ButanePlatformInterface.instance = ButanePlatform();
   }
 
-  /// Host API used to invoke native BLE operations.
   @protected
   late final api.ButaneHostApi hostApi = api.ButaneHostApi();
 
-  /// Flutter API that receives native BLE callbacks.
   @protected
   late final ButaneFlutterApi flutterApi = ButaneFlutterApi();
 
@@ -317,7 +308,8 @@ base class ButanePlatform extends ButanePlatformInterface {
   ]) =>
       flutterApi.peripheralManagerStateStream
           .where(
-            (e) => e.session?.clientIdentifier == session?.clientIdentifier,
+            (e) =>
+                e.session?.clientIdentifier == session?.clientIdentifier,
           )
           .map((e) => e.state.toClientState());
 
@@ -436,16 +428,13 @@ base class ButanePlatform extends ButanePlatformInterface {
       );
 }
 
-/// Receives generated native callbacks and exposes typed event streams.
 base class ButaneFlutterApi extends api.ButaneFlutterApi {
-  /// Creates and registers a receiver for generated native callbacks.
   ButaneFlutterApi() {
     api.ButaneFlutterApi.setUp(this);
   }
 
   // Client State
 
-  /// Emits native client-state changes.
   Stream<ClientStateResult> get clientStateStream =>
       clientStateController.stream;
 
@@ -467,7 +456,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Scan Result
 
-  /// Emits native scan results.
   Stream<api.ScanResult> get scanStream => scanController.stream;
 
   @protected
@@ -485,7 +473,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   final connectionStateController =
       StreamController<ConnectionStateResult>.broadcast();
 
-  /// Emits native peripheral connection-state changes.
   Stream<ConnectionStateResult> get connectionStateStream =>
       connectionStateController.stream;
 
@@ -505,7 +492,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Characteristic Value
 
-  /// Emits native characteristic-value updates.
   Stream<CharacteristicValueResult> get characteristicValueStream =>
       characteristicValueController.stream;
 
@@ -542,7 +528,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Peripheral Manager State
 
-  /// Emits native peripheral-manager state changes.
   Stream<ClientStateResult> get peripheralManagerStateStream =>
       peripheralManagerStateController.stream;
 
@@ -568,7 +553,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Service Added
 
-  /// Emits results of adding local services.
   Stream<ServiceAddedResult> get serviceAddedStream =>
       serviceAddedController.stream;
 
@@ -589,11 +573,12 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Read Request
 
-  /// Emits native ATT read requests.
-  Stream<api.AttRequest> get readRequestStream => readRequestController.stream;
+  Stream<api.AttRequest> get readRequestStream =>
+      readRequestController.stream;
 
   @protected
-  final readRequestController = StreamController<api.AttRequest>.broadcast();
+  final readRequestController =
+      StreamController<api.AttRequest>.broadcast();
 
   @protected
   @override
@@ -603,7 +588,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Write Requests
 
-  /// Emits batches of native ATT write requests.
   Stream<List<api.AttRequest>> get writeRequestsStream =>
       writeRequestsController.stream;
 
@@ -619,7 +603,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Central Subscribed
 
-  /// Emits central-subscription events.
   Stream<CentralSubscriptionResult> get centralSubscribedStream =>
       centralSubscribedController.stream;
 
@@ -647,7 +630,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Central Unsubscribed
 
-  /// Emits central-unsubscription events.
   Stream<CentralSubscriptionResult> get centralUnsubscribedStream =>
       centralUnsubscribedController.stream;
 
@@ -675,7 +657,6 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   // Ready to Update Subscribers
 
-  /// Emits client identifiers ready for another subscriber update.
   Stream<String?> get readyToUpdateSubscribersStream =>
       readyToUpdateSubscribersController.stream;
 
@@ -690,10 +671,8 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   }
 }
 
-/// Filters characteristic-value callback streams.
 extension CharacteristicValueResultStreamFilter
     on Stream<CharacteristicValueResult> {
-  /// Returns events matching [peripheralIdentifier] and [characteristicUuid].
   Stream<CharacteristicValueResult> forCharacteristic({
     required String? peripheralIdentifier,
     required String characteristicUuid,
@@ -709,9 +688,7 @@ extension CharacteristicValueResultStreamFilter
 
 /// Records
 
-/// Converts between domain session values and generated channel values.
 extension SessionConverter on Session {
-  /// Creates a domain session from [session].
   static Session fromClientSession(api.ClientSession session) {
     return Session(
       peripheralIdentifier: session.peripheralIdentifier,
@@ -721,7 +698,6 @@ extension SessionConverter on Session {
     );
   }
 
-  /// Returns this session in the generated channel representation.
   api.ClientSession toSession() {
     return api.ClientSession(
       peripheralIdentifier: peripheralIdentifier,
@@ -732,9 +708,7 @@ extension SessionConverter on Session {
   }
 }
 
-/// Converts between domain peripheral session values and generated channel values.
 extension PeripheralSessionConverter on PeripheralSession {
-  /// Creates a domain peripheral session from [session].
   static PeripheralSession fromSession(api.PeripheralSession session) {
     return PeripheralSession(
       peripheralIdentifier: session.peripheralIdentifier,
@@ -744,7 +718,6 @@ extension PeripheralSessionConverter on PeripheralSession {
     );
   }
 
-  /// Returns this peripheral session in the generated channel representation.
   api.PeripheralSession toSession() {
     return api.PeripheralSession(
       peripheralIdentifier: peripheralIdentifier,
@@ -755,9 +728,7 @@ extension PeripheralSessionConverter on PeripheralSession {
   }
 }
 
-/// Converts between domain peripheral session values and generated channel values.
 extension PeripheralChannelSessionConverter on api.PeripheralSession {
-  /// Creates a channel peripheral session from [session].
   static api.PeripheralSession fromSession(PeripheralSession session) {
     return api.PeripheralSession(
       peripheralIdentifier: session.peripheralIdentifier,
@@ -767,7 +738,6 @@ extension PeripheralChannelSessionConverter on api.PeripheralSession {
     );
   }
 
-  /// Returns this channel peripheral session in the domain representation.
   PeripheralSession toSession() {
     return PeripheralSession(
       peripheralIdentifier: peripheralIdentifier,
@@ -778,9 +748,7 @@ extension PeripheralChannelSessionConverter on api.PeripheralSession {
   }
 }
 
-/// Converts between domain client state values and generated channel values.
 extension ClientStateConverter on ClientState {
-  /// Creates a domain client state from [state].
   static ClientState fromClientState(api.ClientState state) {
     switch (state) {
       case api.ClientState.unknown:
@@ -798,7 +766,6 @@ extension ClientStateConverter on ClientState {
     }
   }
 
-  /// Returns this client state in the generated channel representation.
   api.ClientState toClientState() {
     switch (this) {
       case ClientState.unknown:
@@ -817,9 +784,7 @@ extension ClientStateConverter on ClientState {
   }
 }
 
-/// Converts between domain client state values and generated channel values.
 extension ClientStateChannelConverter on api.ClientState {
-  /// Creates a channel client state from [state].
   static api.ClientState fromClientState(ClientState state) {
     switch (state) {
       case ClientState.unknown:
@@ -837,7 +802,6 @@ extension ClientStateChannelConverter on api.ClientState {
     }
   }
 
-  /// Returns this channel client state in the domain representation.
   ClientState toClientState() {
     switch (this) {
       case api.ClientState.unknown:
@@ -856,9 +820,7 @@ extension ClientStateChannelConverter on api.ClientState {
   }
 }
 
-/// Converts between domain connection state values and generated channel values.
 extension ConnectionStateConverter on ConnectionState {
-  /// Creates a domain connection state from [state].
   static ConnectionState fromConnectionState(api.ConnectionState state) {
     switch (state) {
       case api.ConnectionState.disconnected:
@@ -874,7 +836,6 @@ extension ConnectionStateConverter on ConnectionState {
     }
   }
 
-  /// Returns this connection state in the generated channel representation.
   api.ConnectionState toConnectionState() {
     switch (this) {
       case ConnectionState.disconnected:
@@ -891,9 +852,7 @@ extension ConnectionStateConverter on ConnectionState {
   }
 }
 
-/// Converts between domain connection state values and generated channel values.
 extension ConnectionStateChannelConverter on api.ConnectionState {
-  /// Creates a channel connection state from [state].
   static api.ConnectionState fromConnectionState(ConnectionState state) {
     switch (state) {
       case ConnectionState.disconnected:
@@ -909,7 +868,6 @@ extension ConnectionStateChannelConverter on api.ConnectionState {
     }
   }
 
-  /// Returns this channel connection state in the domain representation.
   ConnectionState toConnectionState() {
     switch (this) {
       case api.ConnectionState.disconnected:
@@ -926,9 +884,7 @@ extension ConnectionStateChannelConverter on api.ConnectionState {
   }
 }
 
-/// Converts between domain peripheral values and generated channel values.
 extension PeripheralConverter on Peripheral {
-  /// Creates a domain peripheral from [peripheral].
   static Peripheral fromPeripheral(api.Peripheral peripheral) {
     return Peripheral(
       session: PeripheralSessionConverter.fromSession(peripheral.session),
@@ -938,7 +894,6 @@ extension PeripheralConverter on Peripheral {
     );
   }
 
-  /// Returns this peripheral in the generated channel representation.
   api.Peripheral toPeripheral() {
     return api.Peripheral(
       session: session.toSession(),
@@ -949,9 +904,7 @@ extension PeripheralConverter on Peripheral {
   }
 }
 
-/// Converts between domain peripheral values and generated channel values.
 extension PeripheralChannelConverter on api.Peripheral {
-  /// Creates a channel peripheral from [peripheral].
   static api.Peripheral fromPeripheral(Peripheral peripheral) {
     return api.Peripheral(
       session:
@@ -964,7 +917,6 @@ extension PeripheralChannelConverter on api.Peripheral {
     );
   }
 
-  /// Returns this channel peripheral in the domain representation.
   Peripheral toPeripheral() {
     return Peripheral(
       session: session.toSession(),
@@ -975,9 +927,7 @@ extension PeripheralChannelConverter on api.Peripheral {
   }
 }
 
-/// Converts between domain advertisement data values and generated channel values.
 extension AdvertisementDataConverter on AdvertisementData {
-  /// Creates a domain advertisement data from [advertisementData].
   static AdvertisementData fromAdvertisementData(
     api.AdvertisementData advertisementData,
   ) {
@@ -991,7 +941,6 @@ extension AdvertisementDataConverter on AdvertisementData {
     );
   }
 
-  /// Returns this advertisement data in the generated channel representation.
   api.AdvertisementData toAdvertisementData() {
     return api.AdvertisementData(
       localName: localName,
@@ -1004,9 +953,7 @@ extension AdvertisementDataConverter on AdvertisementData {
   }
 }
 
-/// Converts between domain advertisement data values and generated channel values.
 extension AdvertisementDataChannelConverter on api.AdvertisementData {
-  /// Creates a channel advertisement data from [advertisementData].
   static api.AdvertisementData fromAdvertisementData(
     AdvertisementData advertisementData,
   ) {
@@ -1020,7 +967,6 @@ extension AdvertisementDataChannelConverter on api.AdvertisementData {
     );
   }
 
-  /// Returns this channel advertisement data in the domain representation.
   AdvertisementData toAdvertisementData() {
     return AdvertisementData(
       localName: localName,
@@ -1033,9 +979,7 @@ extension AdvertisementDataChannelConverter on api.AdvertisementData {
   }
 }
 
-/// Converts between domain scan result values and generated channel values.
 extension ScanResultConverter on ScanResult {
-  /// Creates a domain scan result from [scanResult].
   static ScanResult fromScanResult(api.ScanResult scanResult) {
     return ScanResult(
       peripheral: PeripheralConverter.fromPeripheral(scanResult.peripheral),
@@ -1045,7 +989,6 @@ extension ScanResultConverter on ScanResult {
     );
   }
 
-  /// Returns this scan result in the generated channel representation.
   api.ScanResult toScanResult() {
     return api.ScanResult(
       peripheral: peripheral.toPeripheral(),
@@ -1054,9 +997,7 @@ extension ScanResultConverter on ScanResult {
   }
 }
 
-/// Converts between domain scan result values and generated channel values.
 extension ScanResultChannelConverter on api.ScanResult {
-  /// Creates a channel scan result from [scanResult].
   static api.ScanResult fromScanResult(ScanResult scanResult) {
     return api.ScanResult(
       peripheral:
@@ -1068,7 +1009,6 @@ extension ScanResultChannelConverter on api.ScanResult {
     );
   }
 
-  /// Returns this channel scan result in the domain representation.
   ScanResult toScanResult() {
     return ScanResult(
       peripheral: peripheral.toPeripheral(),
@@ -1077,9 +1017,7 @@ extension ScanResultChannelConverter on api.ScanResult {
   }
 }
 
-/// Converts between domain service values and generated channel values.
 extension ServiceConverter on Service {
-  /// Creates a domain service from [service].
   static Service fromService(api.Service service) {
     return Service(
       uuid: service.uuid,
@@ -1087,7 +1025,6 @@ extension ServiceConverter on Service {
     );
   }
 
-  /// Returns this service in the generated channel representation.
   api.Service toService() {
     return api.Service(
       uuid: uuid,
@@ -1096,9 +1033,7 @@ extension ServiceConverter on Service {
   }
 }
 
-/// Converts between domain service values and generated channel values.
 extension ServiceChannelConverter on api.Service {
-  /// Creates a channel service from [service].
   static api.Service fromService(Service service) {
     return api.Service(
       uuid: service.uuid,
@@ -1106,7 +1041,6 @@ extension ServiceChannelConverter on api.Service {
     );
   }
 
-  /// Returns this channel service in the domain representation.
   Service toService() {
     return Service(
       uuid: uuid,
@@ -1115,9 +1049,7 @@ extension ServiceChannelConverter on api.Service {
   }
 }
 
-/// Converts between domain characteristic values and generated channel values.
 extension CharacteristicConverter on Characteristic {
-  /// Creates a domain characteristic from [characteristic].
   static Characteristic fromCharacteristic(api.Characteristic characteristic) {
     return Characteristic(
       uuid: characteristic.uuid,
@@ -1133,7 +1065,6 @@ extension CharacteristicConverter on Characteristic {
     );
   }
 
-  /// Returns this characteristic in the generated channel representation.
   api.Characteristic toCharacteristic() {
     return api.Characteristic(
       uuid: uuid,
@@ -1144,9 +1075,7 @@ extension CharacteristicConverter on Characteristic {
   }
 }
 
-/// Converts between domain characteristic values and generated channel values.
 extension CharacteristicChannelConverter on api.Characteristic {
-  /// Creates a channel characteristic from [characteristic].
   static api.Characteristic fromCharacteristic(Characteristic characteristic) {
     return api.Characteristic(
       uuid: characteristic.uuid,
@@ -1162,7 +1091,6 @@ extension CharacteristicChannelConverter on api.Characteristic {
     );
   }
 
-  /// Returns this channel characteristic in the domain representation.
   Characteristic toCharacteristic() {
     return Characteristic(
       uuid: uuid,
@@ -1173,9 +1101,7 @@ extension CharacteristicChannelConverter on api.Characteristic {
   }
 }
 
-/// Converts between domain descriptor values and generated channel values.
 extension DescriptorConverter on Descriptor {
-  /// Creates a domain descriptor from [descriptor].
   static Descriptor fromDescriptor(api.Descriptor descriptor) {
     return Descriptor(
       uuid: descriptor.uuid,
@@ -1183,7 +1109,6 @@ extension DescriptorConverter on Descriptor {
     );
   }
 
-  /// Returns this descriptor in the generated channel representation.
   api.Descriptor toDescriptor() {
     return api.Descriptor(
       uuid: uuid,
@@ -1192,9 +1117,7 @@ extension DescriptorConverter on Descriptor {
   }
 }
 
-/// Converts between domain descriptor values and generated channel values.
 extension DescriptorChannelConverter on api.Descriptor {
-  /// Creates a channel descriptor from [descriptor].
   static api.Descriptor fromDescriptor(Descriptor descriptor) {
     return api.Descriptor(
       uuid: descriptor.uuid,
@@ -1202,7 +1125,6 @@ extension DescriptorChannelConverter on api.Descriptor {
     );
   }
 
-  /// Returns this channel descriptor in the domain representation.
   Descriptor toDescriptor() {
     return Descriptor(
       uuid: uuid,
@@ -1211,9 +1133,7 @@ extension DescriptorChannelConverter on api.Descriptor {
   }
 }
 
-/// Converts between domain characteristic property values and generated channel values.
 extension CharacteristicPropertyConverter on CharacteristicProperty {
-  /// Creates a domain characteristic property from [property].
   static CharacteristicProperty fromCharacteristicProperty(
     api.CharacteristicProperty property,
   ) {
@@ -1231,7 +1151,6 @@ extension CharacteristicPropertyConverter on CharacteristicProperty {
     );
   }
 
-  /// Returns this characteristic property in the generated channel representation.
   api.CharacteristicProperty toCharacteristicProperty() {
     return api.CharacteristicProperty(
       broadcast: broadcast,
@@ -1248,9 +1167,7 @@ extension CharacteristicPropertyConverter on CharacteristicProperty {
   }
 }
 
-/// Converts between domain characteristic property values and generated channel values.
 extension CharacteristicPropertyChannelConverter on api.CharacteristicProperty {
-  /// Creates a channel characteristic property from [property].
   static api.CharacteristicProperty fromCharacteristicProperty(
     CharacteristicProperty property,
   ) {
@@ -1268,7 +1185,6 @@ extension CharacteristicPropertyChannelConverter on api.CharacteristicProperty {
     );
   }
 
-  /// Returns this channel characteristic property in the domain representation.
   CharacteristicProperty toCharacteristicProperty() {
     return CharacteristicProperty(
       broadcast: broadcast,
@@ -1285,9 +1201,7 @@ extension CharacteristicPropertyChannelConverter on api.CharacteristicProperty {
   }
 }
 
-/// Converts between domain peripheral-manager session values and generated channel values.
 extension PeripheralManagerSessionConverter on PeripheralManagerSession {
-  /// Creates a domain peripheral-manager session from [session].
   static PeripheralManagerSession fromPeripheralManagerSession(
     api.PeripheralManagerSession session,
   ) {
@@ -1298,7 +1212,6 @@ extension PeripheralManagerSessionConverter on PeripheralManagerSession {
     );
   }
 
-  /// Returns this peripheral-manager session in the generated channel representation.
   api.PeripheralManagerSession toPeripheralManagerSession() {
     return api.PeripheralManagerSession(
       clientIdentifier: clientIdentifier,
@@ -1308,10 +1221,8 @@ extension PeripheralManagerSessionConverter on PeripheralManagerSession {
   }
 }
 
-/// Converts between domain peripheral-manager session values and generated channel values.
 extension PeripheralManagerSessionChannelConverter
     on api.PeripheralManagerSession {
-  /// Creates a channel peripheral-manager session from [session].
   static api.PeripheralManagerSession fromPeripheralManagerSession(
     PeripheralManagerSession session,
   ) {
@@ -1322,7 +1233,6 @@ extension PeripheralManagerSessionChannelConverter
     );
   }
 
-  /// Returns this channel peripheral-manager session in the domain representation.
   PeripheralManagerSession toPeripheralManagerSession() {
     return PeripheralManagerSession(
       clientIdentifier: clientIdentifier,
@@ -1332,9 +1242,7 @@ extension PeripheralManagerSessionChannelConverter
   }
 }
 
-/// Converts between domain characteristic permission values and generated channel values.
 extension CharacteristicPermissionConverter on CharacteristicPermission {
-  /// Creates a domain characteristic permission from [permission].
   static CharacteristicPermission fromCharacteristicPermission(
     api.CharacteristicPermission permission,
   ) {
@@ -1346,7 +1254,6 @@ extension CharacteristicPermissionConverter on CharacteristicPermission {
     );
   }
 
-  /// Returns this characteristic permission in the generated channel representation.
   api.CharacteristicPermission toCharacteristicPermission() {
     return api.CharacteristicPermission(
       readable: readable,
@@ -1357,10 +1264,8 @@ extension CharacteristicPermissionConverter on CharacteristicPermission {
   }
 }
 
-/// Converts between domain characteristic permission values and generated channel values.
 extension CharacteristicPermissionChannelConverter
     on api.CharacteristicPermission {
-  /// Creates a channel characteristic permission from [permission].
   static api.CharacteristicPermission fromCharacteristicPermission(
     CharacteristicPermission permission,
   ) {
@@ -1372,7 +1277,6 @@ extension CharacteristicPermissionChannelConverter
     );
   }
 
-  /// Returns this channel characteristic permission in the domain representation.
   CharacteristicPermission toCharacteristicPermission() {
     return CharacteristicPermission(
       readable: readable,
@@ -1383,9 +1287,7 @@ extension CharacteristicPermissionChannelConverter
   }
 }
 
-/// Converts between domain ATT result values and generated channel values.
 extension AttResultConverter on AttResult {
-  /// Creates a domain ATT result from [result].
   static AttResult fromAttResult(api.AttResult result) {
     switch (result) {
       case api.AttResult.success:
@@ -1405,7 +1307,6 @@ extension AttResultConverter on AttResult {
     }
   }
 
-  /// Returns this ATT result in the generated channel representation.
   api.AttResult toAttResult() {
     switch (this) {
       case AttResult.success:
@@ -1426,9 +1327,7 @@ extension AttResultConverter on AttResult {
   }
 }
 
-/// Converts between domain ATT result values and generated channel values.
 extension AttResultChannelConverter on api.AttResult {
-  /// Creates a channel ATT result from [result].
   static api.AttResult fromAttResult(AttResult result) {
     switch (result) {
       case AttResult.success:
@@ -1448,7 +1347,6 @@ extension AttResultChannelConverter on api.AttResult {
     }
   }
 
-  /// Returns this channel ATT result in the domain representation.
   AttResult toAttResult() {
     switch (this) {
       case api.AttResult.success:
@@ -1469,9 +1367,7 @@ extension AttResultChannelConverter on api.AttResult {
   }
 }
 
-/// Converts between domain ATT request values and generated channel values.
 extension AttRequestConverter on AttRequest {
-  /// Creates a domain ATT request from [request].
   static AttRequest fromAttRequest(api.AttRequest request) {
     return AttRequest(
       requestId: request.requestId,
@@ -1483,7 +1379,6 @@ extension AttRequestConverter on AttRequest {
     );
   }
 
-  /// Returns this ATT request in the generated channel representation.
   api.AttRequest toAttRequest() {
     return api.AttRequest(
       requestId: requestId,
@@ -1496,9 +1391,7 @@ extension AttRequestConverter on AttRequest {
   }
 }
 
-/// Converts between domain ATT request values and generated channel values.
 extension AttRequestChannelConverter on api.AttRequest {
-  /// Creates a channel ATT request from [request].
   static api.AttRequest fromAttRequest(AttRequest request) {
     return api.AttRequest(
       requestId: request.requestId,
@@ -1510,7 +1403,6 @@ extension AttRequestChannelConverter on api.AttRequest {
     );
   }
 
-  /// Returns this channel ATT request in the domain representation.
   AttRequest toAttRequest() {
     return AttRequest(
       requestId: requestId,
@@ -1523,9 +1415,7 @@ extension AttRequestChannelConverter on api.AttRequest {
   }
 }
 
-/// Converts between domain mutable descriptor values and generated channel values.
 extension MutableDescriptorConverter on MutableDescriptor {
-  /// Creates a domain mutable descriptor from [descriptor].
   static MutableDescriptor fromMutableDescriptor(
     api.MutableDescriptor descriptor,
   ) {
@@ -1535,7 +1425,6 @@ extension MutableDescriptorConverter on MutableDescriptor {
     );
   }
 
-  /// Returns this mutable descriptor in the generated channel representation.
   api.MutableDescriptor toMutableDescriptor() {
     return api.MutableDescriptor(
       uuid: uuid,
@@ -1544,9 +1433,7 @@ extension MutableDescriptorConverter on MutableDescriptor {
   }
 }
 
-/// Converts between domain mutable descriptor values and generated channel values.
 extension MutableDescriptorChannelConverter on api.MutableDescriptor {
-  /// Creates a channel mutable descriptor from [descriptor].
   static api.MutableDescriptor fromMutableDescriptor(
     MutableDescriptor descriptor,
   ) {
@@ -1556,7 +1443,6 @@ extension MutableDescriptorChannelConverter on api.MutableDescriptor {
     );
   }
 
-  /// Returns this channel mutable descriptor in the domain representation.
   MutableDescriptor toMutableDescriptor() {
     return MutableDescriptor(
       uuid: uuid,
@@ -1565,9 +1451,7 @@ extension MutableDescriptorChannelConverter on api.MutableDescriptor {
   }
 }
 
-/// Converts between domain mutable characteristic values and generated channel values.
 extension MutableCharacteristicConverter on MutableCharacteristic {
-  /// Creates a domain mutable characteristic from [characteristic].
   static MutableCharacteristic fromMutableCharacteristic(
     api.MutableCharacteristic characteristic,
   ) {
@@ -1590,21 +1474,19 @@ extension MutableCharacteristicConverter on MutableCharacteristic {
     );
   }
 
-  /// Returns this mutable characteristic in the generated channel representation.
   api.MutableCharacteristic toMutableCharacteristic() {
     return api.MutableCharacteristic(
       uuid: uuid,
       properties: properties?.toCharacteristicProperty(),
       permissions: permissions?.toCharacteristicPermission(),
       value: value,
-      descriptors: descriptors?.map((e) => e.toMutableDescriptor()).toList(),
+      descriptors:
+          descriptors?.map((e) => e.toMutableDescriptor()).toList(),
     );
   }
 }
 
-/// Converts between domain mutable characteristic values and generated channel values.
 extension MutableCharacteristicChannelConverter on api.MutableCharacteristic {
-  /// Creates a channel mutable characteristic from [characteristic].
   static api.MutableCharacteristic fromMutableCharacteristic(
     MutableCharacteristic characteristic,
   ) {
@@ -1618,8 +1500,8 @@ extension MutableCharacteristicChannelConverter on api.MutableCharacteristic {
       permissions: characteristic.permissions != null
           ? CharacteristicPermissionChannelConverter
               .fromCharacteristicPermission(
-              characteristic.permissions!,
-            )
+            characteristic.permissions!,
+          )
           : null,
       value: characteristic.value,
       descriptors: characteristic.descriptors
@@ -1628,22 +1510,20 @@ extension MutableCharacteristicChannelConverter on api.MutableCharacteristic {
     );
   }
 
-  /// Returns this channel mutable characteristic in the domain representation.
   MutableCharacteristic toMutableCharacteristic() {
     return MutableCharacteristic(
       uuid: uuid,
       properties: properties?.toCharacteristicProperty(),
       permissions: permissions?.toCharacteristicPermission(),
       value: value,
-      descriptors:
-          descriptors?.nonNulls.map((e) => e.toMutableDescriptor()).toList(),
+      descriptors: descriptors?.nonNulls
+          .map((e) => e.toMutableDescriptor())
+          .toList(),
     );
   }
 }
 
-/// Converts between domain mutable service values and generated channel values.
 extension MutableServiceConverter on MutableService {
-  /// Creates a domain mutable service from [service].
   static MutableService fromMutableService(api.MutableService service) {
     return MutableService(
       uuid: service.uuid,
@@ -1654,7 +1534,6 @@ extension MutableServiceConverter on MutableService {
     );
   }
 
-  /// Returns this mutable service in the generated channel representation.
   api.MutableService toMutableService() {
     return api.MutableService(
       uuid: uuid,
@@ -1665,9 +1544,7 @@ extension MutableServiceConverter on MutableService {
   }
 }
 
-/// Converts between domain mutable service values and generated channel values.
 extension MutableServiceChannelConverter on api.MutableService {
-  /// Creates a channel mutable service from [service].
   static api.MutableService fromMutableService(MutableService service) {
     return api.MutableService(
       uuid: service.uuid,
@@ -1678,7 +1555,6 @@ extension MutableServiceChannelConverter on api.MutableService {
     );
   }
 
-  /// Returns this channel mutable service in the domain representation.
   MutableService toMutableService() {
     return MutableService(
       uuid: uuid,
@@ -1690,7 +1566,6 @@ extension MutableServiceChannelConverter on api.MutableService {
   }
 }
 
-/// Removes map entries whose values are null.
 extension NonNullMapEntries<K, V> on Map<K, V> {
   Map<K, V> get nonNulls {
     final entries = this.entries.where((element) => element.value != null);
@@ -1698,7 +1573,6 @@ extension NonNullMapEntries<K, V> on Map<K, V> {
   }
 }
 
-/// Converts map entries with non-null values to a map.
 extension NonNullListMapEntries<K, V> on Iterable<MapEntry<K, V>> {
   Map<K, V> get nonNullsKeys {
     final entries = where((element) => element.key != null);

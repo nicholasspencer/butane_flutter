@@ -36,7 +36,7 @@ to replace the request description and acceptance criteria. Never call
 
 New burn requests are persistent from their first `bd create`: proxied stores
 cannot list or promote ephemeral beads. Show the final bead and ask the operator
-to bless it by removing the defer date; do not bless without that explicit
+to approve it by removing the defer date; do not approve without that explicit
 confirmation.
 
 ## Read receipts
