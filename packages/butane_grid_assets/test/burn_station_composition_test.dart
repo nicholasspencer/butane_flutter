@@ -67,6 +67,9 @@ class _FakeHostHarnessLaunch implements HostHarnessLaunch {
 }
 
 class _TranscriptRuntimeProvider implements RuntimeProvider {
+  @override
+  String exitOutputOf(String name) => '';
+
   final started = <String, RuntimeConfig>{};
   final stopped = <String>[];
   final _events = StreamController<RuntimeEvent>.broadcast();
@@ -408,6 +411,36 @@ void main() {
       expect(reports.whereType<AllocationReady>(), isEmpty);
       await allocation.dispose();
       expect(transport.stopped, [name]);
+    },
+  );
+
+  test(
+    'a SessionOrphaned event is observed, not fatal — the follower still '
+    'publishes and the allocation goes ready',
+    () async {
+      final transport = _TranscriptRuntimeProvider();
+      final reports = <AllocationReport>[];
+      final allocation = BurnFollowerAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: reports,
+          bead: _order(_metadata),
+        ),
+      );
+
+      await allocation.startOrAdopt();
+      final name = allocation.address.providerName;
+      transport.emit(SessionOrphaned(name: name, pgid: 4242, memberCount: 2));
+      await Future<void>.delayed(Duration.zero);
+      transport.emitOutput(
+        name,
+        'burn-follower-published ${_endpoint.vmServiceUri}',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(reports.whereType<AllocationFailed>(), isEmpty);
+      expect(reports.whereType<AllocationReady>(), hasLength(1));
+      await allocation.dispose();
     },
   );
 

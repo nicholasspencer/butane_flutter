@@ -249,6 +249,11 @@ final class _PublishedFollowerAllocation extends Allocation {
         _fail('resident burn follower exited before publishing its endpoint');
       case SessionStarted() || Respawned() || ActivityChanged():
         return;
+      case SessionOrphaned():
+        // NOT terminal (grid_runtime): the process group outlived its
+        // supervisor and stays supervised until it empties or the bounded
+        // grace elapses; the follower's own exit still arrives as Exited/Died.
+        return;
     }
   }
 
