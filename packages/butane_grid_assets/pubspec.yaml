@@ -10,7 +10,7 @@ description: >-
   (zero-model) scenario, and collects a domain `TestReport`. Lives with its
   system: `butane_flutter` is the pack's home (the ADR-0011 placement split,
   landed — grid assets belong with their system).
-version: 0.1.1
+version: 0.2.0-rc.1
 publish_to: none
 resolution: workspace
 
