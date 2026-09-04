@@ -3,7 +3,13 @@ version: 1
 skills:
   - id: burn
     description: File, refine, and inspect a resident-station cross-device burn.
-    path: station_overlay/.claude/skills/burn/SKILL.md
+    path: station_overlay/claude/skills/burn/SKILL.md
     visibility: public
     audience: operator
     args: []
+
+# Keep archive sources publish-safe; the materializer maps the authored name
+# onto Claude's hidden station directory at install time.
+station_overlay:
+  mappings:
+    claude: .claude
