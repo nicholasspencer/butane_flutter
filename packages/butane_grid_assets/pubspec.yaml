@@ -12,6 +12,7 @@ description: >-
   landed — grid assets belong with their system).
 version: 0.2.0-rc.1
 publish_to: none
+repository: https://github.com/nicholasspencer/butane_flutter/tree/main/packages/butane_grid_assets
 resolution: workspace
 
 environment:
