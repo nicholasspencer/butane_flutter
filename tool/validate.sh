@@ -23,31 +23,29 @@ validate_repo() {
     return 1
   fi
 
-  # grid_cli left this list when butane_flutter-t9y deleted the ServeCommand
-  # composition (the burn drives through the resident station; no CLI SDK dep).
-  for dependency in \
-    grid_assets \
-    beads_dart \
-    grid_engine \
-    federated_grid_assets \
-    grid_runtime \
-    grid_exploration; do
-    if ! grep -Eq "^  ${dependency}: any$" packages/butane_grid_assets/pubspec.yaml; then
-      echo "validate.sh: expected tracked dependency declaration: ${dependency}: any" >&2
+  # The burn pack must name the published wave explicitly. `any` cannot select
+  # prereleases and previously let this workspace validate an obsolete engine
+  # while Lunar supplied the incompatible current closure.
+  while IFS='|' read -r file dependency constraint; do
+    if ! grep -Fqx "  ${dependency}: ${constraint}" "$file"; then
+      echo "validate.sh: expected tracked dependency declaration: ${dependency}: ${constraint}" >&2
       return 1
     fi
-  done
+  done <<'DEPENDENCIES'
+packages/butane_grid_assets/pubspec.yaml|genesis_tree|^0.3.0
+packages/butane_grid_assets/pubspec.yaml|grid_assets|^0.6.0-rc.10
+packages/butane_grid_assets/pubspec.yaml|beads_dart|^0.2.0-rc.7
+packages/butane_grid_assets/pubspec.yaml|grid_engine|^0.3.0-rc.12
+packages/butane_grid_assets/pubspec.yaml|federated_grid_assets|^0.3.0-rc.3
+packages/butane_grid_assets/pubspec.yaml|grid_runtime|^0.2.0-rc.10
+packages/butane_grid_assets/pubspec.yaml|grid_exploration|^0.3.0-rc.4
+packages/butane_harness/pubspec.yaml|genesis_perception|^0.3.0
+packages/butane_harness/pubspec.yaml|leonard_contract|^0.2.2
+packages/butane_harness/pubspec.yaml|leonard_flutter|^0.3.1
+DEPENDENCIES
 
   if ! grep -Eq '^  sdk: \^3\.9\.0$' pubspec.yaml; then
     echo 'validate.sh: expected tracked SDK declaration: sdk: ^3.9.0' >&2
-    return 1
-  fi
-  if ! grep -Eq '^  genesis_perception: \^0\.1\.3$' packages/butane_harness/pubspec.yaml; then
-    echo 'validate.sh: expected tracked dependency declaration: genesis_perception: ^0.1.3' >&2
-    return 1
-  fi
-  if ! grep -Eq '^  leonard_flutter: \^0\.1\.8$' packages/butane_harness/pubspec.yaml; then
-    echo 'validate.sh: expected tracked dependency declaration: leonard_flutter: ^0.1.8' >&2
     return 1
   fi
 }

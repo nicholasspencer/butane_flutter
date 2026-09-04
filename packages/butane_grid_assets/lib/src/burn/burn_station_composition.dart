@@ -29,6 +29,7 @@ import 'package:grid_runtime/grid_runtime.dart'
         Respawned,
         RuntimeConfig,
         RuntimeEvent,
+        SessionOrphaned,
         SessionStarted,
         SystemProcessGroupController;
 
@@ -247,6 +248,15 @@ final class _PublishedFollowerAllocation extends Allocation {
     switch (event) {
       case Exited() || Died():
         _fail('resident burn follower exited before publishing its endpoint');
+      case SessionOrphaned(:final pgid, :final memberCount):
+        // This is an observation, not a terminal. The runtime still owns and
+        // supervises the surviving process group; its later Exited/Died event
+        // remains the only lifecycle terminal.
+        log.call(
+          'resident burn-observation: follower session orphaned '
+          'sessionId=${event.name} pgid=$pgid memberCount=$memberCount',
+        );
+        return;
       case SessionStarted() || Respawned() || ActivityChanged():
         return;
     }
