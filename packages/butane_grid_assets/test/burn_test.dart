@@ -114,6 +114,9 @@ class _FakeProcessGroupController implements ProcessGroupController {
   bool processAlive(int pid) => _alive;
 
   @override
+  Future<List<int>> groupMembers(int pgid) async => const <int>[];
+
+  @override
   bool signalGroup(int pgid, ProcessSignal signal) {
     final label = signal == ProcessSignal.sigterm
         ? 'TERM'

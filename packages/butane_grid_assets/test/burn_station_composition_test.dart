@@ -89,11 +89,18 @@ class _TranscriptRuntimeProvider implements RuntimeProvider {
   Future<void> interrupt(String name) async {}
 
   @override
+  Future<void> write(String name, List<int> bytes) async {}
+
+  @override
   Stream<RuntimeEvent> get events => _events.stream;
 
   @override
   Stream<String> output(String name) =>
       _outputs.putIfAbsent(name, StreamController<String>.broadcast).stream;
+
+  @override
+  Stream<List<int>> interactionOutput(String name) =>
+      const Stream<List<int>>.empty();
 
   @override
   bool isRunning(String name) =>
@@ -114,6 +121,9 @@ class _TranscriptRuntimeProvider implements RuntimeProvider {
 
   @override
   RuntimeEvent? terminalOf(String name) => null;
+
+  @override
+  String exitOutputOf(String name) => '';
 
   @override
   ({int pid, int? pgid})? identityOf(String name) => null;
@@ -410,6 +420,57 @@ void main() {
       expect(transport.stopped, [name]);
     },
   );
+
+  test('orphan observation stays live until the follower publishes', () async {
+    final notes = <({String beadId, String line})>[];
+    final registry = buildBurnStationRegistry(
+      appendNote: (beadId, line) async =>
+          notes.add((beadId: beadId, line: line)),
+      driveFactory: (_) => _FakeLeonardDrive(),
+      burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+    );
+    final follower = _capability(registry, 0);
+    final transport = _TranscriptRuntimeProvider();
+    final reports = <AllocationReport>[];
+    final allocation = follower.createAllocation(
+      _allocationContext(
+        transport: transport,
+        reports: reports,
+        bead: _order(_metadata),
+      ),
+    );
+
+    await allocation.startOrAdopt();
+    final name = allocation.address.providerName;
+    transport.emit(
+      SessionOrphaned(name: name, pgid: 4242, memberCount: 2, pid: 4242),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(allocation.state, AllocationState.live);
+    expect(transport.started, hasLength(1));
+    expect(transport.stopped, isEmpty);
+    expect(reports, isEmpty);
+    expect(
+      notes.map((note) => note.line),
+      contains(
+        'resident burn-observation: follower session orphaned '
+        'sessionId=$name pgid=4242 memberCount=2',
+      ),
+    );
+
+    transport.emitOutput(
+      name,
+      'burn-follower-published ${_endpoint.vmServiceUri}',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(allocation.state, AllocationState.ready);
+    expect(reports.whereType<AllocationFailed>(), isEmpty);
+    expect(reports.whereType<AllocationReady>(), hasLength(1));
+    await allocation.dispose();
+    expect(transport.stopped, [name]);
+  });
 
   test('Windows metadata selects remote central and two drives', () async {
     final remote = _FakeHostHarnessLaunch();
