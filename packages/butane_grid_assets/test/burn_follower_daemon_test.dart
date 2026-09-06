@@ -182,6 +182,82 @@ void main() {
   });
 
   test(
+    'termination during launch exits promptly and emits teardown receipt',
+    () async {
+      final pendingLaunch = Completer<LaunchedDaemon>();
+      final launcher = _FakeFollowerLauncher(
+        launches: [() => pendingLaunch.future],
+      );
+      final processes = _FakeProcessGroupController();
+      final runner = ButaneFollowerRunner(
+        launcher: launcher,
+        processes: processes,
+        reapGrace: Duration.zero,
+      );
+      final terminate = StreamController<void>();
+      final published = <String>[];
+      final logs = <String>[];
+      Timer? launchDeadline;
+
+      final run = runZoned(
+        () => runBurnFollowerDaemon(
+          inputs: _inputs,
+          runner: runner,
+          terminate: terminate.stream,
+          publish: published.add,
+          onLog: logs.add,
+        ),
+        zoneSpecification: ZoneSpecification(
+          createTimer: (self, parent, zone, duration, callback) {
+            final timer = parent.createTimer(zone, duration, callback);
+            if (duration == const Duration(minutes: 15)) {
+              launchDeadline = timer;
+            }
+            return timer;
+          },
+        ),
+      );
+
+      while (launcher.launchCalls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      terminate.add(null);
+      expect(await run.timeout(const Duration(milliseconds: 250)), 0);
+      expect(launchDeadline, isNotNull);
+      expect(launchDeadline!.isActive, isFalse);
+      expect(published, isEmpty);
+      expect(
+        logs.where(
+          (line) =>
+              line ==
+              'termination-receipt: burn follower daemon launch aborted',
+        ),
+        hasLength(1),
+      );
+      expect(
+        logs.where(
+          (line) => line == 'teardown-receipt: burn follower daemon reaped',
+        ),
+        hasLength(1),
+      );
+      expect(processes.signals, isNot(contains(ProcessSignal.sigkill)));
+      pendingLaunch.complete(
+        const LaunchedDaemon(pid: 4242, pgid: 4242, endpoint: _endpoint),
+      );
+      while (processes.signals.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(runner.isRunning, isFalse);
+      expect(
+        processes.signals.where((signal) => signal == ProcessSignal.sigterm),
+        hasLength(1),
+      );
+      expect(processes.signals, isNot(contains(ProcessSignal.sigkill)));
+      await terminate.close();
+    },
+  );
+
+  test(
     'launch and teardown deadlines settle, receipt once, and permit runner reuse',
     () async {
       Future<void> exercise(
@@ -237,6 +313,7 @@ void main() {
           pid: 4242,
           pgid: 4242,
           endpoint: _endpoint,
+          exited: Future<void>.value(),
           onReap: () => Completer<void>().future,
         ),
       );
@@ -286,4 +363,45 @@ void main() {
     );
     await terminate.close();
   });
+
+  test(
+    'resident fallback observes child death without launcher exit future',
+    () async {
+      final launcher = _FakeFollowerLauncher();
+      final processes = _FakeProcessGroupController();
+      final runner = ButaneFollowerRunner(
+        launcher: launcher,
+        processes: processes,
+        reapGrace: Duration.zero,
+        residentExitPollInterval: Duration.zero,
+      );
+      final terminate = StreamController<void>();
+      final published = <String>[];
+      final logs = <String>[];
+
+      final run = runBurnFollowerDaemon(
+        inputs: _inputs,
+        runner: runner,
+        terminate: terminate.stream,
+        publish: published.add,
+        onLog: logs.add,
+      );
+
+      while (published.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      processes.alive = false;
+      expect(await run.timeout(const Duration(milliseconds: 250)), 1);
+      expect(
+        logs,
+        contains(contains('burn follower child exited while resident')),
+      );
+      expect(
+        logs.where((line) => line.startsWith('teardown-receipt:')),
+        hasLength(1),
+      );
+      expect(runner.isRunning, isFalse);
+      await terminate.close();
+    },
+  );
 }
