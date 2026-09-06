@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:io' show Directory, Platform;
+import 'dart:isolate' show Isolate;
 
 import 'package:beads_dart/beads_dart.dart' show Bead;
 import 'package:genesis_tree/genesis_tree.dart' show TreeContext;
@@ -32,6 +33,7 @@ import 'package:grid_runtime/grid_runtime.dart'
         SessionOrphaned,
         SessionStarted,
         SystemProcessGroupController;
+import 'package:meta/meta.dart' show visibleForTesting;
 
 import 'burn_capabilities.dart'
     show
@@ -423,11 +425,24 @@ CapabilityRegistry buildBurnStationRegistry({
   required NoteAppender appendNote,
   DateTime Function()? clock,
   String? burnFollowerEntrypoint,
+  @visibleForTesting Uri? Function(Uri)? packageUriResolver,
   LeonardDrive Function(String executableOverride)? driveFactory,
   MacosHostLaunchFactory? macosHostFactory,
   WindowsHostLaunchFactory? windowsHostFactory,
   Map<String, String>? environment,
 }) {
+  const packageLibrary = 'package:butane_grid_assets/butane_grid_assets.dart';
+  final packageEntrypoint =
+      (packageUriResolver ?? Isolate.resolvePackageUriSync)(
+        Uri.parse(packageLibrary),
+      )?.resolve('../bin/burn_follower_daemon.dart').toFilePath();
+  final resolvedBurnFollowerEntrypoint =
+      burnFollowerEntrypoint ??
+      packageEntrypoint ??
+      (throw StateError(
+        'Could not resolve $packageLibrary and no '
+        'burnFollowerEntrypoint was provided.',
+      ));
   final log = _BeadNoteLog(appendNote);
   final resolvedDriveFactory =
       driveFactory ??
@@ -442,9 +457,7 @@ CapabilityRegistry buildBurnStationRegistry({
         drive: orderDrive,
         environment: environment ?? Platform.environment,
         log: log,
-        entrypoint:
-            burnFollowerEntrypoint ??
-            '${Directory.current.path}/bin/burn_follower_daemon.dart',
+        entrypoint: resolvedBurnFollowerEntrypoint,
       ),
       kBurnHostStep: _ResidentBurnHostCapability(
         drive: orderDrive,
