@@ -46,8 +46,20 @@ Future<int> runBurnFollowerDaemon({
   Duration teardownTimeout = const Duration(seconds: 30),
 }) async {
   var result = 1;
+  final termination = Completer<void>();
+  final terminationSubscription = terminate.listen(
+    (_) {
+      if (!termination.isCompleted) termination.complete();
+    },
+    onError: (Object error, StackTrace stackTrace) {
+      if (!termination.isCompleted) {
+        termination.completeError(error, stackTrace);
+      }
+    },
+  );
   try {
-    final endpoint = await runner
+    final launchResult = Completer<FollowerEndpoint>();
+    runner
         .launch(
           LaunchSpec(
             app: 'butane_harness',
@@ -59,27 +71,54 @@ Future<int> runBurnFollowerDaemon({
             leonardDrive: inputs.leonardDrive,
           ),
         )
-        .timeout(
-          launchTimeout,
-          onTimeout: () => throw TimeoutException(
+        .then<void>(
+          (endpoint) {
+            if (!launchResult.isCompleted) launchResult.complete(endpoint);
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!launchResult.isCompleted) {
+              launchResult.completeError(error, stackTrace);
+            }
+          },
+        );
+    final launchTimer = Timer(launchTimeout, () {
+      if (!launchResult.isCompleted) {
+        launchResult.completeError(
+          TimeoutException(
             'burn follower launch timed out after '
             '${launchTimeout.inMilliseconds}ms',
             launchTimeout,
           ),
         );
-    publish('burn-follower-published ${endpoint.vmServiceUri}');
-    final residentExit = runner.residentExit;
-    if (residentExit == null) {
-      await terminate.first;
+      }
+    });
+    late final FollowerEndpoint? endpoint;
+    try {
+      endpoint = await Future.any<FollowerEndpoint?>([
+        launchResult.future.then<FollowerEndpoint?>((endpoint) => endpoint),
+        termination.future.then<FollowerEndpoint?>((_) => null),
+      ]);
+    } finally {
+      launchTimer.cancel();
+    }
+    if (endpoint == null) {
+      onLog?.call('termination-receipt: burn follower daemon launch aborted');
+      result = 0;
     } else {
+      publish('burn-follower-published ${endpoint.vmServiceUri}');
+      final residentExit =
+          runner.residentExit ??
+          (throw StateError(
+            'burn follower runner lost its resident after launch',
+          ));
       await Future.any<void>([
-        terminate.first,
+        termination.future,
         residentExit.then<void>(
           (_) => throw StateError('burn follower child exited while resident'),
         ),
       ]);
+      result = 0;
     }
-    result = 0;
   } on Object catch (error) {
     onLog?.call('burn follower supervisor failed: $error');
     result = 1;
@@ -101,5 +140,6 @@ Future<int> runBurnFollowerDaemon({
     );
     result = 1;
   }
+  await terminationSubscription.cancel();
   return result;
 }

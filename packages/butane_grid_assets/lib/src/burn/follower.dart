@@ -210,24 +210,42 @@ class ButaneFollowerRunner {
     required FollowerLauncher launcher,
     required ProcessGroupController processes,
     Duration reapGrace = const Duration(seconds: 2),
+    Duration residentExitPollInterval = const Duration(milliseconds: 250),
     void Function(String)? onLog,
   }) : _launcher = launcher,
        _processes = processes,
        _reapGrace = reapGrace,
+       _residentExitPollInterval = residentExitPollInterval,
        _onLog = onLog ?? _noLog;
 
   final FollowerLauncher _launcher;
   final ProcessGroupController _processes;
   final Duration _reapGrace;
+  final Duration _residentExitPollInterval;
   final void Function(String) _onLog;
 
   LaunchedDaemon? _daemon;
+  Future<void>? _residentExitFallback;
+  var _launchGeneration = 0;
 
   /// Whether a launched follower daemon is currently running (un-reaped).
   bool get isRunning => _daemon != null;
 
-  /// Death notification for the currently owned daemon.
-  Future<void>? get residentExit => _daemon?.exited;
+  /// Death notification for the currently owned daemon. Launchers should
+  /// provide the native notification when possible; otherwise the runner
+  /// polls the leader through its existing process controller.
+  Future<void>? get residentExit {
+    final daemon = _daemon;
+    if (daemon == null) return null;
+    return daemon.exited ??
+        (_residentExitFallback ??= _pollResidentExit(daemon));
+  }
+
+  Future<void> _pollResidentExit(LaunchedDaemon daemon) async {
+    while (identical(_daemon, daemon) && _processes.processAlive(daemon.pid)) {
+      await Future<void>.delayed(_residentExitPollInterval);
+    }
+  }
 
   /// Provisions + builds + launches [spec], publishing the follower endpoint.
   /// (An act.) A second launch while one is already running reaps the prior
@@ -237,8 +255,14 @@ class ButaneFollowerRunner {
       _onLog('follower: relaunch — reaping the prior daemon first');
       await teardown();
     }
+    final launchGeneration = ++_launchGeneration;
     _onLog('follower: provision+build+launch ${spec.app} for ${spec.target}');
     final daemon = await _launcher.launch(spec);
+    if (launchGeneration != _launchGeneration) {
+      await _reap(daemon);
+      throw StateError('follower launch completed after teardown');
+    }
+    _residentExitFallback = null;
     _daemon = daemon;
     _onLog(
       'follower: launched pid ${daemon.pid} (pgid ${daemon.pgid}); '
@@ -252,10 +276,16 @@ class ButaneFollowerRunner {
   /// teardown with nothing running returns [GroupTerminateResult.alreadyGone].
   /// (An act — the guaranteed teardown, ADR-0011 D9 / Hazards.)
   Future<GroupTerminateResult> teardown() async {
+    _launchGeneration++;
     final daemon = _daemon;
-    if (daemon == null) return GroupTerminateResult.alreadyGone;
     _daemon =
         null; // once-only: a release racing a TTL reap cannot double-signal
+    _residentExitFallback = null;
+    if (daemon == null) return GroupTerminateResult.alreadyGone;
+    return _reap(daemon);
+  }
+
+  Future<GroupTerminateResult> _reap(LaunchedDaemon daemon) async {
     final result = await terminateGroup(
       controller: _processes,
       pgid: daemon.pgid,
