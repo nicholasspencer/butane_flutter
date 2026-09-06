@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:beads_dart/beads_dart.dart';
 import 'package:butane_grid_assets/butane_grid_assets.dart';
@@ -205,6 +206,107 @@ void main() {
     expect(_capability(registry, 0), isA<Capability>());
     expect(_capability(registry, 0), isNot(isA<ProcessCapability>()));
     expect(_capability(registry, 1), isA<BurnHostCapability>());
+  });
+
+  test(
+    'default follower entrypoint resolves outside the current cwd',
+    () async {
+      final originalDirectory = Directory.current;
+      final temporaryDirectory = await Directory.systemTemp.createTemp(
+        'burn-station-composition-',
+      );
+      Allocation? allocation;
+
+      try {
+        Directory.current = temporaryDirectory.path;
+        final registry = buildBurnStationRegistry(
+          appendNote: (_, _) async {},
+          driveFactory: (_) => _FakeLeonardDrive(),
+        );
+        final transport = _TranscriptRuntimeProvider();
+        allocation = _capability(registry, 0).createAllocation(
+          _allocationContext(
+            transport: transport,
+            reports: <AllocationReport>[],
+            bead: _order(_metadata),
+          ),
+        );
+
+        await allocation.startOrAdopt();
+        final config = transport.started[allocation.address.providerName]!;
+        final entrypoint = config.args[1];
+        final packageRoot = File(entrypoint).parent.parent;
+        final cwdEntrypoint = temporaryDirectory.uri
+            .resolve('bin/burn_follower_daemon.dart')
+            .toFilePath();
+
+        expect(entrypoint, endsWith('bin/burn_follower_daemon.dart'));
+        expect(File(entrypoint).existsSync(), isTrue);
+        expect(entrypoint, isNot(cwdEntrypoint));
+        expect(config.workDir, packageRoot.path);
+        expect(
+          File(
+            packageRoot.uri.resolve('pubspec.yaml').toFilePath(),
+          ).existsSync(),
+          isTrue,
+        );
+      } finally {
+        Directory.current = originalDirectory.path;
+        try {
+          await allocation?.dispose();
+        } finally {
+          await temporaryDirectory.delete(recursive: true);
+        }
+      }
+    },
+  );
+
+  test(
+    'explicit follower entrypoint survives failed package resolution',
+    () async {
+      const entrypoint = '/explicit/bin/burn_follower_daemon.dart';
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        burnFollowerEntrypoint: entrypoint,
+        packageUriResolver: (_) => null,
+        driveFactory: (_) => _FakeLeonardDrive(),
+      );
+      final transport = _TranscriptRuntimeProvider();
+      final allocation = _capability(registry, 0).createAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: <AllocationReport>[],
+          bead: _order(_metadata),
+        ),
+      );
+
+      try {
+        await allocation.startOrAdopt();
+        final config = transport.started[allocation.address.providerName]!;
+        expect(config.args[1], entrypoint);
+      } finally {
+        await allocation.dispose();
+      }
+    },
+  );
+
+  test('registry fails when neither follower entrypoint source resolves', () {
+    expect(
+      () => buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        packageUriResolver: (_) => null,
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          allOf(
+            contains('package:butane_grid_assets/butane_grid_assets.dart'),
+            contains('burnFollowerEntrypoint'),
+          ),
+        ),
+      ),
+    );
   });
 
   test('follower stays mounted from readiness through host report', () async {
