@@ -96,8 +96,11 @@ class _TranscriptRuntimeProvider implements RuntimeProvider {
   Stream<RuntimeEvent> get events => _events.stream;
 
   @override
-  Stream<String> output(String name) =>
-      _outputs.putIfAbsent(name, StreamController<String>.broadcast).stream;
+  Stream<String> output(String name) {
+    // Mirrors SubprocessProvider from package:grid_runtime: output(name) is
+    // permanently empty until start(name) registers the transcript.
+    return _outputs[name]?.stream ?? const Stream<String>.empty();
+  }
 
   @override
   Stream<List<int>> interactionOutput(String name) =>
@@ -194,6 +197,29 @@ void main() {
       expect(burnCircuitFor(_order(const {})), isNull);
     });
   });
+
+  test(
+    'output subscription created before start never receives publish line',
+    () async {
+      final transport = _TranscriptRuntimeProvider();
+      final received = <String>[];
+      const name = 'burn-follower';
+      final subscription = transport.output(name).listen(received.add);
+
+      await transport.start(
+        name,
+        const RuntimeConfig(workDir: '.', command: 'burn-follower'),
+      );
+      transport.emitOutput(
+        name,
+        'burn-follower-published ${_endpoint.vmServiceUri}',
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, isEmpty);
+      await subscription.cancel();
+    },
+  );
 
   test('registry exposes a direct follower capability and service host', () {
     final registry = buildBurnStationRegistry(
