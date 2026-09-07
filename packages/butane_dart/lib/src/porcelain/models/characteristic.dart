@@ -4,15 +4,20 @@ base class Characteristic extends Attribute {
   Characteristic({
     required super.uuid,
     required this.service,
+    this.properties,
   }) : _descriptorData = null;
 
   Characteristic._fromData({
     required super.uuid,
     required this.service,
     required List<api.Descriptor>? descriptorData,
+    this.properties,
   }) : _descriptorData = descriptorData;
 
   final Service? service;
+
+  /// The operations supported by this characteristic, if reported.
+  final CharacteristicProperties? properties;
 
   final List<api.Descriptor>? _descriptorData;
 
@@ -119,6 +124,9 @@ extension ApiCharacteristic on api.Characteristic {
       uuid: UuidIdentifier(uuid),
       service: service,
       descriptorData: descriptors,
+      properties: properties == null
+          ? null
+          : CharacteristicProperties.fromApi(properties!),
     );
   }
 }

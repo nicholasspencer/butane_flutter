@@ -35,6 +35,107 @@ void main() {
     });
   });
 
+  test('CharacteristicProperties.fromApi maps all ten fields', () {
+    final properties = CharacteristicProperties.fromApi(
+      const api.CharacteristicProperty(
+        broadcast: true,
+        read: false,
+        writeWithoutResponse: true,
+        write: false,
+        notify: true,
+        indicate: false,
+        authenticatedSignedWrites: true,
+        extendedProperties: false,
+        notifyEncryptionRequired: true,
+        indicateEncryptionRequired: false,
+      ),
+    );
+
+    expect(properties.broadcast, isTrue);
+    expect(properties.read, isFalse);
+    expect(properties.writeWithoutResponse, isTrue);
+    expect(properties.write, isFalse);
+    expect(properties.notify, isTrue);
+    expect(properties.indicate, isFalse);
+    expect(properties.authenticatedSignedWrites, isTrue);
+    expect(properties.extendedProperties, isFalse);
+    expect(properties.notifyEncryptionRequired, isTrue);
+    expect(properties.indicateEncryptionRequired, isFalse);
+  });
+
+  test(
+      'Service.characteristics preserves all ten characteristic property flags',
+      () async {
+    final manager = CentralManager(
+      platform: _FakePlatform(
+        characteristicsValue: [
+          api.Characteristic(
+            uuid: 'characteristic',
+            properties: const api.CharacteristicProperty(
+              broadcast: false,
+              read: true,
+              writeWithoutResponse: false,
+              write: true,
+              notify: false,
+              indicate: true,
+              authenticatedSignedWrites: false,
+              extendedProperties: true,
+              notifyEncryptionRequired: false,
+              indicateEncryptionRequired: true,
+            ),
+          ),
+        ],
+      ),
+    );
+    addTearDown(manager.dispose);
+    final peripheral = Peripheral(
+      manager: manager,
+      name: 'peripheral',
+      identifier: const StringIdentifier('peripheral'),
+    );
+    final service = Service(
+      uuid: const UuidIdentifier('service'),
+      peripheral: peripheral,
+    );
+
+    final characteristic = (await service.characteristics).single;
+    final properties = characteristic.properties!;
+
+    expect(properties.broadcast, isFalse);
+    expect(properties.read, isTrue);
+    expect(properties.writeWithoutResponse, isFalse);
+    expect(properties.write, isTrue);
+    expect(properties.notify, isFalse);
+    expect(properties.indicate, isTrue);
+    expect(properties.authenticatedSignedWrites, isFalse);
+    expect(properties.extendedProperties, isTrue);
+    expect(properties.notifyEncryptionRequired, isFalse);
+    expect(properties.indicateEncryptionRequired, isTrue);
+  });
+
+  test('Service.characteristics preserves absent characteristic properties',
+      () async {
+    final manager = CentralManager(
+      platform: _FakePlatform(
+        characteristicsValue: [api.Characteristic(uuid: 'characteristic')],
+      ),
+    );
+    addTearDown(manager.dispose);
+    final peripheral = Peripheral(
+      manager: manager,
+      name: 'peripheral',
+      identifier: const StringIdentifier('peripheral'),
+    );
+    final service = Service(
+      uuid: const UuidIdentifier('service'),
+      peripheral: peripheral,
+    );
+
+    final characteristic = (await service.characteristics).single;
+
+    expect(characteristic.properties, isNull);
+  });
+
   group('CentralManager with an injected pure-Dart platform', () {
     test('state reads platform.clientState', () async {
       final manager = CentralManager(
@@ -186,20 +287,20 @@ void main() {
 final class _FakePlatform extends api.ButanePlatformInterface {
   _FakePlatform({
     this.clientStateValue = api.ClientState.poweredOn,
+    this.characteristicsValue = const [],
     Stream<api.ClientState>? clientStates,
     this.peripheralsValue = const [],
     this.servicesValue = const [],
-    this.characteristicsValue = const [],
     Uint8List? descriptorReadValue,
     this.effectiveMtu = 23,
   })  : _clientStates = clientStates,
         descriptorReadValue = descriptorReadValue ?? Uint8List(0);
 
   final api.ClientState clientStateValue;
+  final Iterable<api.Characteristic> characteristicsValue;
   final Stream<api.ClientState>? _clientStates;
   final Iterable<api.Peripheral> peripheralsValue;
   final Iterable<api.Service> servicesValue;
-  final Iterable<api.Characteristic> characteristicsValue;
   final Uint8List descriptorReadValue;
   final int effectiveMtu;
 

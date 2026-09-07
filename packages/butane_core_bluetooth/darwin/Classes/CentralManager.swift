@@ -176,7 +176,19 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             uuid: $0.uuid.uuidString,
             value: FlutterStandardTypedData(bytes: ($0.value as? Data? ?? Data())!)
           )
-        }
+        },
+        properties: CharacteristicProperty(
+          broadcast: $0.properties.contains(.broadcast),
+          read: $0.properties.contains(.read),
+          writeWithoutResponse: $0.properties.contains(.writeWithoutResponse),
+          write: $0.properties.contains(.write),
+          notify: $0.properties.contains(.notify),
+          indicate: $0.properties.contains(.indicate),
+          authenticatedSignedWrites: $0.properties.contains(.authenticatedSignedWrites),
+          extendedProperties: $0.properties.contains(.extendedProperties),
+          notifyEncryptionRequired: $0.properties.contains(.notifyEncryptionRequired),
+          indicateEncryptionRequired: $0.properties.contains(.indicateEncryptionRequired)
+        )
       )
     } ?? []
   }
