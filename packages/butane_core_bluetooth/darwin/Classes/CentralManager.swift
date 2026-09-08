@@ -22,7 +22,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   
   lazy var manager: CBCentralManager = {
     if let restorationIdentifier = restorationIdentifier {
-      return .init(delegate: self, queue: queue, options: [CBCentralManagerRestoredStateScanOptionsKey: restorationIdentifier])
+      return .init(delegate: self, queue: queue, options: [CBCentralManagerOptionRestoreIdentifierKey: restorationIdentifier])
     }
     return .init(delegate: self, queue: queue)
   }()
