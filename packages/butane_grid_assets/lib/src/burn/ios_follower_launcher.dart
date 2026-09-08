@@ -198,13 +198,20 @@ class IosFollowerLauncher implements FollowerLauncher {
     this.launchTimeout = const Duration(minutes: 10),
     this.readyTimeout = const Duration(minutes: 4),
     this.lifecycleTimeout = const Duration(minutes: 12),
+    this.forwardedPreferenceWindow = const Duration(seconds: 15),
     ProcessGroupController processes = const SystemProcessGroupController(),
     IosProcessStarter processStarter = _startIosProcess,
     IosPreLaunchCleanup? preLaunchCleanup,
+    Future<bool> Function(Uri)? explorationReadyProbe,
+    Future<List<IosMdnsCandidate>> Function()? mdnsCandidateResolver,
+    Future<Process> Function(IosMdnsCandidate)? relayStarter,
     void Function(String)? onLog,
   }) : _processes = processes,
        _processStarter = processStarter,
        _preLaunchCleanup = preLaunchCleanup,
+       _explorationReadyProbe = explorationReadyProbe ?? isIosExplorationReady,
+       _mdnsCandidateResolver = mdnsCandidateResolver,
+       _relayStarter = relayStarter,
        _onLog = onLog ?? _noLog;
 
   /// The target device UDID (`flutter run -d`).
@@ -240,9 +247,16 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// Hard bound for the complete iOS launcher lifecycle.
   final Duration lifecycleTimeout;
 
+  /// How long endpoint discovery waits for Flutter's forwarded URI before
+  /// falling back to wireless mDNS discovery.
+  final Duration forwardedPreferenceWindow;
+
   final ProcessGroupController _processes;
   final IosProcessStarter _processStarter;
   final IosPreLaunchCleanup? _preLaunchCleanup;
+  final Future<bool> Function(Uri) _explorationReadyProbe;
+  final Future<List<IosMdnsCandidate>> Function()? _mdnsCandidateResolver;
+  final Future<Process> Function(IosMdnsCandidate)? _relayStarter;
   final void Function(String) _onLog;
 
   LaunchedDaemon? _last;
@@ -446,7 +460,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     DateTime deadline,
     Completer<String> forwarded,
   ) async {
-    final preferenceDeadline = DateTime.now().add(const Duration(seconds: 15));
+    final preferenceDeadline = DateTime.now().add(forwardedPreferenceWindow);
     while (!forwarded.isCompleted &&
         DateTime.now().isBefore(deadline) &&
         DateTime.now().isBefore(preferenceDeadline)) {
@@ -459,13 +473,14 @@ class IosFollowerLauncher implements FollowerLauncher {
         final explorationReady = await _phase<bool>(
           'readiness',
           readyTimeout,
-          isIosExplorationReady(_vmServiceWsToHttpBase(wsUri)),
+          _explorationReadyProbe(_vmServiceWsToHttpBase(wsUri)),
         );
         if (explorationReady) {
           return (wsUri: wsUri, relay: null);
         }
       }
-      final candidates = await _resolveCandidates();
+      final candidates =
+          await (_mdnsCandidateResolver?.call() ?? _resolveCandidates());
       for (final candidate in candidates) {
         final base = Uri.parse(
           'http://${candidate.ip}:${candidate.port}/${candidate.authCode}/',
@@ -473,13 +488,13 @@ class IosFollowerLauncher implements FollowerLauncher {
         final explorationReady = await _phase<bool>(
           'readiness',
           readyTimeout,
-          isIosExplorationReady(base),
+          _explorationReadyProbe(base),
         );
         if (explorationReady) {
           final relay = await _phase<Process>(
             'readiness',
             readyTimeout,
-            _startRelay(candidate),
+            _relayStarter?.call(candidate) ?? _startRelay(candidate),
           );
           return (
             wsUri: 'ws://127.0.0.1:$relayPort/${candidate.authCode}/ws',
