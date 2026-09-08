@@ -4,12 +4,8 @@ import 'dart:typed_data';
 import 'package:butane_dart/interface.dart';
 import 'package:dbus/dbus.dart';
 
-/// Wrap raw bytes as a D-Bus `ay` value. The dbus 0.2.5 package has no
-/// convenience constructor for byte arrays, so we build one per call.
-DBusArray _byteArray(List<int> bytes) => DBusArray(
-      DBusSignature('y'),
-      [for (final b in bytes) DBusByte(b)],
-    );
+/// Wrap raw bytes as a D-Bus `ay` value.
+DBusArray _byteArray(List<int> bytes) => DBusArray.byte(bytes);
 
 /// Callbacks the [GattCharacteristic] object invokes when BlueZ forwards a
 /// remote read/write from a connected central. The butane peripheral
@@ -50,13 +46,9 @@ abstract class GattServerDelegate {
 /// new `RegisterApplication` is required (which is why [addService]
 /// unregisters + re-registers on each call).
 class GattApplication extends DBusObject {
-  GattApplication(this._path);
+  GattApplication(DBusObjectPath path) : super(path);
 
-  final DBusObjectPath _path;
   final List<DBusObject> _children = [];
-
-  @override
-  DBusObjectPath get path => _path;
 
   void addChild(DBusObject child) => _children.add(child);
 
@@ -68,14 +60,9 @@ class GattApplication extends DBusObject {
   }
 
   @override
-  Future<DBusMethodResponse> handleMethodCall(
-    String? sender,
-    String? interface,
-    String member,
-    List<DBusValue> values,
-  ) async {
-    if (interface == 'org.freedesktop.DBus.ObjectManager' &&
-        member == 'GetManagedObjects') {
+  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
+    if (methodCall.interface == 'org.freedesktop.DBus.ObjectManager' &&
+        methodCall.name == 'GetManagedObjects') {
       return _getManagedObjects();
     }
     return DBusMethodErrorResponse.unknownMethod();
@@ -93,8 +80,8 @@ class GattApplication extends DBusObject {
         final propsResponse = await child.getAllProperties(iface.name);
         if (propsResponse is! DBusGetAllPropertiesResponse) continue;
         final propsDict = <DBusValue, DBusValue>{};
-        (propsResponse.returnValues.first as DBusDict).children.forEach(
-          (k, v) => propsDict[k] = v,
+        propsDict.addAll(
+          (propsResponse.returnValues.first as DBusDict).children,
         );
         interfaces[DBusString(iface.name)] = DBusDict(
           DBusSignature('s'),
@@ -124,16 +111,12 @@ class GattService extends DBusObject {
     required DBusObjectPath objectPath,
     required this.uuid,
     required this.isPrimary,
-  }) : _path = objectPath;
+  }) : super(objectPath);
 
   static const _interfaceName = 'org.bluez.GattService1';
 
-  final DBusObjectPath _path;
   final String uuid;
   final bool isPrimary;
-
-  @override
-  DBusObjectPath get path => _path;
 
   @override
   List<DBusIntrospectInterface> introspect() {
@@ -196,13 +179,12 @@ class GattCharacteristic extends DBusObject {
     required this.serviceUuid,
     required this.delegate,
     Uint8List? initialValue,
-  })  : _path = objectPath,
-        _servicePath = servicePath,
-        _value = initialValue ?? Uint8List(0);
+  })  : _servicePath = servicePath,
+        _value = initialValue ?? Uint8List(0),
+        super(objectPath);
 
   static const _interfaceName = 'org.bluez.GattCharacteristic1';
 
-  final DBusObjectPath _path;
   final DBusObjectPath _servicePath;
   final String uuid;
   final String serviceUuid;
@@ -228,9 +210,6 @@ class GattCharacteristic extends DBusObject {
   bool _notifying = false;
   bool get notifying => _notifying;
 
-  @override
-  DBusObjectPath get path => _path;
-
   Uint8List get currentValue => _value;
 
   void setValue(Uint8List value) {
@@ -239,22 +218,24 @@ class GattCharacteristic extends DBusObject {
     // Value into BLE notifications/indications based on the Flags we
     // advertised at registration time.
     if (!_notifying) return;
-    emitSignal(
-      'org.freedesktop.DBus.Properties',
-      'PropertiesChanged',
-      [
-        const DBusString(_interfaceName),
-        DBusDict(
-          DBusSignature('s'),
-          DBusSignature('v'),
-          {
-            const DBusString('Value'): DBusVariant(
-              _byteArray(value),
-            ),
-          },
-        ),
-        DBusArray(DBusSignature('s'), const []),
-      ],
+    unawaited(
+      emitSignal(
+        'org.freedesktop.DBus.Properties',
+        'PropertiesChanged',
+        [
+          const DBusString(_interfaceName),
+          DBusDict(
+            DBusSignature('s'),
+            DBusSignature('v'),
+            {
+              const DBusString('Value'): DBusVariant(
+                _byteArray(value),
+              ),
+            },
+          ),
+          DBusArray(DBusSignature('s'), const []),
+        ],
+      ),
     );
   }
 
@@ -301,20 +282,15 @@ class GattCharacteristic extends DBusObject {
   }
 
   @override
-  Future<DBusMethodResponse> handleMethodCall(
-    String? sender,
-    String? interface,
-    String member,
-    List<DBusValue> values,
-  ) async {
-    if (interface != _interfaceName) {
+  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
+    if (methodCall.interface != _interfaceName) {
       return DBusMethodErrorResponse.unknownInterface();
     }
-    switch (member) {
+    switch (methodCall.name) {
       case 'ReadValue':
-        return _handleReadValue(values);
+        return _handleReadValue(methodCall.values);
       case 'WriteValue':
-        return _handleWriteValue(values);
+        return _handleWriteValue(methodCall.values);
       case 'StartNotify':
         _notifying = true;
         delegate.onNotifyingChanged(uuid, true);
@@ -491,19 +467,15 @@ class GattDescriptor extends DBusObject {
     required DBusObjectPath characteristicPath,
     required this.uuid,
     Uint8List? value,
-  })  : _path = objectPath,
-        _characteristicPath = characteristicPath,
-        _value = value ?? Uint8List(0);
+  })  : _characteristicPath = characteristicPath,
+        _value = value ?? Uint8List(0),
+        super(objectPath);
 
   static const _interfaceName = 'org.bluez.GattDescriptor1';
 
-  final DBusObjectPath _path;
   final DBusObjectPath _characteristicPath;
   final String uuid;
   final Uint8List _value;
-
-  @override
-  DBusObjectPath get path => _path;
 
   @override
   List<DBusIntrospectInterface> introspect() {
@@ -536,16 +508,11 @@ class GattDescriptor extends DBusObject {
   }
 
   @override
-  Future<DBusMethodResponse> handleMethodCall(
-    String? sender,
-    String? interface,
-    String member,
-    List<DBusValue> values,
-  ) async {
-    if (interface != _interfaceName) {
+  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
+    if (methodCall.interface != _interfaceName) {
       return DBusMethodErrorResponse.unknownInterface();
     }
-    switch (member) {
+    switch (methodCall.name) {
       case 'ReadValue':
         return DBusMethodSuccessResponse([_byteArray(_value)]);
       case 'WriteValue':
