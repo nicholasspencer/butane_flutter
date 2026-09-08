@@ -36,6 +36,19 @@ Pigeon output is checked in. After editing
 `packages/butane_platform_interface/pigeons/api.dart`, run
 `tool/gen_api.sh` from the repo root.
 
+## Manual source receipt
+
+`PeripheralConnection.writeDescriptorValue` calls Nordic's
+`writeDescriptor(descriptor, value).suspend()`. Its
+`PeripheralConnection.requestMtuValue` counterpart calls
+`requestMtu(mtu).suspend()`, which completes with the negotiated value delivered
+through Android's `BluetoothGattCallback.onMtuChanged` callback.
+
+The current Kotlin unit target has no injectable `BluetoothGatt` fake, so these
+native paths are recorded by source inspection. On-radio behavior remains part
+of the separate hardware burn workflow documented in
+[`docs/burn-workflow.md`](../../docs/burn-workflow.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

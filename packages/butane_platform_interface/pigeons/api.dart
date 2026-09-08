@@ -125,10 +125,7 @@ class AdvertisementData {
 }
 
 class ScanResult {
-  ScanResult({
-    required this.peripheral,
-    required this.advertisementData,
-  });
+  ScanResult({required this.peripheral, required this.advertisementData});
 
   final Peripheral peripheral;
 
@@ -138,10 +135,7 @@ class ScanResult {
 sealed class AttributeData {}
 
 class Service extends AttributeData {
-  Service({
-    required this.uuid,
-    this.isPrimary = false,
-  });
+  Service({required this.uuid, this.isPrimary = false});
 
   final String uuid;
 
@@ -166,10 +160,7 @@ class Characteristic extends AttributeData {
 }
 
 class Descriptor extends AttributeData {
-  Descriptor({
-    required this.uuid,
-    this.value,
-  });
+  Descriptor({required this.uuid, this.value});
 
   final String uuid;
 
@@ -262,10 +253,7 @@ class AttRequest {
 }
 
 class MutableDescriptor {
-  MutableDescriptor({
-    required this.uuid,
-    this.value,
-  });
+  MutableDescriptor({required this.uuid, this.value});
 
   final String uuid;
 
@@ -313,21 +301,14 @@ abstract class ButaneHostApi {
   /// "Central" APIs.
 
   @async
-  ClientState state({
-    ClientSession? session,
-  });
+  ClientState state({ClientSession? session});
 
   /// Scans for peripherals that are advertising services.
   @async
-  void scan({
-    ClientSession? session,
-    List<String>? forServices,
-  });
+  void scan({ClientSession? session, List<String>? forServices});
 
   @async
-  void cancelScan({
-    ClientSession? session,
-  });
+  void cancelScan({ClientSession? session});
 
   /// A list of known peripherals optionally filtered by their identifiers.
   @async
@@ -345,20 +326,14 @@ abstract class ButaneHostApi {
 
   /// Establishes a connection to the peripheral.
   @async
-  void connect({
-    required PeripheralSession session,
-  });
+  void connect({required PeripheralSession session});
 
   /// Cancels an active or pending connection to the peripheral.
   @async
-  void cancelConnection({
-    required PeripheralSession session,
-  });
+  void cancelConnection({required PeripheralSession session});
 
   @async
-  ConnectionState connectionState({
-    required PeripheralSession session,
-  });
+  ConnectionState connectionState({required PeripheralSession session});
 
   /// Discovers services offered by the peripheral.
   @async
@@ -368,9 +343,7 @@ abstract class ButaneHostApi {
   });
 
   @async
-  List<Service> services({
-    required PeripheralSession session,
-  });
+  List<Service> services({required PeripheralSession session});
 
   /// Discovers characteristics offered by the service.
   @async
@@ -433,16 +406,14 @@ abstract class ButaneHostApi {
 
   /// Requests a read of the RSSI for the peripheral.
   @async
-  int readRssi({
-    required PeripheralSession session,
-  });
+  int readRssi({required PeripheralSession session});
 
-  /// Requests a MTU size change.
+  /// Requests a target ATT MTU and returns the negotiated/effective ATT MTU.
+  ///
+  /// A platform without a client-side request ignores the target and reports
+  /// its effective value.
   @async
-  int requestMtu({
-    required PeripheralSession session,
-    required int mtu,
-  });
+  int requestMtu({required PeripheralSession session, required int mtu});
 
   /// "Peripheral" APIs.
 
@@ -459,9 +430,7 @@ abstract class ButaneHostApi {
   });
 
   @async
-  void stopAdvertising({
-    required PeripheralManagerSession session,
-  });
+  void stopAdvertising({required PeripheralManagerSession session});
 
   @async
   void addService({
@@ -476,9 +445,7 @@ abstract class ButaneHostApi {
   });
 
   @async
-  void removeAllServices({
-    required PeripheralManagerSession session,
-  });
+  void removeAllServices({required PeripheralManagerSession session});
 
   @async
   void respondToRequest({
@@ -503,21 +470,13 @@ abstract class ButaneHostApi {
 abstract class ButaneFlutterApi {
   /// "Central Client" APIs.
 
-  void onClientState(
-    String? clientIdentifier,
-    ClientState state,
-  );
+  void onClientState(String? clientIdentifier, ClientState state);
 
-  void onScanResult(
-    ScanResult scanResult,
-  );
+  void onScanResult(ScanResult scanResult);
 
   /// "Peripheral" APIs.
 
-  void onConnectionState(
-    Peripheral peripheral,
-    ConnectionState state,
-  );
+  void onConnectionState(Peripheral peripheral, ConnectionState state);
 
   void onCharacteristicValue(
     Peripheral peripheral,
@@ -533,23 +492,13 @@ abstract class ButaneFlutterApi {
 
   /// "Peripheral Manager" APIs.
 
-  void onPeripheralManagerState(
-    String? clientIdentifier,
-    ClientState state,
-  );
+  void onPeripheralManagerState(String? clientIdentifier, ClientState state);
 
-  void onServiceAdded(
-    String serviceUuid,
-    String? error,
-  );
+  void onServiceAdded(String serviceUuid, String? error);
 
-  void onReadRequest(
-    AttRequest request,
-  );
+  void onReadRequest(AttRequest request);
 
-  void onWriteRequests(
-    List<AttRequest> requests,
-  );
+  void onWriteRequests(List<AttRequest> requests);
 
   void onCentralSubscribed(
     String? clientIdentifier,
@@ -565,7 +514,5 @@ abstract class ButaneFlutterApi {
     String characteristicUuid,
   );
 
-  void onReadyToUpdateSubscribers(
-    String? clientIdentifier,
-  );
+  void onReadyToUpdateSubscribers(String? clientIdentifier);
 }

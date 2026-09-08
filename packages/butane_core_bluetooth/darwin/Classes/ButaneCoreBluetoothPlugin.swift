@@ -167,15 +167,28 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     Task { await observeCharacteristic(observe: observe, session: session, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, completion: completion) }
   }
   
-  func readDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {}
+  func readDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
+    Task { await readDescriptor(session: session, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid, completion: completion) }
+  }
   
-  func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void) {}
+  func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void) {
+    Task { await writeDescriptor(session: session, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid, value: value, completion: completion) }
+  }
   
   func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) {
     Task { await readRssi(session: session, completion: completion) }
   }
   
-  func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {}
+  func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void) {
+    let central = centralManager(session.session)
+
+    do {
+      let effectiveMtu = try central.requestMtu(identifier: session.peripheralIdentifier, mtu: mtu)
+      completion(.success(effectiveMtu))
+    } catch {
+      completion(.failure(error))
+    }
+  }
   
   // MARK: Peripheral Manager API
   
@@ -316,8 +329,15 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     }
   }
   
-  func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: [Int64], completion: @escaping (Result<Void, Error>) -> Void) async {
-//    let central = centralManager(session.session)
+  func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void) async {
+    let central = centralManager(session.session)
+
+    do {
+      try await central.writeDescriptor(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid, value: value.data)
+      completion(.success)
+    } catch {
+      completion(.failure(error))
+    }
   }
   
   func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) async {

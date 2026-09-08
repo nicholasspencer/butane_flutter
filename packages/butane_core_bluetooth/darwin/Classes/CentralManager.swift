@@ -240,7 +240,25 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     return try await actor.readDescriptor(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid)
   }
   
-  func writeDescriptor(identifier: String, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {}
+  func writeDescriptor(identifier: String, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let actor = actors[uuid]
+    else {
+      throw PigeonError(
+        code: "peripheral-not-found",
+        message: "No peripheral found with identifier: \(identifier)",
+        details: nil
+      )
+    }
+
+    return try await actor.writeDescriptor(
+      serviceUuid: serviceUuid,
+      characteristicUuid: characteristicUuid,
+      descriptorUuid: descriptorUuid,
+      value: value
+    )
+  }
   
   func readRssi(identifier: String) async throws -> Int64 {
     guard
@@ -253,7 +271,20 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     return try await actor.rssi()
   }
   
-  func requestMtu(identifier: String, mtu: Int64) {}
+  func requestMtu(identifier: String, mtu: Int64) throws -> Int64 {
+    guard
+      let uuid = UUID(uuidString: identifier),
+      let actor = actors[uuid]
+    else {
+      throw PigeonError(
+        code: "peripheral-not-found",
+        message: "No peripheral found with identifier: \(identifier)",
+        details: nil
+      )
+    }
+
+    return Int64(actor.peripheral.maximumWriteValueLength(for: .withoutResponse) + 3)
+  }
   
   // MARK: Central Delegate
   
@@ -347,6 +378,22 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
     
     Task { await actor.didWriteValueFor(characteristic: characteristic, error: error) }
+  }
+
+  func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor descriptor: CBDescriptor, error: Error?) {
+    guard let actor = actors[peripheral.identifier] else {
+      return
+    }
+
+    Task { await actor.didUpdateValueFor(descriptor: descriptor, error: error) }
+  }
+
+  func peripheral(_ peripheral: CBPeripheral, didWriteValueFor descriptor: CBDescriptor, error: Error?) {
+    guard let actor = actors[peripheral.identifier] else {
+      return
+    }
+
+    Task { await actor.didWriteValueFor(descriptor: descriptor, error: error) }
   }
   
   func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
@@ -492,7 +539,26 @@ actor PeripheralActor: Equatable {
     }
   }
   
-  func writeDescriptor(serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {}
+  func writeDescriptor(serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {
+    guard
+      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
+      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
+      let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) })
+    else {
+      throw PigeonError(
+        code: "descriptor-not-found",
+        message: "No descriptor found with UUID: \(descriptorUuid) in characteristic: \(characteristicUuid)",
+        details: nil
+      )
+    }
+
+    descriptorWriteContinuations[characteristic] = descriptorWriteContinuations[characteristic] ?? [];
+
+    return try await withCheckedThrowingContinuation { continuation in
+      descriptorWriteContinuations[characteristic]?.append(continuation)
+      peripheral.writeValue(value, for: descriptor)
+    }
+  }
   
   func rssi() async throws -> Int64 {
     return try await withCheckedThrowingContinuation { continuation in
@@ -603,6 +669,44 @@ actor PeripheralActor: Equatable {
     }
     
     characteristicWriteContinuations[characteristic]?.removeAll()
+  }
+
+  func didUpdateValueFor(descriptor: CBDescriptor, error: Error?) {
+    guard
+      let characteristic = descriptor.characteristic,
+      let continuations = descriptorReadContinuations[characteristic]
+    else {
+      return
+    }
+
+    for continuation in continuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume(returning: descriptor.value as? Data ?? Data())
+      }
+    }
+
+    descriptorReadContinuations[characteristic]?.removeAll()
+  }
+
+  func didWriteValueFor(descriptor: CBDescriptor, error: Error?) {
+    guard
+      let characteristic = descriptor.characteristic,
+      let continuations = descriptorWriteContinuations[characteristic]
+    else {
+      return
+    }
+
+    for continuation in continuations {
+      if let error = error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume()
+      }
+    }
+
+    descriptorWriteContinuations[characteristic]?.removeAll()
   }
   
   func didUpdateNotificationStateFor(characteristic: CBCharacteristic, error: Error?) {

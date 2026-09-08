@@ -16,7 +16,6 @@ import 'gatt_server.dart';
 base class ButaneDartBluez extends ButanePlatformInterface {
   ButaneDartBluez({BlueZClient? client}) : _client = client ?? BlueZClient();
 
-
   final BlueZClient _client;
   BlueZAdapter? _defaultAdapter;
   Future<void>? _connecting;
@@ -107,7 +106,6 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     'TxPower',
   };
 
-
   Future<void> _ensureConnected() {
     if (_connected) return Future.value();
     return _connecting ??= () async {
@@ -154,9 +152,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         sub = adapter.propertiesChangedStream.listen((changed) {
           if (changed.contains('Powered')) {
             controller.add(
-              adapter.powered
-                  ? ClientState.poweredOn
-                  : ClientState.poweredOff,
+              adapter.powered ? ClientState.poweredOn : ClientState.poweredOff,
             );
           }
         });
@@ -472,6 +468,24 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     );
   }
 
+  BlueZGattDescriptor _requireDescriptor(
+    BlueZDevice device,
+    String serviceUuid,
+    String characteristicUuid,
+    String descriptorUuid,
+  ) {
+    final characteristic =
+        _requireCharacteristic(device, serviceUuid, characteristicUuid);
+    final want = descriptorUuid.toLowerCase();
+    for (final descriptor in characteristic.gattDescriptors) {
+      if (descriptor.uuid.id.toLowerCase() == want) return descriptor;
+    }
+    throw StateError(
+      'Descriptor $descriptorUuid not found in characteristic '
+      '$characteristicUuid on ${device.address}',
+    );
+  }
+
   /// Resolve the D-Bus object path of a GATT characteristic. The `bluez`
   /// package hides `_BlueZObject.path` behind a private field, so we
   /// walk BlueZ's ObjectManager tree via our own system-bus client.
@@ -496,18 +510,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final cached = _charPathCache[cacheKey];
     if (cached != null) return cached;
 
-    final bus = await _ensurePeripheralBus();
-    final result = await bus.callMethod(
-      destination: 'org.bluez',
-      path: DBusObjectPath('/'),
-      interface: 'org.freedesktop.DBus.ObjectManager',
-      member: 'GetManagedObjects',
-    );
-    if (result is! DBusMethodSuccessResponse ||
-        result.returnValues.isEmpty) {
-      throw StateError('BlueZ GetManagedObjects returned no data');
-    }
-    final dict = result.returnValues.first as DBusDict;
+    final dict = await _managedObjects();
     // Device path fragment: MAC with colons → underscores (BlueZ convention).
     final macFragment = 'dev_${deviceAddress.replaceAll(':', '_')}';
     final wantSvc = serviceUuid.toLowerCase();
@@ -533,15 +536,14 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       final svcIfaces =
           (dict.children[DBusObjectPath(svcPath)] as DBusDict?)?.children;
       if (svcIfaces != null) {
-        final svcIface =
-            svcIfaces[const DBusString('org.bluez.GattService1')];
+        final svcIface = svcIfaces[const DBusString('org.bluez.GattService1')];
         if (svcIface != null) {
           final svcProps = (svcIface as DBusDict).children;
           final svcUuidProp = svcProps[const DBusString('UUID')];
           if (svcUuidProp != null) {
-            final svcUuid =
-                (svcUuidProp is DBusVariant ? svcUuidProp.value : svcUuidProp)
-                    as DBusString;
+            final svcUuid = (svcUuidProp is DBusVariant
+                ? svcUuidProp.value
+                : svcUuidProp) as DBusString;
             if (svcUuid.value.toLowerCase() != wantSvc) continue;
           }
         }
@@ -820,8 +822,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       write: flags.contains(BlueZGattCharacteristicFlag.write),
       notify: flags.contains(BlueZGattCharacteristicFlag.notify),
       indicate: flags.contains(BlueZGattCharacteristicFlag.indicate),
-      authenticatedSignedWrites: flags
-          .contains(BlueZGattCharacteristicFlag.authenticatedSignedWrites),
+      authenticatedSignedWrites:
+          flags.contains(BlueZGattCharacteristicFlag.authenticatedSignedWrites),
       extendedProperties:
           flags.contains(BlueZGattCharacteristicFlag.extendedProperties),
       // BlueZ exposes `encrypt-authenticated-read/write` flags but no
@@ -842,7 +844,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   }) async {
     await _ensureConnected();
     final device = _requireDevice(session);
-    final char = _requireCharacteristic(device, serviceUuid, characteristicUuid);
+    final char =
+        _requireCharacteristic(device, serviceUuid, characteristicUuid);
     final bytes = await char.readValue();
     return Uint8List.fromList(bytes.toList());
   }
@@ -886,6 +889,44 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         '${result.errorName} ${result.values}',
       );
     }
+  }
+
+  @override
+  Future<Uint8List> readDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    final descriptor = _requireDescriptor(
+      device,
+      serviceUuid,
+      characteristicUuid,
+      descriptorUuid,
+    );
+    final bytes = await descriptor.readValue();
+    return Uint8List.fromList(bytes.toList());
+  }
+
+  @override
+  Future<void> writeDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+    required Uint8List value,
+  }) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    final descriptor = _requireDescriptor(
+      device,
+      serviceUuid,
+      characteristicUuid,
+      descriptorUuid,
+    );
+    await descriptor.writeValue(value);
   }
 
   @override
@@ -958,8 +999,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
           final changed = (signal.values[1] as DBusDict).children;
           final valueProp = changed[const DBusString('Value')];
           if (valueProp == null) return;
-          final inner =
-              valueProp is DBusVariant ? valueProp.value : valueProp;
+          final inner = valueProp is DBusVariant ? valueProp.value : valueProp;
           if (inner is! DBusArray) return;
           final bytes = Uint8List.fromList(
             inner.children.map((v) => (v as DBusByte).value).toList(),
@@ -987,6 +1027,45 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     return device.rssi;
   }
 
+  @override
+  Future<int> requestMtu({
+    required PeripheralSession session,
+    required int mtu,
+  }) async {
+    try {
+      // BlueZ owns ATT negotiation and exposes no client-side target-MTU
+      // request. Waiting for service resolution ensures its characteristic
+      // objects, including their negotiated MTU properties, are available.
+      await discoverServices(session: session);
+      final managedObjects = await _managedObjects();
+      final devicePathFragment =
+          'dev_${session.peripheralIdentifier.replaceAll(':', '_')}'
+              .toLowerCase();
+
+      for (final entry in managedObjects.children.entries) {
+        final objectPath = (entry.key as DBusObjectPath).value.toLowerCase();
+        if (!objectPath.contains(devicePathFragment)) continue;
+        final interfaces = (entry.value as DBusDict).children;
+        final characteristic =
+            interfaces[const DBusString('org.bluez.GattCharacteristic1')];
+        if (characteristic is! DBusDict) continue;
+        final mtuProperty = characteristic.children[const DBusString('MTU')];
+        final mtuValue =
+            mtuProperty is DBusVariant ? mtuProperty.value : mtuProperty;
+        if (mtuValue is DBusUint16 && mtuValue.value > 0) {
+          return mtuValue.value;
+        }
+      }
+    } catch (_) {
+      // Normalize lookup, D-Bus, and malformed-property failures to the same
+      // platform-facing contract below.
+    }
+    throw StateError(
+      'BlueZ did not publish a negotiated ATT MTU for '
+      '${session.peripheralIdentifier}',
+    );
+  }
+
   // --- Peripheral: advertising ----------------------------------------------
 
   Future<DBusClient> _ensurePeripheralBus() async {
@@ -997,13 +1076,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     return bus;
   }
 
-  /// Walk BlueZ's ObjectManager tree to find the first object that
-  /// implements `org.bluez.Adapter1`. BlueZAdapter doesn't expose its
-  /// D-Bus path publicly in 0.1.4 and we can't reuse the bluez package's
-  /// internal client, so we do the lookup ourselves.
-  Future<String> _ensureAdapterPath() async {
-    final cached = _adapterPath;
-    if (cached != null) return cached;
+  Future<DBusDict> _managedObjects() async {
     final bus = await _ensurePeripheralBus();
     final result = await bus.callMethod(
       destination: 'org.bluez',
@@ -1016,7 +1089,17 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         result.returnValues.first is! DBusDict) {
       throw StateError('BlueZ GetManagedObjects returned no data');
     }
-    final dict = result.returnValues.first as DBusDict;
+    return result.returnValues.first as DBusDict;
+  }
+
+  /// Walk BlueZ's ObjectManager tree to find the first object that
+  /// implements `org.bluez.Adapter1`. BlueZAdapter doesn't expose its
+  /// D-Bus path publicly in 0.1.4 and we can't reuse the bluez package's
+  /// internal client, so we do the lookup ourselves.
+  Future<String> _ensureAdapterPath() async {
+    final cached = _adapterPath;
+    if (cached != null) return cached;
+    final dict = await _managedObjects();
     for (final entry in dict.children.entries) {
       final interfaces = entry.value as DBusDict;
       for (final ifaceKey in interfaces.children.keys) {
@@ -1157,7 +1240,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     // existing services + the new one into a fresh application tree.
     final priorServices = _application?.services ?? const <MutableService>[];
     final merged = <MutableService>[
-      ...priorServices.where((s) => s.uuid.toLowerCase() != service.uuid.toLowerCase()),
+      ...priorServices
+          .where((s) => s.uuid.toLowerCase() != service.uuid.toLowerCase()),
       service,
     ];
     await _rebuildApplication(bus, adapterPath, merged);
@@ -1248,8 +1332,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
 
       var charIndex = 0;
       for (final char in svc.characteristics) {
-        final charPath =
-            DBusObjectPath('${servicePath.value}/char$charIndex');
+        final charPath = DBusObjectPath('${servicePath.value}/char$charIndex');
         final charObj = GattCharacteristic(
           objectPath: charPath,
           servicePath: servicePath,
@@ -1265,8 +1348,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
 
         var descIndex = 0;
         for (final desc in char.descriptors ?? const <MutableDescriptor>[]) {
-          final descPath =
-              DBusObjectPath('${charPath.value}/desc$descIndex');
+          final descPath = DBusObjectPath('${charPath.value}/desc$descIndex');
           final descObj = GattDescriptor(
             objectPath: descPath,
             characteristicPath: charPath,
@@ -1344,7 +1426,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   }) async {
     final app = _application;
     if (app == null) return false;
-    final char = app.delegate.findCharacteristic(serviceUuid, characteristicUuid);
+    final char =
+        app.delegate.findCharacteristic(serviceUuid, characteristicUuid);
     if (char == null) return false;
     // Mirror CoreBluetooth's return: true iff anyone is subscribed. We
     // always update the cached Value; BlueZ only pushes a notification
@@ -1417,8 +1500,7 @@ class _GattDelegate implements GattServerDelegate {
   Future<({AttResult result, Uint8List? value})> onReadRequest(
     AttRequest request,
   ) {
-    final completer =
-        Completer<({AttResult result, Uint8List? value})>();
+    final completer = Completer<({AttResult result, Uint8List? value})>();
     _plugin._pendingReads[request.requestId] = completer;
     _plugin._ensureReadRequestController().add(request);
     return completer.future;

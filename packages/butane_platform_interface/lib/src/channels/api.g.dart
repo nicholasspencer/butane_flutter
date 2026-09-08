@@ -1423,7 +1423,10 @@ class ButaneHostApi {
     return pigeonVar_replyValue! as int;
   }
 
-  /// Requests a MTU size change.
+  /// Requests a target ATT MTU and returns the negotiated/effective ATT MTU.
+  ///
+  /// A platform without a client-side request ignores the target and reports
+  /// its effective value.
   Future<int> requestMtu({required PeripheralSession session, required int mtu}) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestMtu$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

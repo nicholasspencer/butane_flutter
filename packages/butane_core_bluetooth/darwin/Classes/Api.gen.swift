@@ -911,7 +911,10 @@ protocol ButaneHostApi {
   func writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void)
   /// Requests a read of the RSSI for the peripheral.
   func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void)
-  /// Requests a MTU size change.
+  /// Requests a target ATT MTU and returns the negotiated/effective ATT MTU.
+  ///
+  /// A platform without a client-side request ignores the target and reports
+  /// its effective value.
   func requestMtu(session: PeripheralSession, mtu: Int64, completion: @escaping (Result<Int64, Error>) -> Void)
   /// "Peripheral" APIs.
   func peripheralManagerState(session: PeripheralManagerSession, completion: @escaping (Result<ClientState, Error>) -> Void)
@@ -1272,7 +1275,10 @@ class ButaneHostApiSetup {
     } else {
       readRssiChannel.setMessageHandler(nil)
     }
-    /// Requests a MTU size change.
+    /// Requests a target ATT MTU and returns the negotiated/effective ATT MTU.
+    ///
+    /// A platform without a client-side request ignores the target and reports
+    /// its effective value.
     let requestMtuChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestMtu\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       requestMtuChannel.setMessageHandler { message, reply in

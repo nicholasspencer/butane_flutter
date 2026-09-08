@@ -919,7 +919,12 @@ interface ButaneHostApi {
   fun writeDescriptor(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: ByteArray, callback: (Result<Unit>) -> Unit)
   /** Requests a read of the RSSI for the peripheral. */
   fun readRssi(session: PeripheralSession, callback: (Result<Long>) -> Unit)
-  /** Requests a MTU size change. */
+  /**
+   * Requests a target ATT MTU and returns the negotiated/effective ATT MTU.
+   *
+   * A platform without a client-side request ignores the target and reports
+   * its effective value.
+   */
   fun requestMtu(session: PeripheralSession, mtu: Long, callback: (Result<Long>) -> Unit)
   /** "Peripheral" APIs. */
   fun peripheralManagerState(session: PeripheralManagerSession, callback: (Result<ClientState>) -> Unit)

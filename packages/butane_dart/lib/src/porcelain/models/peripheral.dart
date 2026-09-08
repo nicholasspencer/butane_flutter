@@ -154,6 +154,11 @@ base class Peripheral extends Peer {
     return await platform.readRssi(session: session);
   }
 
+  /// Requests a target ATT [mtu] and returns the negotiated/effective ATT MTU.
+  Future<int> requestMtu(int mtu) {
+    return platform.requestMtu(session: session, mtu: mtu);
+  }
+
   @protected
   api.Peripheral toData() {
     return api.Peripheral(
