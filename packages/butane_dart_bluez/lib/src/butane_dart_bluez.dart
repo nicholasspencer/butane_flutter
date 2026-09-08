@@ -50,10 +50,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   LEAdvertisement? _advertisement;
 
   /// Monotonic counter used to mint unique advertisement object paths.
-  /// `dbus` 0.2.5 has no `unregisterObject`, so re-advertising must use a
-  /// fresh path to avoid "path already registered" errors. Old objects
-  /// remain on the bus as no-ops — BlueZ stops talking to them after
-  /// UnregisterAdvertisement.
+  /// Fresh paths keep each BlueZ registration lifecycle distinct, including
+  /// retries after a best-effort unregister.
   int _advertisementCounter = 0;
 
   /// Monotonic counter for GATT application paths. Same rationale as
@@ -149,7 +147,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         // Re-emit on Powered changes. We deliberately don't filter on the
         // property list — bluez_client batches multiple changes into one
         // event, and misfires are cheaper than missed transitions.
-        sub = adapter.propertiesChangedStream.listen((changed) {
+        sub = adapter.propertiesChanged.listen((changed) {
           if (changed.contains('Powered')) {
             controller.add(
               adapter.powered ? ClientState.poweredOn : ClientState.poweredOff,
@@ -220,18 +218,12 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       }
     }
 
-    // BlueZ's SetDiscoveryFilter expects a{sv} — each value is a variant.
-    //
     // We only set `Transport: le` (no `UUIDs`). BlueZ's `UUIDs` filter silently
     // excludes devices whose service UUIDs haven't yet arrived via scan
     // response or PropertiesChanged — which is exactly the case for freshly
     // advertising peripherals, and also for devices already in the BlueZ
     // cache. Client-side filtering in [scanStream] (via [_scanUuidFilter])
     // handles this correctly.
-    final filter = <String, DBusValue>{
-      'Transport': DBusVariant(const DBusString('le')),
-    };
-
     // If discovery is already running (because a prior cancelScan left it
     // going — see [cancelScan] for why), stop it first so SetDiscoveryFilter
     // can apply the new filter cleanly. BlueZ requires filter updates to
@@ -239,7 +231,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     if (adapter.discovering) {
       await adapter.stopDiscovery();
     }
-    await adapter.setDiscoveryFilter(filter);
+    await adapter.setDiscoveryFilter(transport: 'le');
     await adapter.startDiscovery();
     _scanning = true;
   }
@@ -253,7 +245,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   bool _matchesScanFilter(BlueZDevice device) {
     if (_scanUuidFilter.isEmpty) return true;
     for (final uuid in device.uuids) {
-      if (_scanUuidFilter.contains(uuid.id.toLowerCase())) return true;
+      if (_scanUuidFilter.contains(uuid.toString().toLowerCase())) return true;
     }
     return false;
   }
@@ -277,7 +269,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
 
     void watchDevice(BlueZDevice device) {
       subs.add(
-        device.propertiesChangedStream.listen((changed) {
+        device.propertiesChanged.listen((changed) {
           // A late `UUIDs` update may flip a previously-unmatched device into
           // the filter — live() re-checks, so no extra handling needed here.
           if (changed.any(_advertRelevantProps.contains)) live(device);
@@ -311,7 +303,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         }
         // New discoveries.
         subs.add(
-          _client.deviceAddedStream.listen((device) {
+          _client.deviceAdded.listen((device) {
             live(device);
             watchDevice(device);
           }),
@@ -376,7 +368,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       advertisementData: AdvertisementData(
         localName: device.name.isNotEmpty ? device.name : null,
         manufacturerData: _flattenManufacturerData(device.manufacturerData),
-        serviceUuids: device.uuids.map((u) => u.id).toList(),
+        serviceUuids: device.uuids.map((u) => u.toString()).toList(),
         serviceData: _mapServiceData(device.serviceData),
         txPowerLevel: device.txPower,
       ),
@@ -408,7 +400,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   Map<String, Uint8List> _mapServiceData(Map<BlueZUUID, List<int>> data) {
     return {
       for (final entry in data.entries)
-        entry.key.id: Uint8List.fromList(entry.value),
+        entry.key.toString(): Uint8List.fromList(entry.value),
     };
   }
 
@@ -442,9 +434,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   BlueZGattService _requireService(BlueZDevice device, String serviceUuid) {
     final want = serviceUuid.toLowerCase();
     for (final svc in device.gattServices) {
-      // BlueZUUID.toString() wraps the raw id in `BlueZUUID('...')` — use
-      // `.id` for the bare UUID string. Same idiom as `_toScanResult`.
-      if (svc.uuid.id.toLowerCase() == want) return svc;
+      if (svc.uuid.toString().toLowerCase() == want) return svc;
     }
     throw StateError(
       'Service $serviceUuid not found on ${device.address} — '
@@ -459,8 +449,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   ) {
     final service = _requireService(device, serviceUuid);
     final want = characteristicUuid.toLowerCase();
-    for (final char in service.gattCharacteristics) {
-      if (char.uuid.id.toLowerCase() == want) return char;
+    for (final char in service.characteristics) {
+      if (char.uuid.toString().toLowerCase() == want) return char;
     }
     throw StateError(
       'Characteristic $characteristicUuid not found in service '
@@ -477,8 +467,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final characteristic =
         _requireCharacteristic(device, serviceUuid, characteristicUuid);
     final want = descriptorUuid.toLowerCase();
-    for (final descriptor in characteristic.gattDescriptors) {
-      if (descriptor.uuid.id.toLowerCase() == want) return descriptor;
+    for (final descriptor in characteristic.descriptors) {
+      if (descriptor.uuid.toString().toLowerCase() == want) return descriptor;
     }
     throw StateError(
       'Descriptor $descriptorUuid not found in characteristic '
@@ -585,7 +575,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     for (final device in _client.devices) {
       if (!device.connected) continue;
       if (wanted.isNotEmpty) {
-        final offered = device.uuids.map((u) => u.id.toLowerCase());
+        final offered = device.uuids.map((u) => u.toString().toLowerCase());
         if (!offered.any(wanted.contains)) continue;
       }
       out.add(_toPeripheral(device));
@@ -685,7 +675,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         // BlueZ exposes only a boolean `Connected` property — we can't
         // distinguish connecting/disconnecting transitional states the way
         // CoreBluetooth can. Emit connected/disconnected edges only.
-        sub = device.propertiesChangedStream.listen((changed) {
+        sub = device.propertiesChanged.listen((changed) {
           if (changed.contains('Connected')) {
             controller.add(
               device.connected
@@ -748,7 +738,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final device = _requireDevice(session);
     return [
       for (final svc in device.gattServices)
-        Service(uuid: svc.uuid.id, isPrimary: svc.primary),
+        Service(uuid: svc.uuid.toString(), isPrimary: svc.primary),
     ];
   }
 
@@ -765,10 +755,10 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     // However, the InterfacesAdded D-Bus signals for characteristic objects
     // may arrive slightly after ServicesResolved becomes true. Poll until
     // at least one characteristic appears (or timeout).
-    if (service.gattCharacteristics.isNotEmpty) return;
+    if (service.characteristics.isNotEmpty) return;
     const pollInterval = Duration(milliseconds: 250);
     final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (service.gattCharacteristics.isEmpty) {
+    while (service.characteristics.isEmpty) {
       if (DateTime.now().isAfter(deadline)) {
         throw TimeoutException(
           'No characteristics materialized for service $serviceUuid on '
@@ -788,13 +778,13 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final device = _requireDevice(session);
     final service = _requireService(device, serviceUuid);
     return [
-      for (final char in service.gattCharacteristics)
+      for (final char in service.characteristics)
         Characteristic(
-          uuid: char.uuid.id,
+          uuid: char.uuid.toString(),
           properties: _flagsToProperties(char.flags),
           descriptors: [
-            for (final desc in char.gattDescriptors)
-              Descriptor(uuid: desc.uuid.id),
+            for (final desc in char.descriptors)
+              Descriptor(uuid: desc.uuid.toString()),
           ],
         ),
     ];
@@ -859,34 +849,33 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     bool withoutResponse = false,
   }) async {
     await _ensureConnected();
-    // Call WriteValue via raw D-Bus because the bluez 0.1.4 package's
-    // writeValue builds the options dict with unwrapped values
-    // (DBusString instead of DBusVariant(DBusString)), causing
-    // "Provided value don't match signature" from the dbus package.
+    // Resolve the characteristic path so this operation and notification
+    // subscription share the same raw D-Bus object identity.
     final charPath = await _resolveCharacteristicPath(
       session.peripheralIdentifier,
       serviceUuid,
       characteristicUuid,
     );
     final bus = await _ensurePeripheralBus();
-    final result = await bus.callMethod(
-      destination: 'org.bluez',
-      path: charPath,
-      interface: 'org.bluez.GattCharacteristic1',
-      member: 'WriteValue',
-      values: [
-        DBusArray(DBusSignature('y'), value.map(DBusByte.new)),
-        DBusDict(DBusSignature('s'), DBusSignature('v'), {
-          const DBusString('type'): DBusVariant(
-            DBusString(withoutResponse ? 'command' : 'request'),
-          ),
-        }),
-      ],
-    );
-    if (result is DBusMethodErrorResponse) {
+    try {
+      await bus.callMethod(
+        destination: 'org.bluez',
+        path: charPath,
+        interface: 'org.bluez.GattCharacteristic1',
+        name: 'WriteValue',
+        values: [
+          DBusArray(DBusSignature('y'), value.map(DBusByte.new)),
+          DBusDict(DBusSignature('s'), DBusSignature('v'), {
+            const DBusString('type'): DBusVariant(
+              DBusString(withoutResponse ? 'command' : 'request'),
+            ),
+          }),
+        ],
+      );
+    } on DBusMethodResponseException catch (error) {
       throw StateError(
         'BlueZ WriteValue failed on $charPath: '
-        '${result.errorName} ${result.values}',
+        '${error.errorName} ${error.response.values}',
       );
     }
   }
@@ -938,8 +927,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   }) async {
     await _ensureConnected();
     _requireDevice(session);
-    // The bluez 0.1.4 package does not expose StartNotify/StopNotify
-    // (it TODO'd them as "require fd manipulation"). Call via raw D-Bus.
+    // Use the same raw D-Bus path as [characteristicValueStream] so the
+    // subscription and notification lifecycle address the same object.
     final charPath = await _resolveCharacteristicPath(
       session.peripheralIdentifier,
       serviceUuid,
@@ -947,16 +936,17 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     );
     final bus = await _ensurePeripheralBus();
     final method = observe ? 'StartNotify' : 'StopNotify';
-    final result = await bus.callMethod(
-      destination: 'org.bluez',
-      path: charPath,
-      interface: 'org.bluez.GattCharacteristic1',
-      member: method,
-    );
-    if (result is DBusMethodErrorResponse) {
+    try {
+      await bus.callMethod(
+        destination: 'org.bluez',
+        path: charPath,
+        interface: 'org.bluez.GattCharacteristic1',
+        name: method,
+      );
+    } on DBusMethodResponseException catch (error) {
       throw StateError(
         'BlueZ $method failed on $charPath: '
-        '${result.errorName} ${result.values}',
+        '${error.errorName} ${error.response.values}',
       );
     }
   }
@@ -983,14 +973,13 @@ base class ButaneDartBluez extends ButanePlatformInterface {
           characteristicUuid,
         );
         final bus = await _ensurePeripheralBus();
-        sub = bus
-            .subscribeSignals(
+        sub = DBusSignalStream(
+          bus,
           sender: 'org.bluez',
           interface: 'org.freedesktop.DBus.Properties',
-          member: 'PropertiesChanged',
+          name: 'PropertiesChanged',
           path: charPath,
-        )
-            .listen((signal) {
+        ).listen((signal) {
           // PropertiesChanged args: (interface_name: s, changed: a{sv},
           //                          invalidated: as)
           if (signal.values.length < 2) return;
@@ -1078,15 +1067,18 @@ base class ButaneDartBluez extends ButanePlatformInterface {
 
   Future<DBusDict> _managedObjects() async {
     final bus = await _ensurePeripheralBus();
-    final result = await bus.callMethod(
-      destination: 'org.bluez',
-      path: DBusObjectPath('/'),
-      interface: 'org.freedesktop.DBus.ObjectManager',
-      member: 'GetManagedObjects',
-    );
-    if (result is! DBusMethodSuccessResponse ||
-        result.returnValues.isEmpty ||
-        result.returnValues.first is! DBusDict) {
+    late DBusMethodSuccessResponse result;
+    try {
+      result = await bus.callMethod(
+        destination: 'org.bluez',
+        path: DBusObjectPath('/'),
+        interface: 'org.freedesktop.DBus.ObjectManager',
+        name: 'GetManagedObjects',
+      );
+    } on DBusMethodResponseException {
+      throw StateError('BlueZ GetManagedObjects returned no data');
+    }
+    if (result.returnValues.isEmpty || result.returnValues.first is! DBusDict) {
       throw StateError('BlueZ GetManagedObjects returned no data');
     }
     return result.returnValues.first as DBusDict;
@@ -1094,7 +1086,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
 
   /// Walk BlueZ's ObjectManager tree to find the first object that
   /// implements `org.bluez.Adapter1`. BlueZAdapter doesn't expose its
-  /// D-Bus path publicly in 0.1.4 and we can't reuse the bluez package's
+  /// D-Bus path publicly and we can't reuse the bluez package's
   /// internal client, so we do the lookup ourselves.
   Future<String> _ensureAdapterPath() async {
     final cached = _adapterPath;
@@ -1157,14 +1149,14 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       localName: localName,
       serviceUuids: [for (final u in serviceUuids ?? const <String>[]) u],
     );
-    bus.registerObject(advert);
+    await bus.registerObject(advert);
 
     try {
-      final result = await bus.callMethod(
+      await bus.callMethod(
         destination: 'org.bluez',
         path: DBusObjectPath(adapterPath),
         interface: 'org.bluez.LEAdvertisingManager1',
-        member: 'RegisterAdvertisement',
+        name: 'RegisterAdvertisement',
         values: [
           path,
           DBusDict(
@@ -1174,16 +1166,15 @@ base class ButaneDartBluez extends ButanePlatformInterface {
           ),
         ],
       );
-      if (result is DBusMethodErrorResponse) {
-        throw StateError(
-          'BlueZ RegisterAdvertisement failed: '
-          '${result.errorName} ${result.values}',
-        );
-      }
+    } on DBusMethodResponseException catch (error) {
+      // Drop our reference so callers can retry with a fresh path. BlueZ did
+      // not accept the object in this case, so it is inert.
+      _advertisement = null;
+      throw StateError(
+        'BlueZ RegisterAdvertisement failed: '
+        '${error.errorName} ${error.response.values}',
+      );
     } catch (_) {
-      // Leave the DBusObject registered (no unregisterObject in dbus
-      // 0.2.5) but drop our reference so callers can retry with a fresh
-      // path. BlueZ never saw the object in this case, so it's inert.
       _advertisement = null;
       rethrow;
     }
@@ -1204,13 +1195,17 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     // advertisement (e.g. adapter powered off). We've already cleared our
     // side, so treat any error response as best-effort cleanup rather
     // than propagating.
-    await bus.callMethod(
-      destination: 'org.bluez',
-      path: DBusObjectPath(adapterPath),
-      interface: 'org.bluez.LEAdvertisingManager1',
-      member: 'UnregisterAdvertisement',
-      values: [advert.path],
-    );
+    try {
+      await bus.callMethod(
+        destination: 'org.bluez',
+        path: DBusObjectPath(adapterPath),
+        interface: 'org.bluez.LEAdvertisingManager1',
+        name: 'UnregisterAdvertisement',
+        values: [advert.path],
+      );
+    } on DBusMethodResponseException {
+      // Best-effort cleanup: BlueZ may already have dropped it.
+    }
   }
 
   // --- Peripheral: local GATT services --------------------------------------
@@ -1288,16 +1283,18 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final bus = _peripheralBus;
     final adapterPath = _adapterPath;
     if (bus == null || adapterPath == null) return;
-    await bus.callMethod(
-      destination: 'org.bluez',
-      path: DBusObjectPath(adapterPath),
-      interface: 'org.bluez.GattManager1',
-      member: 'UnregisterApplication',
-      values: [app.rootPath],
-    );
-    // DBusObject children stay registered on our bus (no
-    // unregisterObject in dbus 0.2.5), but the app counter guarantees
-    // any future registration uses a fresh path.
+    try {
+      await bus.callMethod(
+        destination: 'org.bluez',
+        path: DBusObjectPath(adapterPath),
+        interface: 'org.bluez.GattManager1',
+        name: 'UnregisterApplication',
+        values: [app.rootPath],
+      );
+    } on DBusMethodResponseException {
+      // Best-effort cleanup: BlueZ may already have dropped it.
+    }
+    // The app counter guarantees any future registration uses a fresh path.
   }
 
   Future<void> _rebuildApplication(
@@ -1314,7 +1311,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final appRoot =
         DBusObjectPath('/com/nicospencer/butane/app${++_applicationCounter}');
     final app = GattApplication(appRoot);
-    bus.registerObject(app);
+    await bus.registerObject(app);
 
     final registered = <MutableService>[];
     final delegate = _GattDelegate(this);
@@ -1328,7 +1325,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         isPrimary: svc.isPrimary,
       );
       app.addChild(serviceObj);
-      bus.registerObject(serviceObj);
+      await bus.registerObject(serviceObj);
 
       var charIndex = 0;
       for (final char in svc.characteristics) {
@@ -1343,7 +1340,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
           initialValue: char.value,
         );
         app.addChild(charObj);
-        bus.registerObject(charObj);
+        await bus.registerObject(charObj);
         delegate.registerCharacteristic(svc.uuid, char.uuid, charObj);
 
         var descIndex = 0;
@@ -1356,7 +1353,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
             value: desc.value,
           );
           app.addChild(descObj);
-          bus.registerObject(descObj);
+          await bus.registerObject(descObj);
           descIndex++;
         }
         charIndex++;
@@ -1372,25 +1369,26 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       delegate: delegate,
     );
 
-    final result = await bus.callMethod(
-      destination: 'org.bluez',
-      path: DBusObjectPath(adapterPath),
-      interface: 'org.bluez.GattManager1',
-      member: 'RegisterApplication',
-      values: [
-        appRoot,
-        DBusDict(
-          DBusSignature('s'),
-          DBusSignature('v'),
-          const <DBusValue, DBusValue>{},
-        ),
-      ],
-    );
-    if (result is DBusMethodErrorResponse) {
+    try {
+      await bus.callMethod(
+        destination: 'org.bluez',
+        path: DBusObjectPath(adapterPath),
+        interface: 'org.bluez.GattManager1',
+        name: 'RegisterApplication',
+        values: [
+          appRoot,
+          DBusDict(
+            DBusSignature('s'),
+            DBusSignature('v'),
+            const <DBusValue, DBusValue>{},
+          ),
+        ],
+      );
+    } on DBusMethodResponseException catch (error) {
       _application = null;
       throw StateError(
         'BlueZ RegisterApplication failed: '
-        '${result.errorName} ${result.values}',
+        '${error.errorName} ${error.response.values}',
       );
     }
   }

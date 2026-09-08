@@ -19,11 +19,10 @@ class LEAdvertisement extends DBusObject {
     required DBusObjectPath objectPath,
     this.localName,
     this.serviceUuids = const [],
-  }) : _path = objectPath;
+  }) : super(objectPath);
 
   static const _interfaceName = 'org.bluez.LEAdvertisement1';
 
-  final DBusObjectPath _path;
   final String? localName;
   final List<String> serviceUuids;
 
@@ -32,9 +31,6 @@ class LEAdvertisement extends DBusObject {
   /// that want to notice the advertisement going away without having
   /// triggered it themselves.
   final Completer<void> released = Completer<void>();
-
-  @override
-  DBusObjectPath get path => _path;
 
   @override
   List<DBusIntrospectInterface> introspect() {
@@ -65,16 +61,11 @@ class LEAdvertisement extends DBusObject {
   }
 
   @override
-  Future<DBusMethodResponse> handleMethodCall(
-    String? sender,
-    String? interface,
-    String member,
-    List<DBusValue> values,
-  ) async {
-    if (interface != _interfaceName) {
+  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
+    if (methodCall.interface != _interfaceName) {
       return DBusMethodErrorResponse.unknownInterface();
     }
-    if (member == 'Release') {
+    if (methodCall.name == 'Release') {
       if (!released.isCompleted) released.complete();
       return DBusMethodSuccessResponse();
     }
