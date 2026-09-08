@@ -41,8 +41,22 @@ confirmation.
 
 ## Read receipts
 
-Use `bd show <id>` and report the burn circuit's follower rendezvous, host
-`TestReport`, critique/telemetry/artifact links, failure reason, and teardown
-result present on the bead/session records. If the work is still deferred,
-ready, or active, report that state instead of inventing a result. Richer
-per-device audit is tracked separately and is not synthesized here.
+Use `bd show <id>` to read the burn order bead. Its durable `burn-host` step
+result payload is the receipt for a passing burn. Report these static keys:
+`scenario`, `passed`, `central`, `follower`, `steps`, `failures`,
+`observedSteps`, `centralIdentity`, `centralRole`, `centralTarget`,
+`centralLaunchOutcome`, `centralTeardownConfirmation`, `followerIdentity`,
+`followerRole`, `followerTarget`, `followerLaunchOutcome`, and
+`followerTeardownConfirmation`. Each declared step adds `step<N>Role`,
+`step<N>Outcome`, and `step<N>DurationMs`, where `<N>` is its zero-based index.
+
+The literal `not-observed` records an unentered launch or step; it is evidence,
+not an empty value. A failed burn remains a failed step so supervision still
+runs. Because the engine's `Failed` arm cannot carry a payload, its reason ends
+with a one-line `burn-evidence:` digest containing `scenario`, both devices'
+identity/role/target/launch-outcome groups, and `failingStepIndex`.
+
+Also report any follower rendezvous, critique/telemetry/artifact links, failure
+reason, and teardown result present on the bead/session records. If the work is
+still deferred, ready, or active, report that state instead of inventing a
+result.

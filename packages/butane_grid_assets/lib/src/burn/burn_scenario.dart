@@ -140,6 +140,48 @@ abstract interface class LeonardDrive {
   Future<void> close();
 }
 
+/// Builds a report snapshot in which neither device nor any declared step has
+/// been observed yet.
+///
+/// The snapshot carries one [DriveStepResult] per scenario step so cancellation
+/// and early host failures retain explicit evidence for every unentered step.
+TestReport unobservedDriveReport({
+  required DriveScenario scenario,
+  required String endpoint,
+  required String central,
+  required String follower,
+  String centralIdentity = '',
+  BurnLaunchOutcome centralLaunchOutcome = BurnLaunchOutcome.notObserved,
+  BurnTeardownConfirmation centralTeardownConfirmation =
+      BurnTeardownConfirmation.notObserved,
+  String followerIdentity = '',
+  BurnLaunchOutcome followerLaunchOutcome = BurnLaunchOutcome.notObserved,
+  BurnTeardownConfirmation followerTeardownConfirmation =
+      BurnTeardownConfirmation.notObserved,
+}) => TestReport(
+  scenario: scenario.name,
+  endpoint: endpoint,
+  central: central,
+  follower: follower,
+  centralIdentity: centralIdentity,
+  centralLaunchOutcome: centralLaunchOutcome,
+  centralTeardownConfirmation: centralTeardownConfirmation,
+  followerIdentity: followerIdentity,
+  followerLaunchOutcome: followerLaunchOutcome,
+  followerTeardownConfirmation: followerTeardownConfirmation,
+  steps: [
+    for (final step in scenario.steps)
+      DriveStepResult(
+        description: step.description,
+        observed: BurnStepOutcome.notObserved.wire,
+        role: _roleFor(step.on),
+        outcome: BurnStepOutcome.notObserved,
+        duration: null,
+      ),
+  ],
+  passed: false,
+);
+
 /// Runs a SCRIPTED [scenario] against an already-attached [drive] (the
 /// follower channel) — and, for two-drive scenarios, [localDrive] (the
 /// host's own locally-launched harness) — and collects a [TestReport] for
@@ -160,12 +202,31 @@ Future<TestReport> runDriveScenario({
   required FollowerEndpoint endpoint,
   required String central,
   required String follower,
+  required String centralIdentity,
+  required BurnLaunchOutcome centralLaunchOutcome,
+  required BurnTeardownConfirmation centralTeardownConfirmation,
+  required String followerIdentity,
+  required BurnLaunchOutcome followerLaunchOutcome,
+  required BurnTeardownConfirmation followerTeardownConfirmation,
   LeonardDrive? localDrive,
   bool Function()? isCancelled,
 }) async {
-  final results = <DriveStepResult>[];
-  for (final step in scenario.steps) {
+  final results = unobservedDriveReport(
+    scenario: scenario,
+    endpoint: endpoint.vmServiceUri,
+    central: central,
+    follower: follower,
+    centralIdentity: centralIdentity,
+    centralLaunchOutcome: centralLaunchOutcome,
+    centralTeardownConfirmation: centralTeardownConfirmation,
+    followerIdentity: followerIdentity,
+    followerLaunchOutcome: followerLaunchOutcome,
+    followerTeardownConfirmation: followerTeardownConfirmation,
+  ).steps.toList();
+  for (var index = 0; index < scenario.steps.length; index++) {
     if (isCancelled?.call() ?? false) break;
+    final step = scenario.steps[index];
+    final stopwatch = Stopwatch()..start();
     String observed;
     bool passed;
     final target = step.on == DriveEndpoint.local ? localDrive : drive;
@@ -192,12 +253,13 @@ Future<TestReport> runDriveScenario({
         passed = false;
       }
     }
-    results.add(
-      DriveStepResult(
-        description: step.description,
-        observed: observed,
-        passed: passed,
-      ),
+    stopwatch.stop();
+    results[index] = DriveStepResult(
+      description: step.description,
+      observed: observed,
+      role: _roleFor(step.on),
+      outcome: passed ? BurnStepOutcome.passed : BurnStepOutcome.failed,
+      duration: stopwatch.elapsed,
     );
   }
   return TestReport(
@@ -205,7 +267,18 @@ Future<TestReport> runDriveScenario({
     endpoint: endpoint.vmServiceUri,
     central: central,
     follower: follower,
+    centralIdentity: centralIdentity,
+    centralLaunchOutcome: centralLaunchOutcome,
+    centralTeardownConfirmation: centralTeardownConfirmation,
+    followerIdentity: followerIdentity,
+    followerLaunchOutcome: followerLaunchOutcome,
+    followerTeardownConfirmation: followerTeardownConfirmation,
     steps: results,
     passed: results.isNotEmpty && results.every((r) => r.passed),
   );
 }
+
+BurnDeviceRole _roleFor(DriveEndpoint endpoint) =>
+    endpoint == DriveEndpoint.local
+    ? BurnDeviceRole.central
+    : BurnDeviceRole.follower;
