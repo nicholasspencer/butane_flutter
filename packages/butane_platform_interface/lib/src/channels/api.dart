@@ -6,10 +6,7 @@ import 'package:meta/meta.dart';
 import 'package:butane_dart/interface.dart';
 import 'api.g.dart' as api;
 
-typedef ClientStateResult = ({
-  Session? session,
-  api.ClientState state,
-});
+typedef ClientStateResult = ({Session? session, api.ClientState state});
 
 typedef ConnectionStateResult = ({
   api.Peripheral peripheral,
@@ -22,15 +19,9 @@ typedef CharacteristicValueResult = ({
   Uint8List value,
 });
 
-typedef RssiResult = ({
-  api.Peripheral peripheral,
-  int rssi,
-});
+typedef RssiResult = ({api.Peripheral peripheral, int rssi});
 
-typedef ServiceAddedResult = ({
-  String serviceUuid,
-  String? error,
-});
+typedef ServiceAddedResult = ({String serviceUuid, String? error});
 
 typedef CentralSubscriptionResult = ({
   String? clientIdentifier,
@@ -53,28 +44,19 @@ base class ButanePlatform extends ButanePlatformInterface {
   late final ButaneFlutterApi flutterApi = ButaneFlutterApi();
 
   @override
-  Future<ClientState> clientState([
-    Session? session,
-  ]) async {
+  Future<ClientState> clientState([Session? session]) async {
     final state = await hostApi.state(session: session?.toSession());
     return state.toClientState();
   }
 
   @override
-  Stream<ClientState> clientStateStream([
-    Session? session,
-  ]) =>
-      flutterApi.clientStateStream
-          .where(
-            (e) => e.session?.clientIdentifier == session?.clientIdentifier,
-          )
-          .map((e) => e.state.toClientState());
+  Stream<ClientState> clientStateStream([Session? session]) => flutterApi
+      .clientStateStream
+      .where((e) => e.session?.clientIdentifier == session?.clientIdentifier)
+      .map((e) => e.state.toClientState());
 
   @override
-  Future<void> scan({
-    Iterable<String>? forServices,
-    Session? session,
-  }) async {
+  Future<void> scan({Iterable<String>? forServices, Session? session}) async {
     hostApi.scan(
       session: session?.toSession(),
       forServices: forServices?.toList(),
@@ -82,21 +64,15 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
-  Stream<ScanResult> scanStream([
-    Session? session,
-  ]) {
+  Stream<ScanResult> scanStream([Session? session]) {
     return flutterApi.scanStream.where((e) {
       return e.peripheral.session.clientIdentifier == session?.clientIdentifier;
     }).map(ScanResultConverter.fromScanResult);
   }
 
   @override
-  Future<void> cancelScan({
-    Session? session,
-  }) {
-    return hostApi.cancelScan(
-      session: session?.toSession(),
-    );
+  Future<void> cancelScan({Session? session}) {
+    return hostApi.cancelScan(session: session?.toSession());
   }
 
   @override
@@ -126,30 +102,20 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
-  Future<void> connect({
-    required PeripheralSession session,
-  }) async {
-    return hostApi.connect(
-      session: session.toSession(),
-    );
+  Future<void> connect({required PeripheralSession session}) async {
+    return hostApi.connect(session: session.toSession());
   }
 
   @override
-  Future<void> cancelConnection({
-    required PeripheralSession session,
-  }) async {
-    return hostApi.cancelConnection(
-      session: session.toSession(),
-    );
+  Future<void> cancelConnection({required PeripheralSession session}) async {
+    return hostApi.cancelConnection(session: session.toSession());
   }
 
   @override
   Future<ConnectionState> connectionState({
     required PeripheralSession session,
   }) async {
-    final state = await hostApi.connectionState(
-      session: session.toSession(),
-    );
+    final state = await hostApi.connectionState(session: session.toSession());
 
     return state.toConnectionState();
   }
@@ -158,14 +124,12 @@ base class ButanePlatform extends ButanePlatformInterface {
   Stream<ConnectionState> connectionStateStream({
     required PeripheralSession session,
   }) {
-    return flutterApi.connectionStateStream.where(
-      (event) {
-        return event.peripheral.session.clientIdentifier ==
-                session.clientIdentifier &&
-            event.peripheral.session.peripheralIdentifier ==
-                session.peripheralIdentifier;
-      },
-    ).map((event) => event.state.toConnectionState());
+    return flutterApi.connectionStateStream.where((event) {
+      return event.peripheral.session.clientIdentifier ==
+              session.clientIdentifier &&
+          event.peripheral.session.peripheralIdentifier ==
+              session.peripheralIdentifier;
+    }).map((event) => event.state.toConnectionState());
   }
 
   @override
@@ -183,9 +147,7 @@ base class ButanePlatform extends ButanePlatformInterface {
   Future<Iterable<Service>> services({
     required PeripheralSession session,
   }) async {
-    final services = await hostApi.services(
-      session: session.toSession(),
-    );
+    final services = await hostApi.services(session: session.toSession());
 
     return services.nonNulls.map(ServiceConverter.fromService);
   }
@@ -266,6 +228,38 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
+  Future<Uint8List> readDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+  }) {
+    return hostApi.readDescriptor(
+      session: session.toSession(),
+      serviceUuid: serviceUuid,
+      characteristicUuid: characteristicUuid,
+      descriptorUuid: descriptorUuid,
+    );
+  }
+
+  @override
+  Future<void> writeDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+    required Uint8List value,
+  }) {
+    return hostApi.writeDescriptor(
+      session: session.toSession(),
+      serviceUuid: serviceUuid,
+      characteristicUuid: characteristicUuid,
+      descriptorUuid: descriptorUuid,
+      value: value,
+    );
+  }
+
+  @override
   Stream<Uint8List> characteristicValueStream({
     required PeripheralSession session,
     required String serviceUuid,
@@ -281,12 +275,16 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   /// Requests a read of the RSSI for the peripheral.
   @override
-  Future<int> readRssi({
+  Future<int> readRssi({required PeripheralSession session}) {
+    return hostApi.readRssi(session: session.toSession());
+  }
+
+  @override
+  Future<int> requestMtu({
     required PeripheralSession session,
+    required int mtu,
   }) {
-    return hostApi.readRssi(
-      session: session.toSession(),
-    );
+    return hostApi.requestMtu(session: session.toSession(), mtu: mtu);
   }
 
   // Peripheral Manager
@@ -308,8 +306,7 @@ base class ButanePlatform extends ButanePlatformInterface {
   ]) =>
       flutterApi.peripheralManagerStateStream
           .where(
-            (e) =>
-                e.session?.clientIdentifier == session?.clientIdentifier,
+            (e) => e.session?.clientIdentifier == session?.clientIdentifier,
           )
           .map((e) => e.state.toClientState());
 
@@ -328,9 +325,7 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
-  Future<void> stopAdvertising({
-    PeripheralManagerSession? session,
-  }) {
+  Future<void> stopAdvertising({PeripheralManagerSession? session}) {
     return hostApi.stopAdvertising(
       session: session?.toPeripheralManagerSession() ??
           api.PeripheralManagerSession(),
@@ -370,9 +365,7 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
-  Future<void> removeAllServices({
-    PeripheralManagerSession? session,
-  }) {
+  Future<void> removeAllServices({PeripheralManagerSession? session}) {
     return hostApi.removeAllServices(
       session: session?.toPeripheralManagerSession() ??
           api.PeripheralManagerSession(),
@@ -412,12 +405,8 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
-  Stream<AttRequest> readRequestStream([
-    PeripheralManagerSession? session,
-  ]) =>
-      flutterApi.readRequestStream.map(
-        (e) => e.toAttRequest(),
-      );
+  Stream<AttRequest> readRequestStream([PeripheralManagerSession? session]) =>
+      flutterApi.readRequestStream.map((e) => e.toAttRequest());
 
   @override
   Stream<List<AttRequest>> writeRequestsStream([
@@ -446,9 +435,7 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   void onClientState(String? clientIdentifier, api.ClientState state) {
     clientStateController.sink.add(
       (
-        session: Session(
-          clientIdentifier: clientIdentifier,
-        ),
+        session: Session(clientIdentifier: clientIdentifier),
         state: state,
       ),
     );
@@ -478,16 +465,8 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
 
   @protected
   @override
-  void onConnectionState(
-    api.Peripheral peripheral,
-    api.ConnectionState state,
-  ) {
-    connectionStateController.sink.add(
-      (
-        peripheral: peripheral,
-        state: state,
-      ),
-    );
+  void onConnectionState(api.Peripheral peripheral, api.ConnectionState state) {
+    connectionStateController.sink.add((peripheral: peripheral, state: state));
   }
 
   // Characteristic Value
@@ -543,9 +522,7 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   ) {
     peripheralManagerStateController.sink.add(
       (
-        session: Session(
-          clientIdentifier: clientIdentifier,
-        ),
+        session: Session(clientIdentifier: clientIdentifier),
         state: state,
       ),
     );
@@ -563,22 +540,15 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   @protected
   @override
   void onServiceAdded(String serviceUuid, String? error) {
-    serviceAddedController.sink.add(
-      (
-        serviceUuid: serviceUuid,
-        error: error,
-      ),
-    );
+    serviceAddedController.sink.add((serviceUuid: serviceUuid, error: error));
   }
 
   // Read Request
 
-  Stream<api.AttRequest> get readRequestStream =>
-      readRequestController.stream;
+  Stream<api.AttRequest> get readRequestStream => readRequestController.stream;
 
   @protected
-  final readRequestController =
-      StreamController<api.AttRequest>.broadcast();
+  final readRequestController = StreamController<api.AttRequest>.broadcast();
 
   @protected
   @override
@@ -907,8 +877,9 @@ extension PeripheralConverter on Peripheral {
 extension PeripheralChannelConverter on api.Peripheral {
   static api.Peripheral fromPeripheral(Peripheral peripheral) {
     return api.Peripheral(
-      session:
-          PeripheralChannelSessionConverter.fromSession(peripheral.session),
+      session: PeripheralChannelSessionConverter.fromSession(
+        peripheral.session,
+      ),
       name: peripheral.name,
       rssi: peripheral.rssi,
       state: ConnectionStateChannelConverter.fromConnectionState(
@@ -1000,8 +971,9 @@ extension ScanResultConverter on ScanResult {
 extension ScanResultChannelConverter on api.ScanResult {
   static api.ScanResult fromScanResult(ScanResult scanResult) {
     return api.ScanResult(
-      peripheral:
-          PeripheralChannelConverter.fromPeripheral(scanResult.peripheral),
+      peripheral: PeripheralChannelConverter.fromPeripheral(
+        scanResult.peripheral,
+      ),
       advertisementData:
           AdvertisementDataChannelConverter.fromAdvertisementData(
         scanResult.advertisementData,
@@ -1019,33 +991,21 @@ extension ScanResultChannelConverter on api.ScanResult {
 
 extension ServiceConverter on Service {
   static Service fromService(api.Service service) {
-    return Service(
-      uuid: service.uuid,
-      isPrimary: service.isPrimary,
-    );
+    return Service(uuid: service.uuid, isPrimary: service.isPrimary);
   }
 
   api.Service toService() {
-    return api.Service(
-      uuid: uuid,
-      isPrimary: isPrimary,
-    );
+    return api.Service(uuid: uuid, isPrimary: isPrimary);
   }
 }
 
 extension ServiceChannelConverter on api.Service {
   static api.Service fromService(Service service) {
-    return api.Service(
-      uuid: service.uuid,
-      isPrimary: service.isPrimary,
-    );
+    return api.Service(uuid: service.uuid, isPrimary: service.isPrimary);
   }
 
   Service toService() {
-    return Service(
-      uuid: uuid,
-      isPrimary: isPrimary,
-    );
+    return Service(uuid: uuid, isPrimary: isPrimary);
   }
 }
 
@@ -1103,33 +1063,21 @@ extension CharacteristicChannelConverter on api.Characteristic {
 
 extension DescriptorConverter on Descriptor {
   static Descriptor fromDescriptor(api.Descriptor descriptor) {
-    return Descriptor(
-      uuid: descriptor.uuid,
-      value: descriptor.value,
-    );
+    return Descriptor(uuid: descriptor.uuid, value: descriptor.value);
   }
 
   api.Descriptor toDescriptor() {
-    return api.Descriptor(
-      uuid: uuid,
-      value: value,
-    );
+    return api.Descriptor(uuid: uuid, value: value);
   }
 }
 
 extension DescriptorChannelConverter on api.Descriptor {
   static api.Descriptor fromDescriptor(Descriptor descriptor) {
-    return api.Descriptor(
-      uuid: descriptor.uuid,
-      value: descriptor.value,
-    );
+    return api.Descriptor(uuid: descriptor.uuid, value: descriptor.value);
   }
 
   Descriptor toDescriptor() {
-    return Descriptor(
-      uuid: uuid,
-      value: value,
-    );
+    return Descriptor(uuid: uuid, value: value);
   }
 }
 
@@ -1419,17 +1367,11 @@ extension MutableDescriptorConverter on MutableDescriptor {
   static MutableDescriptor fromMutableDescriptor(
     api.MutableDescriptor descriptor,
   ) {
-    return MutableDescriptor(
-      uuid: descriptor.uuid,
-      value: descriptor.value,
-    );
+    return MutableDescriptor(uuid: descriptor.uuid, value: descriptor.value);
   }
 
   api.MutableDescriptor toMutableDescriptor() {
-    return api.MutableDescriptor(
-      uuid: uuid,
-      value: value,
-    );
+    return api.MutableDescriptor(uuid: uuid, value: value);
   }
 }
 
@@ -1444,10 +1386,7 @@ extension MutableDescriptorChannelConverter on api.MutableDescriptor {
   }
 
   MutableDescriptor toMutableDescriptor() {
-    return MutableDescriptor(
-      uuid: uuid,
-      value: value,
-    );
+    return MutableDescriptor(uuid: uuid, value: value);
   }
 }
 
@@ -1480,8 +1419,7 @@ extension MutableCharacteristicConverter on MutableCharacteristic {
       properties: properties?.toCharacteristicProperty(),
       permissions: permissions?.toCharacteristicPermission(),
       value: value,
-      descriptors:
-          descriptors?.map((e) => e.toMutableDescriptor()).toList(),
+      descriptors: descriptors?.map((e) => e.toMutableDescriptor()).toList(),
     );
   }
 }
@@ -1500,8 +1438,8 @@ extension MutableCharacteristicChannelConverter on api.MutableCharacteristic {
       permissions: characteristic.permissions != null
           ? CharacteristicPermissionChannelConverter
               .fromCharacteristicPermission(
-            characteristic.permissions!,
-          )
+              characteristic.permissions!,
+            )
           : null,
       value: characteristic.value,
       descriptors: characteristic.descriptors
@@ -1516,9 +1454,8 @@ extension MutableCharacteristicChannelConverter on api.MutableCharacteristic {
       properties: properties?.toCharacteristicProperty(),
       permissions: permissions?.toCharacteristicPermission(),
       value: value,
-      descriptors: descriptors?.nonNulls
-          .map((e) => e.toMutableDescriptor())
-          .toList(),
+      descriptors:
+          descriptors?.nonNulls.map((e) => e.toMutableDescriptor()).toList(),
     );
   }
 }

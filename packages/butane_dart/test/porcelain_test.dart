@@ -74,20 +74,151 @@ void main() {
       expect(emitted, contains(PeerManagerState.unauthorized));
     });
   });
+
+  group('Peripheral descriptor and MTU operations', () {
+    test('forward the discovered attribute chain to the platform', () async {
+      final readValue = Uint8List.fromList([1, 2, 3]);
+      final writeValue = Uint8List.fromList([4, 5, 6]);
+      final platform = _FakePlatform(
+        peripheralsValue: const [
+          api.Peripheral(
+            session: api.PeripheralSession(
+              peripheralIdentifier: 'peripheral-id',
+            ),
+            name: 'test peripheral',
+            rssi: -42,
+            state: api.ConnectionState.connected,
+          ),
+        ],
+        servicesValue: const [
+          api.Service(uuid: 'service-uuid', isPrimary: true),
+        ],
+        characteristicsValue: const [
+          api.Characteristic(
+            uuid: 'characteristic-uuid',
+            descriptors: [
+              api.Descriptor(uuid: 'descriptor-uuid'),
+            ],
+          ),
+        ],
+        descriptorReadValue: readValue,
+        effectiveMtu: 185,
+      );
+      final manager = CentralManager(
+        clientIdentifier: 'client-id',
+        restorationIdentifier: 'restoration-id',
+        platform: platform,
+      );
+
+      final peripheral = (await manager.peripherals()).single;
+      final service = (await peripheral.services).single;
+      final characteristic = (await service.characteristics).single;
+      final descriptor = characteristic.descriptors.single;
+
+      expect(characteristic.descriptors, same(characteristic.descriptors));
+      expect(descriptor.characteristic, same(characteristic));
+      expect(await descriptor.read(), readValue);
+      await descriptor.write(value: writeValue);
+      expect(await peripheral.requestMtu(517), 185);
+
+      final readInvocation = platform.readDescriptorInvocation!;
+      expect(readInvocation.session.peripheralIdentifier, 'peripheral-id');
+      expect(readInvocation.session.clientIdentifier, 'client-id');
+      expect(readInvocation.session.restorationIdentifier, 'restoration-id');
+      expect(readInvocation.serviceUuid, 'service-uuid');
+      expect(readInvocation.characteristicUuid, 'characteristic-uuid');
+      expect(readInvocation.descriptorUuid, 'descriptor-uuid');
+
+      final writeInvocation = platform.writeDescriptorInvocation!;
+      expect(writeInvocation.session.peripheralIdentifier, 'peripheral-id');
+      expect(writeInvocation.session.clientIdentifier, 'client-id');
+      expect(writeInvocation.session.restorationIdentifier, 'restoration-id');
+      expect(writeInvocation.serviceUuid, 'service-uuid');
+      expect(writeInvocation.characteristicUuid, 'characteristic-uuid');
+      expect(writeInvocation.descriptorUuid, 'descriptor-uuid');
+      expect(writeInvocation.value, same(writeValue));
+
+      final mtuInvocation = platform.requestMtuInvocation!;
+      expect(mtuInvocation.session.peripheralIdentifier, 'peripheral-id');
+      expect(mtuInvocation.session.clientIdentifier, 'client-id');
+      expect(mtuInvocation.session.restorationIdentifier, 'restoration-id');
+      expect(mtuInvocation.mtu, 517);
+
+      manager.dispose();
+    });
+
+    test('detached descriptor read fails loudly', () {
+      const descriptor = Descriptor(uuid: UuidIdentifier('descriptor-uuid'));
+
+      expect(
+        descriptor.read,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Cannot access descriptor descriptor-uuid without a characteristic, service, and peripheral',
+          ),
+        ),
+      );
+    });
+
+    test('detached descriptor write fails loudly', () {
+      const descriptor = Descriptor(uuid: UuidIdentifier('descriptor-uuid'));
+
+      expect(
+        () => descriptor.write(value: Uint8List(0)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'Cannot access descriptor descriptor-uuid without a characteristic, service, and peripheral',
+          ),
+        ),
+      );
+    });
+  });
 }
 
 /// A pure-Dart [api.ButanePlatformInterface] test double. The abstraction is an
 /// `abstract base class`, so the double must `extends` it (cross-library
-/// `implements` is forbidden) and override every member; only the client-state
-/// surface is wired up — the rest throw.
+/// `implements` is forbidden) and override every member; only the surfaces
+/// exercised here are wired up — the rest throw.
 final class _FakePlatform extends api.ButanePlatformInterface {
   _FakePlatform({
     this.clientStateValue = api.ClientState.poweredOn,
     Stream<api.ClientState>? clientStates,
-  }) : _clientStates = clientStates;
+    this.peripheralsValue = const [],
+    this.servicesValue = const [],
+    this.characteristicsValue = const [],
+    Uint8List? descriptorReadValue,
+    this.effectiveMtu = 23,
+  })  : _clientStates = clientStates,
+        descriptorReadValue = descriptorReadValue ?? Uint8List(0);
 
   final api.ClientState clientStateValue;
   final Stream<api.ClientState>? _clientStates;
+  final Iterable<api.Peripheral> peripheralsValue;
+  final Iterable<api.Service> servicesValue;
+  final Iterable<api.Characteristic> characteristicsValue;
+  final Uint8List descriptorReadValue;
+  final int effectiveMtu;
+
+  ({
+    api.PeripheralSession session,
+    String serviceUuid,
+    String characteristicUuid,
+    String descriptorUuid,
+  })? readDescriptorInvocation;
+
+  ({
+    api.PeripheralSession session,
+    String serviceUuid,
+    String characteristicUuid,
+    String descriptorUuid,
+    Uint8List value,
+  })? writeDescriptorInvocation;
+
+  ({api.PeripheralSession session, int mtu})? requestMtuInvocation;
 
   @override
   Future<api.ClientState> clientState([api.Session? session]) async =>
@@ -114,8 +245,8 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   Future<Iterable<api.Peripheral>> peripherals({
     Iterable<String> peripheralIdentifiers = const [],
     api.Session? session,
-  }) =>
-      throw UnimplementedError();
+  }) async =>
+      peripheralsValue;
 
   @override
   Future<Iterable<api.Peripheral>> connectedPeripherals({
@@ -154,8 +285,8 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   @override
   Future<Iterable<api.Service>> services({
     required api.PeripheralSession session,
-  }) =>
-      throw UnimplementedError();
+  }) async =>
+      servicesValue;
 
   @override
   Future<void> discoverCharacteristics({
@@ -169,8 +300,8 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   Future<Iterable<api.Characteristic>> characteristics({
     required api.PeripheralSession session,
     required String serviceUuid,
-  }) =>
-      throw UnimplementedError();
+  }) async =>
+      characteristicsValue;
 
   @override
   Future<Uint8List> readCharacteristic({
@@ -208,8 +339,50 @@ final class _FakePlatform extends api.ButanePlatformInterface {
       throw UnimplementedError();
 
   @override
+  Future<Uint8List> readDescriptor({
+    required api.PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+  }) async {
+    readDescriptorInvocation = (
+      session: session,
+      serviceUuid: serviceUuid,
+      characteristicUuid: characteristicUuid,
+      descriptorUuid: descriptorUuid,
+    );
+    return descriptorReadValue;
+  }
+
+  @override
+  Future<void> writeDescriptor({
+    required api.PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+    required Uint8List value,
+  }) async {
+    writeDescriptorInvocation = (
+      session: session,
+      serviceUuid: serviceUuid,
+      characteristicUuid: characteristicUuid,
+      descriptorUuid: descriptorUuid,
+      value: value,
+    );
+  }
+
+  @override
   Future<int> readRssi({required api.PeripheralSession session}) =>
       throw UnimplementedError();
+
+  @override
+  Future<int> requestMtu({
+    required api.PeripheralSession session,
+    required int mtu,
+  }) async {
+    requestMtuInvocation = (session: session, mtu: mtu);
+    return effectiveMtu;
+  }
 
   @override
   Future<api.ClientState> peripheralManagerState([

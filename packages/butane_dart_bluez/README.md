@@ -30,6 +30,22 @@ Future<void> main() async {
 - Linux with BlueZ ≥ 5 and a powered adapter.
 - D-Bus system-bus access for the running user.
 
+## Manual source receipt
+
+`ButaneDartBluez.readDescriptor` and `ButaneDartBluez.writeDescriptor` use the
+`bluez` package's `BlueZGattDescriptor.readValue()` and
+`BlueZGattDescriptor.writeValue()` methods. Those methods call the
+`org.bluez.GattDescriptor1` `ReadValue` and `WriteValue` D-Bus operations.
+
+`ButaneDartBluez.requestMtu` waits for services to resolve, then reads the
+negotiated `MTU` published by `org.bluez.GattCharacteristic1`. BlueZ does not
+offer a client-side target-MTU request, so the requested target is ignored and
+the published effective value is returned.
+
+This pure-Dart package has no native BlueZ fake for exercising these D-Bus
+operations. On-radio proof remains part of the separate hardware burn workflow
+documented in [`docs/burn-workflow.md`](../../docs/burn-workflow.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

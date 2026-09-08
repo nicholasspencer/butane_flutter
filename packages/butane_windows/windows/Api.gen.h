@@ -835,7 +835,10 @@ class ButaneHostApi {
   virtual void ReadRssi(
     const PeripheralSession& session,
     std::function<void(ErrorOr<int64_t> reply)> result) = 0;
-  // Requests a MTU size change.
+  // Requests a target ATT MTU and returns the negotiated/effective ATT MTU.
+  //
+  // A platform without a client-side request ignores the target and reports
+  // its effective value.
   virtual void RequestMtu(
     const PeripheralSession& session,
     int64_t mtu,

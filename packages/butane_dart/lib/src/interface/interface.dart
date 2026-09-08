@@ -138,9 +138,32 @@ abstract base class ButanePlatformInterface {
     required String characteristicUuid,
   });
 
+  /// Reads the value of the descriptor.
+  Future<Uint8List> readDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+  });
+
+  /// Writes [value] to the descriptor.
+  Future<void> writeDescriptor({
+    required PeripheralSession session,
+    required String serviceUuid,
+    required String characteristicUuid,
+    required String descriptorUuid,
+    required Uint8List value,
+  });
+
   /// Requests a read of the RSSI for the peripheral.
   Future<int> readRssi({
     required PeripheralSession session,
+  });
+
+  /// Requests a target ATT [mtu] and returns the negotiated/effective ATT MTU.
+  Future<int> requestMtu({
+    required PeripheralSession session,
+    required int mtu,
   });
 
   /// "Peripheral Manager" APIs.

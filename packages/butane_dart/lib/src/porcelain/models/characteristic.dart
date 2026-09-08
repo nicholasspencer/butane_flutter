@@ -4,9 +4,27 @@ base class Characteristic extends Attribute {
   Characteristic({
     required super.uuid,
     required this.service,
-  });
+  }) : _descriptorData = null;
+
+  Characteristic._fromData({
+    required super.uuid,
+    required this.service,
+    required List<api.Descriptor>? descriptorData,
+  }) : _descriptorData = descriptorData;
 
   final Service? service;
+
+  final List<api.Descriptor>? _descriptorData;
+
+  /// Descriptors discovered for this characteristic.
+  late final List<Descriptor> descriptors = (_descriptorData ?? const [])
+      .map(
+        (data) => Descriptor(
+          uuid: UuidIdentifier(data.uuid),
+          characteristic: this,
+        ),
+      )
+      .toList(growable: false);
 
   @protected
   PlatformStreamController<Uint8List, Uint8List>? valueStreamController;
@@ -97,9 +115,10 @@ extension ApiCharacteristic on api.Characteristic {
   Characteristic toCharacteristic({
     required Service service,
   }) {
-    return Characteristic(
+    return Characteristic._fromData(
       uuid: UuidIdentifier(uuid),
       service: service,
+      descriptorData: descriptors,
     );
   }
 }
