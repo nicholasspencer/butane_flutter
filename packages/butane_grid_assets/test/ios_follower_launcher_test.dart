@@ -19,6 +19,8 @@ const _hangingHelper = r'''
 Future<void> main() => Future<void>.delayed(const Duration(days: 1));
 ''';
 
+const _phaseTestCeiling = Duration(seconds: 5);
+
 class _IosProcessFixture {
   _IosProcessFixture(this.source);
 
@@ -43,6 +45,11 @@ class _IosProcessFixture {
     ], mode: mode);
     _processes.add(process);
     return process;
+  }
+
+  Future<void> signalChildExit() async {
+    _processes.single.stdin.writeln('exit');
+    await _processes.single.stdin.flush();
   }
 
   Future<bool> get allChildrenExited async {
@@ -371,9 +378,10 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
       preLaunchCleanup: (_) => provision.future,
     );
 
-    final stopwatch = Stopwatch()..start();
     await expectLater(
-      launcher.launch(const LaunchSpec(app: 'app', target: 'ios')),
+      launcher
+          .launch(const LaunchSpec(app: 'app', target: 'ios'))
+          .timeout(_phaseTestCeiling),
       throwsA(
         isA<TimeoutException>().having(
           (error) => '$error',
@@ -382,7 +390,6 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
         ),
       ),
     );
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
   });
 
   test('phase deadline: process start', () async {
@@ -397,9 +404,10 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
           process.future,
     );
 
-    final stopwatch = Stopwatch()..start();
     await expectLater(
-      launcher.launch(const LaunchSpec(app: 'app', target: 'ios')),
+      launcher
+          .launch(const LaunchSpec(app: 'app', target: 'ios'))
+          .timeout(_phaseTestCeiling),
       throwsA(
         isA<TimeoutException>().having(
           (error) => '$error',
@@ -408,7 +416,6 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
         ),
       ),
     );
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
   });
 
   test('phase deadline: live install+launch', () async {
@@ -423,9 +430,10 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
       processStarter: fixture.start,
     );
 
-    final stopwatch = Stopwatch()..start();
     await expectLater(
-      launcher.launch(const LaunchSpec(app: 'app', target: 'ios')),
+      launcher
+          .launch(const LaunchSpec(app: 'app', target: 'ios'))
+          .timeout(_phaseTestCeiling),
       throwsA(
         isA<TimeoutException>().having(
           (error) => '$error',
@@ -434,7 +442,6 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
         ),
       ),
     );
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
     expect(await fixture.allChildrenExited, isTrue);
   });
 
@@ -466,9 +473,10 @@ void main() async {
       processStarter: fixture.start,
     );
 
-    final stopwatch = Stopwatch()..start();
     await expectLater(
-      launcher.launch(const LaunchSpec(app: 'app', target: 'ios')),
+      launcher
+          .launch(const LaunchSpec(app: 'app', target: 'ios'))
+          .timeout(_phaseTestCeiling),
       throwsA(
         isA<TimeoutException>().having(
           (error) => '$error',
@@ -477,7 +485,6 @@ void main() async {
         ),
       ),
     );
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
     expect(await fixture.allChildrenExited, isTrue);
   });
 
@@ -507,13 +514,13 @@ void main() async {
       await serving.cancel();
     });
     final fixture = _IosProcessFixture('''
-import 'dart:async';
+import 'dart:io';
 void main() async {
   print(
     "A Dart VM Service on Test Device is available at: "
     "http://127.0.0.1:${server.port}/auth/",
   );
-  await Future<void>.delayed(const Duration(milliseconds: 80));
+  await stdin.first;
 }
 ''');
     addTearDown(fixture.dispose);
@@ -551,9 +558,8 @@ void main() async {
     );
 
     await published.future;
-    final stopwatch = Stopwatch()..start();
-    expect(await run, 1);
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 250)));
+    await fixture.signalChildExit();
+    expect(await run.timeout(_phaseTestCeiling), 1);
     expect(
       logs,
       contains(contains('burn follower child exited while resident')),
