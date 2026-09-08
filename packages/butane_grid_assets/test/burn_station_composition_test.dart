@@ -67,6 +67,19 @@ class _FakeHostHarnessLaunch implements HostHarnessLaunch {
   Future<void> teardown() async => teardowns++;
 }
 
+class _RecordingDeviceCatalog implements FlutterDeviceCatalog {
+  _RecordingDeviceCatalog(this.onList, this.devices);
+
+  final void Function() onList;
+  final List<FlutterDevice> devices;
+
+  @override
+  Future<List<FlutterDevice>> listDevices() async {
+    onList();
+    return devices;
+  }
+}
+
 class _TranscriptRuntimeProvider implements RuntimeProvider {
   final started = <String, RuntimeConfig>{};
   final stopped = <String>[];
@@ -207,6 +220,207 @@ void main() {
     expect(_capability(registry, 0), isNot(isA<ProcessCapability>()));
     expect(_capability(registry, 1), isA<BurnHostCapability>());
   });
+
+  test(
+    'undeclared preconditions preserve the no-probe follower path',
+    () async {
+      final probes = <String>[];
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        driveFactory: (_) => _FakeLeonardDrive(),
+        burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+        preflight: BurnPreflight(
+          directoryExists: (_) {
+            probes.add('directory');
+            return false;
+          },
+          fileExists: (_) {
+            probes.add('file');
+            return false;
+          },
+          devices: _RecordingDeviceCatalog(
+            () => probes.add('devices'),
+            const [],
+          ),
+          hostReachable: (_) async {
+            probes.add('host');
+            return false;
+          },
+          peerReachable: (_, _) async {
+            probes.add('peer');
+            return false;
+          },
+        ),
+      );
+      final transport = _TranscriptRuntimeProvider();
+      final reports = <AllocationReport>[];
+      final allocation = _capability(registry, 0).createAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: reports,
+          bead: _order(_metadata),
+        ),
+      );
+
+      try {
+        await allocation.startOrAdopt();
+        expect(probes, isEmpty);
+        expect(transport.started, hasLength(1));
+        expect(reports.whereType<AllocationFailed>(), isEmpty);
+      } finally {
+        await allocation.dispose();
+      }
+    },
+  );
+
+  test(
+    'declared unsatisfied precondition fails before start and later probes',
+    () async {
+      final probes = <String>[];
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        driveFactory: (_) => _FakeLeonardDrive(),
+        burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+        preflight: BurnPreflight(
+          directoryExists: (_) {
+            probes.add('directory');
+            return true;
+          },
+          fileExists: (_) {
+            probes.add('file');
+            return true;
+          },
+          devices: _RecordingDeviceCatalog(
+            () => probes.add('devices'),
+            const [],
+          ),
+          hostReachable: (host) async {
+            probes.add('host:$host');
+            return false;
+          },
+          peerReachable: (host, port) async {
+            probes.add('peer:$host:$port');
+            return true;
+          },
+        ),
+      );
+      final transport = _TranscriptRuntimeProvider();
+      final reports = <AllocationReport>[];
+      final allocation = _capability(registry, 0).createAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: reports,
+          bead: _order({
+            ..._metadata,
+            BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
+            BurnOrderInputs.preconditionsKey:
+                '["windows-host-reachable","peer=bench.local:8123"]',
+          }),
+        ),
+      );
+
+      try {
+        await allocation.startOrAdopt();
+        expect(probes, ['directory', 'file', 'host:yoga-from-bead']);
+        expect(transport.started, isEmpty);
+        expect(allocation.state, AllocationState.gone);
+        expect(reports.whereType<AllocationReady>(), isEmpty);
+        expect(
+          reports.whereType<AllocationFailed>().single.reason,
+          'resident burn follower failed to start: Bad state: '
+          'burn preflight held windows-host-reachable: host=yoga-from-bead',
+        );
+      } finally {
+        await allocation.dispose();
+      }
+    },
+  );
+
+  test(
+    'declared satisfied preconditions probe in order and launch unchanged',
+    () async {
+      final probes = <String>[];
+      final registry = buildBurnStationRegistry(
+        appendNote: (_, _) async {},
+        driveFactory: (_) => _FakeLeonardDrive(),
+        burnFollowerEntrypoint: '/package/bin/burn_follower_daemon.dart',
+        preflight: BurnPreflight(
+          directoryExists: (path) {
+            probes.add('directory:$path');
+            return true;
+          },
+          fileExists: (path) {
+            probes.add('file:$path');
+            return true;
+          },
+          devices: _RecordingDeviceCatalog(() => probes.add('follower'), const [
+            FlutterDevice(
+              id: 'device-from-bead',
+              name: 'iPhone',
+              targetPlatform: 'ios',
+              emulator: false,
+            ),
+          ]),
+          hostReachable: (host) async {
+            probes.add('windows:$host');
+            return true;
+          },
+          peerReachable: (host, port) async {
+            probes.add('peer:$host:$port');
+            return true;
+          },
+        ),
+      );
+      final transport = _TranscriptRuntimeProvider();
+      final reports = <AllocationReport>[];
+      final allocation = _capability(registry, 0).createAllocation(
+        _allocationContext(
+          transport: transport,
+          reports: reports,
+          bead: _order({
+            ..._metadata,
+            BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
+            BurnOrderInputs.preconditionsKey:
+                '["follower-ios-attached","windows-host-reachable",'
+                '"peer=bench.local:8123"]',
+          }),
+        ),
+      );
+      final name = allocation.address.providerName;
+
+      await allocation.startOrAdopt();
+      expect(probes, [
+        'directory:/harness/from/bead',
+        'file:/drive/from/bead',
+        'follower',
+        'windows:yoga-from-bead',
+        'peer:bench.local:8123',
+      ]);
+      expect(transport.started[name]!.command, isNotEmpty);
+      expect(transport.started[name]!.lifecycle, Lifecycle.longLived);
+      expect(transport.started[name]!.args, [
+        'run',
+        '/package/bin/burn_follower_daemon.dart',
+        '--target',
+        'ios',
+        '--device',
+        'device-from-bead',
+        '--harness-dir',
+        '/harness/from/bead',
+        '--leonard-drive',
+        '/drive/from/bead',
+      ]);
+
+      transport.emitOutput(
+        name,
+        'burn-follower-published ${_endpoint.vmServiceUri}',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(reports.whereType<AllocationReady>(), hasLength(1));
+      await allocation.dispose();
+      expect(transport.stopped, [name]);
+    },
+  );
 
   test(
     'default follower entrypoint resolves outside the current cwd',

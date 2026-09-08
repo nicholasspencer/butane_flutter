@@ -32,6 +32,7 @@ export 'src/burn/burn_follower_daemon.dart';
 export 'src/burn/burn_order_landing.dart';
 export 'src/burn/burn_order_inputs.dart';
 export 'src/burn/burn_preflight.dart';
+export 'src/burn/burn_preflight_io.dart';
 export 'src/burn/burn_dispatch_handler.dart';
 export 'src/burn/burn_report.dart';
 export 'src/burn/burn_scenario.dart';
