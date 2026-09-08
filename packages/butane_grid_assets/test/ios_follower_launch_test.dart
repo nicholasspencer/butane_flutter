@@ -113,12 +113,8 @@ void main() {
         markTestSkipped('provide ORDER burn metadata or compatibility inputs');
         return;
       }
-      final preflight = BurnPreflight(
-        directoryExists: (path) => Directory(path).existsSync(),
-        fileExists: (path) => File(path).existsSync(),
-      );
       try {
-        preflight.validate(inputs);
+        await systemBurnPreflight().validate(inputs);
       } on StateError catch (error) {
         markTestSkipped('$error');
         return;

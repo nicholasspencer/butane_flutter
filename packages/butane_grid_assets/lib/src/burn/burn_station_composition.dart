@@ -43,6 +43,8 @@ import 'burn_capabilities.dart'
         kBurnFollowerStep,
         kBurnHostStep;
 import 'burn_order_inputs.dart' show BurnOrderInputs;
+import 'burn_preflight.dart' show BurnPreflight;
+import 'burn_preflight_io.dart' show systemBurnPreflight;
 import 'burn_report.dart' show TestReport;
 import 'burn_scenario.dart' show LeonardDrive;
 import 'follower.dart' show ButaneFollowerRunner, FollowerEndpoint, LaunchSpec;
@@ -157,17 +159,19 @@ final class _ResidentBurnFollowerCapability extends Capability {
     required this.environment,
     required this.log,
     required this.entrypoint,
+    required this.preflight,
   });
 
   final _OrderLeonardDrive drive;
   final Map<String, String> environment;
   final _BeadNoteLog log;
   final String entrypoint;
+  final BurnPreflight preflight;
 
-  ({RuntimeConfig config, String followerTarget}) spawn(
+  Future<({RuntimeConfig config, String followerTarget})> spawn(
     TreeContext context,
     StepArgs args,
-  ) {
+  ) async {
     log.bind(args.beadId);
     final bead = context.getInheritedSeedOfExactType<Bead>();
     if (bead == null) {
@@ -180,6 +184,9 @@ final class _ResidentBurnFollowerCapability extends Capability {
       environment: environment,
       onLog: log.call,
     );
+    if (inputs.preconditions.isNotEmpty) {
+      await preflight.validate(inputs);
+    }
     drive.select(inputs.leonardDrive);
     return (
       config: RuntimeConfig(
@@ -223,7 +230,7 @@ final class _PublishedFollowerAllocation extends Allocation {
   Future<void> startOrAdopt() async {
     final name = address.providerName;
     try {
-      final base = capability.spawn(context.treeContext, context.args);
+      final base = await capability.spawn(context.treeContext, context.args);
       _followerTarget = base.followerTarget;
       final config = base.config.copyWith(
         env: {...base.config.env, ...context.env},
@@ -430,6 +437,7 @@ CapabilityRegistry buildBurnStationRegistry({
   MacosHostLaunchFactory? macosHostFactory,
   WindowsHostLaunchFactory? windowsHostFactory,
   Map<String, String>? environment,
+  BurnPreflight? preflight,
 }) {
   const packageLibrary = 'package:butane_grid_assets/butane_grid_assets.dart';
   final packageEntrypoint =
@@ -451,6 +459,7 @@ CapabilityRegistry buildBurnStationRegistry({
         onLog: log.call,
       );
   final orderDrive = _OrderLeonardDrive(resolvedDriveFactory);
+  final resolvedPreflight = preflight ?? systemBurnPreflight();
   return DefaultCapabilityRegistry(
     capabilities: {
       kBurnFollowerStep: _ResidentBurnFollowerCapability(
@@ -458,6 +467,7 @@ CapabilityRegistry buildBurnStationRegistry({
         environment: environment ?? Platform.environment,
         log: log,
         entrypoint: resolvedBurnFollowerEntrypoint,
+        preflight: resolvedPreflight,
       ),
       kBurnHostStep: _ResidentBurnHostCapability(
         drive: orderDrive,

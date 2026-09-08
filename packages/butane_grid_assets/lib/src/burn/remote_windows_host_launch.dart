@@ -25,6 +25,14 @@ typedef LocalPortAllocator = Future<int> Function();
 typedef TunnelReadyWaiter =
     Future<void> Function(int port, Process process, Duration timeout);
 
+/// Shared non-interactive SSH options for Windows host probes and lifecycle.
+const List<String> kBurnSshOptions = [
+  '-o',
+  'BatchMode=yes',
+  '-o',
+  'ConnectTimeout=15',
+];
+
 void _noLog(String _) {}
 
 Future<int> _allocateLoopbackPort() async {
@@ -89,7 +97,6 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
   Process? _logTailProcess;
   bool _teardownStarted = false;
 
-  static const _sshOptions = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15'];
   static const _scheduledTaskName = r'\Butane\InteractiveCentralHarness';
   static const _payloadFileName = 'remote_windows_host_launch.ps1';
   static const _logFileName = 'remote_windows_host_launch.log';
@@ -99,7 +106,7 @@ final class RemoteWindowsHostLaunch implements HostHarnessLaunch {
   String get _logPath => '$_gridDirectory/$_logFileName';
 
   Future<String> _runCheckedSsh(String command, String operation) async {
-    final process = await _starter('ssh', [..._sshOptions, host, command]);
+    final process = await _starter('ssh', [...kBurnSshOptions, host, command]);
     final outputFuture = process.stdout.transform(utf8.decoder).join();
     final errorFuture = process.stderr.transform(utf8.decoder).join();
     final code = await process.exitCode;
@@ -183,7 +190,7 @@ exit \$LASTEXITCODE
         '{ Start-Sleep -Milliseconds 100 }; '
         'Get-Content -LiteralPath ${ps(_logPath)} -Wait';
     return _starter('ssh', [
-      ..._sshOptions,
+      ...kBurnSshOptions,
       host,
       'powershell.exe -NoProfile -NonInteractive -Command ${ps(script)}',
     ]);
@@ -237,7 +244,7 @@ exit \$LASTEXITCODE
       }
       final localPort = await _allocatePort();
       final tunnel = await _starter('ssh', [
-        ..._sshOptions,
+        ...kBurnSshOptions,
         '-o',
         'ExitOnForwardFailure=yes',
         '-N',
@@ -290,7 +297,7 @@ exit \$LASTEXITCODE
   Future<void> _taskkill(int pid) async {
     _remotePid = null;
     final process = await _starter('ssh', [
-      ..._sshOptions,
+      ...kBurnSshOptions,
       host,
       'taskkill /F /T /PID $pid',
     ]);

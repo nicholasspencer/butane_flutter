@@ -3,6 +3,101 @@ import 'package:test/test.dart';
 
 void main() {
   group('BurnOrderInputs', () {
+    test('parses canonical preconditions in declaration order', () {
+      final inputs = BurnOrderInputs.resolve(
+        metadata: const {
+          BurnOrderInputs.preconditionsKey:
+              '["follower-ios-attached",'
+              '"windows-host-reachable","peer=bench.local:6123"]',
+        },
+        environment: const {},
+        onLog: (_) {},
+      );
+
+      expect(
+        inputs.preconditions.map((value) => value.kind),
+        orderedEquals(const [
+          BurnPreconditionKind.followerIosAttached,
+          BurnPreconditionKind.windowsHostReachable,
+          BurnPreconditionKind.peerAnswering,
+        ]),
+      );
+      expect(
+        inputs.preconditions.map((value) => value.declaration),
+        orderedEquals(const [
+          'follower-ios-attached',
+          'windows-host-reachable',
+          'peer=bench.local:6123',
+        ]),
+      );
+      expect(inputs.preconditions.last.host, 'bench.local');
+      expect(inputs.preconditions.last.port, 6123);
+      expect(
+        () => inputs.preconditions.add(
+          const BurnPrecondition.followerIosAttached(),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('missing and blank preconditions are empty immutable lists', () {
+      for (final metadata in const <Map<String, Object?>>[
+        {},
+        {BurnOrderInputs.preconditionsKey: ''},
+        {BurnOrderInputs.preconditionsKey: '   '},
+      ]) {
+        final inputs = BurnOrderInputs.resolve(
+          metadata: metadata,
+          environment: const {},
+          onLog: (_) {},
+        );
+
+        expect(inputs.preconditions, isEmpty);
+        expect(
+          () => inputs.preconditions.add(
+            const BurnPrecondition.followerIosAttached(),
+          ),
+          throwsUnsupportedError,
+        );
+      }
+    });
+
+    for (final raw in const <Object?>[
+      null,
+      7,
+      'not-json',
+      '{}',
+      '"follower-ios-attached"',
+      '[1]',
+      '["unknown"]',
+      '[" follower-ios-attached"]',
+      '["peer=:80"]',
+      '["peer=bench host:80"]',
+      '["peer=bench:host:80"]',
+      '["peer=bench:port"]',
+      '["peer=bench:0"]',
+      '["peer=bench:65536"]',
+      '["follower-ios-attached","follower-ios-attached"]',
+      '["peer=bench:080","peer=bench:80"]',
+    ]) {
+      test('rejects invalid preconditions value $raw', () {
+        expect(
+          () => BurnOrderInputs.resolve(
+            metadata: {BurnOrderInputs.preconditionsKey: raw},
+            environment: const {},
+            onLog: (_) {},
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'burn input burn.preconditions invalid: $raw',
+            ),
+          ),
+        );
+      });
+    }
+
     test('metadata wins, is trimmed, and emits no fallback logs', () {
       final logs = <String>[];
       final inputs = BurnOrderInputs.resolve(
