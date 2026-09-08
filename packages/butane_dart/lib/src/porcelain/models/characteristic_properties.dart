@@ -15,6 +15,24 @@ base class CharacteristicProperties {
     this.indicateEncryptionRequired = false,
   });
 
+  /// Creates characteristic properties from the platform interface type.
+  factory CharacteristicProperties.fromApi(
+    api.CharacteristicProperty property,
+  ) {
+    return CharacteristicProperties(
+      broadcast: property.broadcast,
+      read: property.read,
+      writeWithoutResponse: property.writeWithoutResponse,
+      write: property.write,
+      notify: property.notify,
+      indicate: property.indicate,
+      authenticatedSignedWrites: property.authenticatedSignedWrites,
+      extendedProperties: property.extendedProperties,
+      notifyEncryptionRequired: property.notifyEncryptionRequired,
+      indicateEncryptionRequired: property.indicateEncryptionRequired,
+    );
+  }
+
   final bool broadcast;
 
   final bool read;
