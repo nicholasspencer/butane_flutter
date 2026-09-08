@@ -19,7 +19,10 @@ const _hangingHelper = r'''
 Future<void> main() => Future<void>.delayed(const Duration(days: 1));
 ''';
 
-const _phaseTestCeiling = Duration(seconds: 5);
+// Liveness tripwire only, never a latency assertion: every fixture below
+// compiles a Dart script from source, and under the code-validation lane's
+// parallel load a cold compile alone exceeded five seconds (1 in 21 runs).
+const _phaseTestCeiling = Duration(seconds: 30);
 
 class _IosProcessFixture {
   _IosProcessFixture(this.source);
