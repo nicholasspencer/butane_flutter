@@ -412,6 +412,32 @@ class BurnHostCapability extends ServiceCapability {
     // The per-incarnation hold is keyed by the [StepArgs] identity — the host
     // hands the SAME instance to run + teardown + reportFor.
     final hold = _holds[args] = _HostHold();
+    final configuredCentralTarget = localSpec?.target ?? '';
+    var reportEndpoint = '';
+    var centralIdentity = '';
+    var centralLaunchOutcome = BurnLaunchOutcome.notObserved;
+    var followerIdentity = '';
+    var followerTarget = BurnStepOutcome.notObserved.wire;
+    var followerLaunchOutcome = BurnLaunchOutcome.notObserved;
+
+    TestReport unobservedReport() => unobservedDriveReport(
+      scenario: scenario,
+      endpoint: reportEndpoint,
+      central: configuredCentralTarget.isEmpty
+          ? BurnStepOutcome.notObserved.wire
+          : configuredCentralTarget,
+      follower: followerTarget,
+      centralIdentity: centralIdentity,
+      centralLaunchOutcome: centralLaunchOutcome,
+      followerIdentity: followerIdentity,
+      followerLaunchOutcome: followerLaunchOutcome,
+    );
+
+    void retainUnobservedReport() {
+      hold.report = unobservedReport();
+    }
+
+    retainUnobservedReport();
 
     // AWAIT the follower endpoint, read pull-free from the AMBIENT sibling
     // view at ENTRY (the effect verb, D-5).
@@ -422,28 +448,45 @@ class BurnHostCapability extends ServiceCapability {
     final published = siblings.resultOf(followerPath);
     final uri = published['endpoint'] ?? '';
     if (uri.isEmpty) {
-      return const Failed('no follower endpoint (rendezvous failed)');
+      return _failedWithEvidence(
+        'no follower endpoint (rendezvous failed)',
+        hold.report!,
+      );
     }
-    final followerTarget = published['target'];
-    if (followerTarget == null || followerTarget.isEmpty) {
-      return const Failed('follower rendezvous published no target');
+    reportEndpoint = uri;
+    followerIdentity = published['station'] ?? '';
+    followerTarget = published['target'] ?? BurnStepOutcome.notObserved.wire;
+    followerLaunchOutcome = BurnLaunchOutcome.launched;
+    retainUnobservedReport();
+    if (followerTarget == BurnStepOutcome.notObserved.wire ||
+        followerTarget.isEmpty) {
+      return _failedWithEvidence(
+        'follower rendezvous published no target',
+        hold.report!,
+      );
     }
     final centralLaunch = hostLaunch;
-    final centralTarget = localSpec?.target ?? '';
-    if (centralLaunch != null && centralTarget.isEmpty) {
-      return const Failed('two-drive burn published no central target');
+    if (centralLaunch != null && configuredCentralTarget.isEmpty) {
+      return _failedWithEvidence(
+        'two-drive burn published no central target',
+        hold.report!,
+      );
     }
     final endpoint = FollowerEndpoint(
       vmServiceUri: uri,
       station: published['station'] ?? '',
       leaseId: published['lease'] ?? '',
     );
-    if (args.cancel.isCancelled) return const Failed('cancelled');
+    if (args.cancel.isCancelled) {
+      return _failedWithEvidence('cancelled', hold.report!);
+    }
 
     // ATTACH the DIRECT perception channel (NOT the bus) + run the SCRIPTED
     // scenario. The drive is closed in teardown (the guaranteed channel teardown).
     await drive.attach(endpoint);
-    if (args.cancel.isCancelled) return const Failed('cancelled');
+    if (args.cancel.isCancelled) {
+      return _failedWithEvidence('cancelled', hold.report!);
+    }
     _onLog('host attached leonard_drive to ${endpoint.vmServiceUri}');
 
     // TWO-DRIVE burn: launch the host's own local harness (the central) and
@@ -454,14 +497,26 @@ class BurnHostCapability extends ServiceCapability {
       try {
         centralEndpoint = await centralLaunch.launch(localSpec!);
       } on Object catch (e) {
+        centralLaunchOutcome = BurnLaunchOutcome.failed;
+        retainUnobservedReport();
         final label = centralLaunch is LocalFollowerLaunch
             ? 'local'
             : 'central';
-        return Failed('$label harness launch failed: $e');
+        return _failedWithEvidence(
+          '$label harness launch failed: $e',
+          hold.report!,
+        );
       }
-      if (args.cancel.isCancelled) return const Failed('cancelled');
+      centralIdentity = centralEndpoint.station;
+      centralLaunchOutcome = BurnLaunchOutcome.launched;
+      retainUnobservedReport();
+      if (args.cancel.isCancelled) {
+        return _failedWithEvidence('cancelled', hold.report!);
+      }
       await localDrive!.attach(centralEndpoint);
-      if (args.cancel.isCancelled) return const Failed('cancelled');
+      if (args.cancel.isCancelled) {
+        return _failedWithEvidence('cancelled', hold.report!);
+      }
       _onLog(
         'host attached central leonard_drive to ${centralEndpoint.vmServiceUri}',
       );
@@ -471,31 +526,38 @@ class BurnHostCapability extends ServiceCapability {
       drive: drive,
       scenario: scenario,
       endpoint: endpoint,
-      central: centralTarget,
+      central: configuredCentralTarget,
       follower: followerTarget,
+      centralIdentity: centralIdentity,
+      centralLaunchOutcome: centralLaunchOutcome,
+      centralTeardownConfirmation: BurnTeardownConfirmation.notObserved,
+      followerIdentity: followerIdentity,
+      followerLaunchOutcome: followerLaunchOutcome,
+      followerTeardownConfirmation: BurnTeardownConfirmation.notObserved,
       localDrive: localDrive,
       isCancelled: () => args.cancel.isCancelled,
     );
     hold.report = report;
-    if (args.cancel.isCancelled) return const Failed('cancelled');
+    if (args.cancel.isCancelled) {
+      return _failedWithEvidence('cancelled', report);
+    }
 
     _onLog('host collected report: $report');
     if (report.passed) _onLog(report.receipt);
     return report.passed
-        ? Ok({
-            'scenario': report.scenario,
-            'passed': 'true',
-            'central': report.central,
-            'follower': report.follower,
-            'steps': '${report.total}',
-            'failures': '${report.failures}',
-            'endpoint': report.endpoint,
-          })
-        : Failed(
+        ? Ok(burnResultPayload(report))
+        : _failedWithEvidence(
             'burn scenario "${report.scenario}" failed: '
             '${report.failures}/${report.total} step(s)',
+            report,
           );
   }
+
+  // The engine's Failed arm has no payload by contract, so this bounded digest
+  // is the only durable failure carrier. Returning Ok for a failed burn would
+  // suppress supervision and is therefore not an evidence-preserving option.
+  Failed _failedWithEvidence(String reason, TestReport report) =>
+      Failed('$reason ${burnFailureDigest(report)}');
 
   /// The report the mount driven by [args] collected (for tests /
   /// introspection), or `null`.

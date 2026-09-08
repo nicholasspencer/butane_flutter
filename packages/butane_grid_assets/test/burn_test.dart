@@ -417,7 +417,350 @@ _ScriptedLeonardDrive _passingDrive() => _ScriptedLeonardDrive(
   invokeResponses: const {'grid.ready': '["tg-1","tg-2"]'},
 );
 
+void _expectHostFailure(
+  StepOutcome outcome,
+  String diagnostic,
+  BurnHostCapability host,
+  StepArgs args,
+) {
+  final report = host.reportFor(args);
+  expect(report, isNotNull);
+  expect(outcome, isA<Failed>());
+  expect(
+    (outcome as Failed).reason,
+    '$diagnostic ${burnFailureDigest(report!)}',
+  );
+}
+
 void main() {
+  group('durable burn evidence', () {
+    test('report JSON carries two-device evidence', () {
+      const report = TestReport(
+        scenario: 'evidence-smoke',
+        endpoint: 'ws://receipt.invalid/secret/ws',
+        central: 'macos',
+        follower: 'ios',
+        centralIdentity: 'studio',
+        centralLaunchOutcome: BurnLaunchOutcome.launched,
+        centralTeardownConfirmation: BurnTeardownConfirmation.confirmed,
+        followerIdentity: 'dashboard',
+        followerLaunchOutcome: BurnLaunchOutcome.failed,
+        followerTeardownConfirmation: BurnTeardownConfirmation.failed,
+        steps: [
+          DriveStepResult(
+            description: '[local] invoke central.probe',
+            observed: '{"ok":true}',
+            role: BurnDeviceRole.central,
+            outcome: BurnStepOutcome.passed,
+            duration: Duration(milliseconds: 12),
+          ),
+          DriveStepResult(
+            description: 'observe follower.state',
+            observed: 'not-observed',
+            role: BurnDeviceRole.follower,
+            outcome: BurnStepOutcome.notObserved,
+            duration: null,
+          ),
+        ],
+        passed: false,
+      );
+
+      expect(report.toJson(), {
+        'scenario': 'evidence-smoke',
+        'endpoint': 'ws://receipt.invalid/secret/ws',
+        'central': 'macos',
+        'follower': 'ios',
+        'passed': false,
+        'total': 2,
+        'failures': 0,
+        'observedSteps': 1,
+        'devices': [
+          {
+            'identity': 'studio',
+            'role': 'central',
+            'target': 'macos',
+            'launchOutcome': 'launched',
+            'teardownConfirmation': 'confirmed',
+          },
+          {
+            'identity': 'dashboard',
+            'role': 'follower',
+            'target': 'ios',
+            'launchOutcome': 'failed',
+            'teardownConfirmation': 'failed',
+          },
+        ],
+        'steps': [
+          {
+            'description': '[local] invoke central.probe',
+            'observed': '{"ok":true}',
+            'passed': true,
+            'role': 'central',
+            'outcome': 'passed',
+            'durationMs': 12,
+          },
+          {
+            'description': 'observe follower.state',
+            'observed': 'not-observed',
+            'passed': false,
+            'role': 'follower',
+            'outcome': 'not-observed',
+            'durationMs': 'not-observed',
+          },
+        ],
+      });
+      expect(report.failingStepIndex, isNull);
+    });
+
+    test(
+      'passing host payload promotes bounded device and step evidence',
+      () async {
+        final localRunner = ButaneFollowerRunner(
+          launcher: _FakeLocalLauncher(),
+          processes: _FakeProcessGroupController(),
+        );
+        final host = BurnHostCapability(
+          drive: _ScriptedLeonardDrive(
+            observeResponses: const {
+              'description-sentinel': 'observed-sentinel ready',
+            },
+          ),
+          scenario: const DriveScenario(
+            name: 'bounded-smoke',
+            steps: [
+              DriveStep.observe(
+                'description-sentinel',
+                expectContains: 'ready',
+              ),
+              DriveStep.invoke('central.probe', on: DriveEndpoint.local),
+            ],
+          ),
+          localRunner: localRunner,
+          localSpec: const LaunchSpec(
+            app: 'butane_harness',
+            target: 'macos',
+            role: 'central',
+          ),
+          localDrive: _ScriptedLeonardDrive(),
+          onLog: (_) {},
+        );
+        final ctx = _ctx(
+          nodePath: _hostPath,
+          siblings: const SiblingView(
+            results: {
+              _followerPath: {
+                'endpoint': 'ws://vm-service-sentinel.invalid/secret/ws',
+                'station': 'the-dashboard',
+                'lease': 'burn-lease-0',
+                'target': 'ios',
+              },
+            },
+          ),
+        );
+
+        final outcome = await host.run(ctx.context, ctx.args) as Ok;
+        final payload = outcome.payload!;
+        const staticKeys = {
+          'scenario',
+          'passed',
+          'central',
+          'follower',
+          'steps',
+          'failures',
+          'observedSteps',
+          'centralIdentity',
+          'centralRole',
+          'centralTarget',
+          'centralLaunchOutcome',
+          'centralTeardownConfirmation',
+          'followerIdentity',
+          'followerRole',
+          'followerTarget',
+          'followerLaunchOutcome',
+          'followerTeardownConfirmation',
+        };
+        expect(payload.keys.toSet(), {
+          ...staticKeys,
+          'step0Role',
+          'step0Outcome',
+          'step0DurationMs',
+          'step1Role',
+          'step1Outcome',
+          'step1DurationMs',
+        });
+        expect(payload, containsPair('scenario', 'bounded-smoke'));
+        expect(payload, containsPair('passed', 'true'));
+        expect(payload, containsPair('central', 'macos'));
+        expect(payload, containsPair('follower', 'ios'));
+        expect(payload, containsPair('steps', '2'));
+        expect(payload, containsPair('failures', '0'));
+        expect(payload, containsPair('observedSteps', '2'));
+        expect(payload, containsPair('centralIdentity', 'the-studio-local'));
+        expect(payload, containsPair('centralRole', 'central'));
+        expect(payload, containsPair('centralTarget', 'macos'));
+        expect(payload, containsPair('centralLaunchOutcome', 'launched'));
+        expect(
+          payload,
+          containsPair('centralTeardownConfirmation', 'not-observed'),
+        );
+        expect(payload, containsPair('followerIdentity', 'the-dashboard'));
+        expect(payload, containsPair('followerRole', 'follower'));
+        expect(payload, containsPair('followerTarget', 'ios'));
+        expect(payload, containsPair('followerLaunchOutcome', 'launched'));
+        expect(
+          payload,
+          containsPair('followerTeardownConfirmation', 'not-observed'),
+        );
+        expect(payload, containsPair('step0Role', 'follower'));
+        expect(payload, containsPair('step0Outcome', 'passed'));
+        expect(payload, containsPair('step1Role', 'central'));
+        expect(payload, containsPair('step1Outcome', 'passed'));
+        expect(int.tryParse(payload['step0DurationMs']!), isNotNull);
+        expect(int.tryParse(payload['step1DurationMs']!), isNotNull);
+        expect(payload.keys, everyElement(isNot(contains('.'))));
+        final encoded = jsonEncode(payload);
+        for (final excluded in [
+          'vm-service-sentinel',
+          'description-sentinel',
+          'observed-sentinel',
+          'log-sentinel',
+          'rationale-sentinel',
+          'endpoint',
+        ]) {
+          expect(encoded, isNot(contains(excluded)));
+        }
+
+        await host.teardown(ctx.args);
+      },
+    );
+
+    test(
+      'failed host keeps supervision and appends bounded evidence digest',
+      () async {
+        final host = BurnHostCapability(
+          drive: _ScriptedLeonardDrive(
+            observeResponses: const {'first': 'ok', 'second': 'nope'},
+          ),
+          scenario: const DriveScenario(
+            name: 'failed-smoke',
+            steps: [
+              DriveStep.observe('first', expectContains: 'ok'),
+              DriveStep.observe('second', expectContains: 'expected'),
+            ],
+          ),
+          localRunner: ButaneFollowerRunner(
+            launcher: _FakeLocalLauncher(),
+            processes: _FakeProcessGroupController(),
+          ),
+          localSpec: const LaunchSpec(
+            app: 'butane_harness',
+            target: 'macos',
+            role: 'central',
+          ),
+          localDrive: _ScriptedLeonardDrive(),
+        );
+        final ctx = _ctx(
+          nodePath: _hostPath,
+          siblings: const SiblingView(
+            results: {
+              _followerPath: {
+                'endpoint': 'ws://dashboard.invalid/vm/ws',
+                'station': 'the-dashboard',
+                'lease': 'burn-lease-0',
+                'target': 'ios',
+              },
+            },
+          ),
+        );
+
+        final outcome = await host.run(ctx.context, ctx.args);
+        expect(
+          outcome,
+          isA<Failed>(),
+          reason: 'failure must reach supervision',
+        );
+        final reason = (outcome as Failed).reason;
+        expect(
+          reason,
+          'burn scenario "failed-smoke" failed: 1/2 step(s) '
+          'burn-evidence: scenario=failed-smoke; '
+          'centralIdentity=the-studio-local; centralRole=central; '
+          'centralTarget=macos; centralLaunchOutcome=launched; '
+          'followerIdentity=the-dashboard; followerRole=follower; '
+          'followerTarget=ios; followerLaunchOutcome=launched; '
+          'failingStepIndex=1',
+        );
+        expect(reason, isNot(anyOf(contains('\n'), contains('\r'))));
+
+        await host.teardown(ctx.args);
+      },
+    );
+
+    test('partial burn renders not-observed evidence', () async {
+      final host = BurnHostCapability(
+        drive: _passingDrive(),
+        scenario: _passingScenario(),
+        localRunner: ButaneFollowerRunner(
+          launcher: _FakeLocalLauncher(),
+          processes: _FakeProcessGroupController(),
+        ),
+        localSpec: const LaunchSpec(
+          app: 'butane_harness',
+          target: 'macos',
+          role: 'central',
+        ),
+        localDrive: _ScriptedLeonardDrive(),
+      );
+      final ctx = _ctx(nodePath: _hostPath);
+
+      final outcome = await host.run(ctx.context, ctx.args);
+      expect(outcome, isA<Failed>());
+      final report = host.reportFor(ctx.args)!;
+      final payload = burnResultPayload(report);
+      expect(payload, containsPair('centralRole', 'central'));
+      expect(payload, containsPair('centralTarget', 'macos'));
+      expect(payload, containsPair('centralIdentity', 'not-observed'));
+      expect(payload, containsPair('centralLaunchOutcome', 'not-observed'));
+      expect(payload, containsPair('followerIdentity', 'not-observed'));
+      expect(payload, containsPair('followerTarget', 'not-observed'));
+      expect(payload, containsPair('followerLaunchOutcome', 'not-observed'));
+      expect(payload, containsPair('observedSteps', '0'));
+      for (var index = 0; index < report.steps.length; index++) {
+        expect(payload['step${index}Outcome'], 'not-observed');
+        expect(payload['step${index}DurationMs'], 'not-observed');
+      }
+      expect(
+        burnFailureDigest(report),
+        'burn-evidence: scenario=smoke; '
+        'centralIdentity=not-observed; centralRole=central; '
+        'centralTarget=macos; centralLaunchOutcome=not-observed; '
+        'followerIdentity=not-observed; followerRole=follower; '
+        'followerTarget=not-observed; '
+        'followerLaunchOutcome=not-observed; '
+        'failingStepIndex=not-observed',
+      );
+    });
+
+    test('burn evidence extends existing result values only', () {
+      final declarations = <String>[];
+      for (final entity in Directory('lib/src/burn').listSync()) {
+        if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        final source = entity.readAsStringSync();
+        declarations.addAll(
+          RegExp(
+            r'\bclass\s+(\w+(?:Report|Result))\b',
+          ).allMatches(source).map((match) => match.group(1)!),
+        );
+      }
+      declarations.sort();
+      expect(declarations, [
+        'BurnOrderLandingResult',
+        'DriveStepResult',
+        'TestReport',
+      ]);
+    });
+  });
+
   group('the burn circuit composition (ADR-0011 D9)', () {
     test('two capability-scoped orders + the rendezvous barrier', () {
       expect(kBurnCircuit.id, 'burn');
@@ -807,9 +1150,11 @@ void main() {
           },
         ),
       );
-      expect(
+      _expectHostFailure(
         await host.run(ctx.context, ctx.args),
-        const Failed('follower rendezvous published no target'),
+        'follower rendezvous published no target',
+        host,
+        ctx.args,
       );
     });
 
@@ -1006,7 +1351,7 @@ void main() {
         cancel.cancel();
         attachGate.completeAfterCancellation(cancel, null);
         final outcome = await pending;
-        expect(outcome, const Failed('cancelled'));
+        _expectHostFailure(outcome, 'cancelled', host, ctx.args);
         expect(launcher.launches, 0);
         expect(followerDrive.scenarioCalls, 0);
         expect(localDrive.scenarioCalls, 0);
@@ -1052,7 +1397,7 @@ void main() {
         ),
       );
       final outcome = await pending;
-      expect(outcome, const Failed('cancelled'));
+      _expectHostFailure(outcome, 'cancelled', host, ctx.args);
       expect(
         localDrive.calls.where((call) => call.startsWith('attach:')),
         isEmpty,
@@ -1092,7 +1437,7 @@ void main() {
       cancel.cancel();
       gate.completeAfterCancellation(cancel, null);
       final outcome = await pending;
-      expect(outcome, const Failed('cancelled'));
+      _expectHostFailure(outcome, 'cancelled', host, ctx.args);
       expect(followerDrive.scenarioCalls, 0);
       expect(localDrive.scenarioCalls, 0);
       await host.teardown(ctx.args);
@@ -1132,7 +1477,7 @@ void main() {
       cancel.cancel();
       gate.completeAfterCancellation(cancel, 'blocked');
       final outcome = await pending;
-      expect(outcome, const Failed('cancelled'));
+      _expectHostFailure(outcome, 'cancelled', host, ctx.args);
       final report = host.reportFor(ctx.args);
       expect(report, isNotNull);
       expect(report!.passed, isFalse);
@@ -1379,9 +1724,11 @@ void main() {
         );
         final out = await host.run(hCtx.context, hCtx.args);
         expect(out, isA<Failed>());
-        expect(
-          (out as Failed).reason,
+        _expectHostFailure(
+          out,
           'burn scenario "missing-local" failed: 1/2 step(s)',
+          host,
+          hCtx.args,
         );
         final report = host.reportFor(hCtx.args)!;
         expect(report.passed, isFalse);
@@ -1431,9 +1778,11 @@ void main() {
         );
         final out = await host.run(hCtx.context, hCtx.args);
         expect(out, isA<Failed>());
-        expect(
-          (out as Failed).reason,
+        _expectHostFailure(
+          out,
           'local harness launch failed: Bad state: launch failed',
+          host,
+          hCtx.args,
         );
 
         // Teardown after the failure path is safe (nothing launched → no-op).
@@ -1467,9 +1816,11 @@ void main() {
 
         final outcome = await host.run(hCtx.context, hCtx.args);
         expect(outcome, isA<Failed>());
-        expect(
-          (outcome as Failed).reason,
+        _expectHostFailure(
+          outcome,
           'central harness launch failed: Bad state: launch failed',
+          host,
+          hCtx.args,
         );
         await host.teardown(hCtx.args);
         expect(launch.teardowns, 1);
@@ -1549,7 +1900,7 @@ void main() {
           await gate.entered.future;
           cancel.cancel();
           gate.completeAfterCancellation(cancel, endpoint);
-          expect(await pending, const Failed('cancelled'));
+          _expectHostFailure(await pending, 'cancelled', host, hCtx.args);
           expect(
             centralDrive.calls.where((call) => call.startsWith('attach:')),
             isEmpty,
@@ -1590,7 +1941,7 @@ void main() {
         await gate.entered.future;
         cancel.cancel();
         gate.completeAfterCancellation(cancel, null);
-        expect(await pending, const Failed('cancelled'));
+        _expectHostFailure(await pending, 'cancelled', host, hCtx.args);
         expect(centralDrive.calls.where((call) => call.startsWith('attach:')), [
           'attach:ws://yoga-win:6000/central/ws',
         ]);

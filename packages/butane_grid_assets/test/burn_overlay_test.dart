@@ -64,4 +64,52 @@ void main() {
       expect(skill, isNot(contains(forbidden)));
     }
   });
+
+  test('burn skill reads durable step-result receipts', () {
+    const trackedSkillPath =
+        'extension/station_overlay/claude/skills/burn/SKILL.md';
+    final skill = File(trackedSkillPath).readAsStringSync();
+
+    expect(skill, contains('burn order bead'));
+    expect(
+      skill,
+      matches(RegExp(r'durable `burn-host` step\s+result payload')),
+    );
+    for (final key in [
+      'scenario',
+      'passed',
+      'central',
+      'follower',
+      'steps',
+      'failures',
+      'observedSteps',
+      'centralIdentity',
+      'centralRole',
+      'centralTarget',
+      'centralLaunchOutcome',
+      'centralTeardownConfirmation',
+      'followerIdentity',
+      'followerRole',
+      'followerTarget',
+      'followerLaunchOutcome',
+      'followerTeardownConfirmation',
+      'step<N>Role',
+      'step<N>Outcome',
+      'step<N>DurationMs',
+      'failingStepIndex',
+      'burn-evidence:',
+      'not-observed',
+    ]) {
+      expect(skill, contains(key), reason: 'missing receipt field $key');
+    }
+    expect(
+      skill,
+      isNot(
+        contains(
+          'Richer per-device audit is tracked separately and is not '
+          'synthesized here.',
+        ),
+      ),
+    );
+  });
 }
