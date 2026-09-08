@@ -16,8 +16,7 @@ void main() {
 ''';
 
 const _hangingHelper = r'''
-import 'dart:async';
-Future<void> main() => Completer<void>().future;
+Future<void> main() => Future<void>.delayed(const Duration(days: 1));
 ''';
 
 class _IosProcessFixture {
@@ -102,6 +101,137 @@ A Dart VM Service on Nico's iPad mini is available at: http://127.0.0.1:49458/ma
       flutterForwardedVmServiceWsUri(transcript),
       'ws://127.0.0.1:49458/mac-auth/ws',
     );
+  });
+
+  test('converts Flutter DevTools debugger URI', () {
+    const transcript = '''
+The Flutter DevTools debugger and profiler on Test Device is available at: http://127.0.0.1:43210/devtools-auth/
+''';
+
+    expect(
+      flutterForwardedVmServiceWsUri(transcript),
+      'ws://127.0.0.1:43210/devtools-auth/ws',
+    );
+  });
+
+  test('returns null without a forwarded URI', () {
+    const transcript = '''
+Launching lib/main.dart on Test Device in profile mode...
+GRID_VM_URI=http://192.168.1.5:1234/device-auth/
+''';
+
+    expect(flutterForwardedVmServiceWsUri(transcript), isNull);
+  });
+
+  test('rejects non-loopback forwarded URI', () {
+    const transcript = '''
+A Dart VM Service on Test Device is available at: http://192.168.1.5:1234/device-auth/
+''';
+
+    expect(flutterForwardedVmServiceWsUri(transcript), isNull);
+  });
+
+  test('prefers forwarded endpoint without mDNS or relay', () async {
+    final fixture = _IosProcessFixture(r'''
+Future<void> main() async {
+  print(
+    'A Dart VM Service on Test Device is available at: '
+    'http://127.0.0.1:43210/forwarded-auth/',
+  );
+  await Future<void>.delayed(const Duration(days: 1));
+}
+''');
+    addTearDown(fixture.dispose);
+    var resolverCalls = 0;
+    var relayCalls = 0;
+    final logs = <String>[];
+    final launcher = IosFollowerLauncher(
+      deviceId: 'device',
+      harnessDirectory: Directory.current.path,
+      preLaunchCleanup: (_) async {},
+      processStarter: fixture.start,
+      processes: _FakeProcessGroupController(),
+      explorationReadyProbe: (base) async {
+        expect(base, Uri.parse('http://127.0.0.1:43210/forwarded-auth/'));
+        return true;
+      },
+      mdnsCandidateResolver: () async {
+        resolverCalls++;
+        return const <IosMdnsCandidate>[];
+      },
+      relayStarter: (candidate) async {
+        relayCalls++;
+        throw StateError('relay must not start for a forwarded endpoint');
+      },
+      onLog: logs.add,
+    );
+
+    final daemon = await launcher.launch(
+      const LaunchSpec(app: 'butane_harness', target: 'ios'),
+    );
+
+    expect(
+      daemon.endpoint.vmServiceUri,
+      'ws://127.0.0.1:43210/forwarded-auth/ws',
+    );
+    expect(resolverCalls, 0);
+    expect(relayCalls, 0);
+    expect(logs.where((line) => line.contains('relay pid')), isEmpty);
+  });
+
+  test('falls back to mDNS after forwarded preference window', () async {
+    final flutterFixture = _IosProcessFixture(_hangingHelper);
+    final relayFixture = _IosProcessFixture(_hangingHelper);
+    addTearDown(flutterFixture.dispose);
+    addTearDown(relayFixture.dispose);
+    const candidate = (ip: '192.168.1.5', port: 1234, authCode: 'mdns-auth');
+    var resolverCalls = 0;
+    var relayCalls = 0;
+    IosMdnsCandidate? relayedCandidate;
+    Process? relayProcess;
+    final logs = <String>[];
+    final launcher = IosFollowerLauncher(
+      deviceId: 'device',
+      harnessDirectory: Directory.current.path,
+      forwardedPreferenceWindow: const Duration(milliseconds: 1),
+      preLaunchCleanup: (_) async {},
+      processStarter: flutterFixture.start,
+      processes: _FakeProcessGroupController(),
+      explorationReadyProbe: (base) async {
+        expect(base, Uri.parse('http://192.168.1.5:1234/mdns-auth/'));
+        return true;
+      },
+      mdnsCandidateResolver: () async {
+        resolverCalls++;
+        return const <IosMdnsCandidate>[candidate];
+      },
+      relayStarter: (resolved) async {
+        relayCalls++;
+        relayedCandidate = resolved;
+        relayProcess = await relayFixture.start(
+          '',
+          const <String>[],
+          workingDirectory: Directory.current.path,
+          mode: ProcessStartMode.detachedWithStdio,
+        );
+        return relayProcess!;
+      },
+      onLog: logs.add,
+    );
+
+    final stopwatch = Stopwatch()..start();
+    final daemon = await launcher.launch(
+      const LaunchSpec(app: 'butane_harness', target: 'ios'),
+    );
+    stopwatch.stop();
+
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
+    expect(daemon.endpoint.vmServiceUri, 'ws://127.0.0.1:50999/mdns-auth/ws');
+    expect(resolverCalls, 1);
+    expect(relayCalls, 1);
+    expect(relayedCandidate, candidate);
+    expect(relayProcess, isNotNull);
+    expect(logs.where((line) => line.contains('relay pid')), hasLength(1));
   });
 
   test('probes exploration readiness through a loopback VM service', () async {
