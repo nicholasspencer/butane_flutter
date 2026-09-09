@@ -19,6 +19,8 @@ dart run pigeon \
   --swift_out ../butane_core_bluetooth/darwin/Classes/Api.gen.swift \
   --kotlin_out ../butane_android/android/src/main/kotlin/com/nicospencer/butane_android/Api.gen.kt
 
+dart format lib/src/channels/api.g.dart
+
 dart run pigeon \
   --input "$cpp_input" \
   --cpp_header_out ../butane_windows/windows/Api.gen.h \
