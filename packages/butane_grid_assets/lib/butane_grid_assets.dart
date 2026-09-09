@@ -27,6 +27,7 @@
 /// build-order placement split, landed; the power_station home was the interim).
 library;
 
+export 'src/assets/grid_asset_pack.dart';
 export 'src/burn/burn_capabilities.dart';
 export 'src/burn/burn_follower_daemon.dart';
 export 'src/burn/burn_order_landing.dart';
