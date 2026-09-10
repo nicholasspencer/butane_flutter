@@ -2,22 +2,18 @@
 /// iOS device and publishes a Dart-reachable VM-service endpoint.
 ///
 /// iOS is fundamentally unlike the desktop path (build + direct-binary launch
-/// + stdout sentinel). Three hard constraints, all learned live and encoded
-/// here (see the `reference-ios-ble-test-setup` memory):
+/// + stdout sentinel). Three hard constraints are encoded here:
 ///
 ///  1. **A debug iOS build cannot run standalone** ("Cannot create a
-///     FlutterEngine instance in debug mode without Flutter tooling"). So we
-///     launch with **`flutter run --profile`** — a profile app runs without
-///     the JIT tooling attached, keeps the Dart VM service, and installs
-///     `LeonardBinding` (kProfileMode).
-///  2. **The device VM service is loopback-bound.** Flutter's stdout supplies
-///     its mac-side usbmux-forwarded loopback URI, which is the primary
-///     endpoint and carries its own authentication code.
-///  3. **Wireless-only fallback uses mDNS.** macOS Local Network TCC blocks the
-///     Dart toolchain from dialing the device over the LAN, so a LAN-exempt
-///     `python3` loopback relay publishes that fallback endpoint.
+///     FlutterEngine instance in debug mode without Flutter tooling"). The
+///     harness is therefore built and launched in profile mode.
+///  2. **The Flutter tool's mDNS socket is Local Network grant-bound.** The
+///     default CoreDevice path launches with `devicectl`, while `dns-sd`
+///     resolves the VM-service record published by the engine itself.
+///  3. **Dart cannot directly dial the device over the LAN without the grant.**
+///     A LAN-exempt `python3` loopback relay publishes the resolved endpoint.
 ///
-/// Teardown reaps `flutter run`'s process group (the reaper) plus, via the
+/// Teardown reaps the console process group (the reaper) plus, via the
 /// [LaunchedDaemon.onReap] seam, the relay process and a best-effort
 /// on-device app terminate.
 library;
@@ -35,6 +31,9 @@ import 'launch_scrape.dart';
 
 void _noLog(String _) {}
 
+const String _kCurrentButaneExtensionPrefix = 'ext.leonard.butane';
+const String _kLegacyButaneExtensionPrefix = 'ext.exploration.butane';
+
 /// The device and harness directory selected for one iOS launch.
 typedef IosLaunchInputs = ({String deviceId, String harnessDirectory});
 
@@ -42,6 +41,16 @@ typedef IosLaunchInputs = ({String deviceId, String harnessDirectory});
 typedef IosMdnsCandidate = ({String ip, int port, String authCode});
 
 typedef _IosReadyEndpoint = ({String wsUri, Process? relay});
+typedef _IosConsoleVmService = ({int port, String authCode});
+
+/// Selects the process responsible for installing and launching the harness.
+enum IosFollowerLaunchMode {
+  /// Build explicitly, then install and launch through CoreDevice.
+  devicectl,
+
+  /// Let the Flutter tool install, launch, and forward the VM service.
+  flutterRun,
+}
 
 Uri _vmServiceWsToHttpBase(String wsUri) {
   final uri = Uri.parse(wsUri);
@@ -57,7 +66,16 @@ Uri _vmServiceWsToHttpBase(String wsUri) {
 /// Reads one VM-service HTTP [uri].
 typedef IosVmServiceGet = Future<String> Function(Uri uri);
 
-/// Starts the long-lived Flutter tool process for one iOS launch.
+/// Runs one bounded iOS build or device command and captures its result.
+typedef IosCommandRunner =
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> arguments, {
+      String? workingDirectory,
+      Duration? timeout,
+    });
+
+/// Starts the long-lived launch process for one iOS launch.
 typedef IosProcessStarter =
     Future<Process> Function(
       String executable,
@@ -69,17 +87,50 @@ typedef IosProcessStarter =
 /// Removes a prior on-device harness instance before a fresh launch.
 typedef IosPreLaunchCleanup = Future<void> Function(String deviceId);
 
+Future<ProcessResult> _runIosCommand(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+  Duration? timeout,
+}) {
+  final result = Process.run(
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
+  );
+  return timeout == null ? result : result.timeout(timeout);
+}
+
 Future<Process> _startIosProcess(
   String executable,
   List<String> arguments, {
   required String workingDirectory,
   required ProcessStartMode mode,
-}) => Process.start(
-  executable,
-  arguments,
-  workingDirectory: workingDirectory,
-  mode: mode,
-);
+}) {
+  final devicectlConsoleLaunch =
+      arguments.length >= 5 &&
+      arguments[0] == 'devicectl' &&
+      arguments[1] == 'device' &&
+      arguments[2] == 'process' &&
+      arguments[3] == 'launch' &&
+      arguments.contains('--console');
+  if (devicectlConsoleLaunch) {
+    // devicectl only redirects the app's standard streams when it sees a TTY.
+    // Match Flutter's CoreDevice wrapper without adding launch environment.
+    return Process.start(
+      '/usr/bin/script',
+      <String>['-t', '0', '/dev/null', executable, ...arguments],
+      workingDirectory: workingDirectory,
+      mode: mode,
+    );
+  }
+  return Process.start(
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
+    mode: mode,
+  );
+}
 
 /// Whether the butane exploration extension is registered at [base].
 @visibleForTesting
@@ -98,7 +149,11 @@ Future<bool> isIosExplorationReady(
           queryParameters: <String, String>{'isolateId': 'isolates/$id'},
         );
     final isolate = await get(isolateUri);
-    if (isolate.contains('ext.exploration.butane')) return true;
+    // Keep resident compatibility across Leonard's extension-prefix migration.
+    if (isolate.contains(_kCurrentButaneExtensionPrefix) ||
+        isolate.contains(_kLegacyButaneExtensionPrefix)) {
+      return true;
+    }
   }
   return false;
 }
@@ -181,18 +236,20 @@ asyncio.run(main())
 
 /// Launches the butane harness on a physical iOS device as a burn follower.
 class IosFollowerLauncher implements FollowerLauncher {
-  /// Creates a launcher for [deviceId] (the device UDID), running
-  /// `flutter run` from [harnessDirectory] and publishing under [station].
-  /// Flutter's usbmux-forwarded loopback URI is primary. [bundleId] identifies
-  /// the wireless-only mDNS fallback; [relayPort] and [python3] provide its
-  /// Dart-reachable loopback relay.
+  /// Creates a launcher for [deviceId] (the device UDID), building from
+  /// [harnessDirectory] and publishing under [station]. [launchMode] defaults
+  /// to the Local Network grant-independent CoreDevice route. [bundleId]
+  /// identifies the engine's mDNS service; [relayPort] and [python3] provide
+  /// its Dart-reachable loopback relay.
   IosFollowerLauncher({
     this.deviceId = '',
     this.harnessDirectory = '',
     this.station = 'butane-ios-follower',
     this.bundleId = 'com.nicospencer.butaneHarness',
     this.relayPort = 50999,
+    this.launchMode = IosFollowerLaunchMode.devicectl,
     this.flutterExecutable = 'flutter',
+    this.xcrunExecutable = 'xcrun',
     this.python3 = '/usr/bin/python3',
     this.provisionTimeout = const Duration(minutes: 1),
     this.launchTimeout = const Duration(minutes: 10),
@@ -200,6 +257,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     this.lifecycleTimeout = const Duration(minutes: 12),
     this.forwardedPreferenceWindow = const Duration(seconds: 15),
     ProcessGroupController processes = const SystemProcessGroupController(),
+    IosCommandRunner commandRunner = _runIosCommand,
     IosProcessStarter processStarter = _startIosProcess,
     IosPreLaunchCleanup? preLaunchCleanup,
     Future<bool> Function(Uri)? explorationReadyProbe,
@@ -207,6 +265,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     Future<Process> Function(IosMdnsCandidate)? relayStarter,
     void Function(String)? onLog,
   }) : _processes = processes,
+       _commandRunner = commandRunner,
        _processStarter = processStarter,
        _preLaunchCleanup = preLaunchCleanup,
        _explorationReadyProbe = explorationReadyProbe ?? isIosExplorationReady,
@@ -214,10 +273,10 @@ class IosFollowerLauncher implements FollowerLauncher {
        _relayStarter = relayStarter,
        _onLog = onLog ?? _noLog;
 
-  /// The target device UDID (`flutter run -d`).
+  /// The target device UDID.
   final String deviceId;
 
-  /// The butane_harness package directory (`flutter run` cwd).
+  /// The butane_harness package directory.
   final String harnessDirectory;
 
   /// The station id stamped on the published endpoint.
@@ -229,8 +288,14 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// The loopback port the wireless-only fallback relay binds.
   final int relayPort;
 
+  /// The install-and-launch implementation used by this launcher.
+  final IosFollowerLaunchMode launchMode;
+
   /// The flutter tool.
   final String flutterExecutable;
+
+  /// The Xcode command-line tool dispatcher used for CoreDevice operations.
+  final String xcrunExecutable;
 
   /// The LAN-exempt python interpreter that runs the wireless fallback relay.
   final String python3;
@@ -238,7 +303,7 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// Maximum duration of prior-app cleanup.
   final Duration provisionTimeout;
 
-  /// Maximum duration from Flutter spawn through endpoint discovery.
+  /// Maximum duration of one build, install, or launch/discovery phase.
   final Duration launchTimeout;
 
   /// Maximum duration of one exploration-readiness probe or relay start.
@@ -252,6 +317,7 @@ class IosFollowerLauncher implements FollowerLauncher {
   final Duration forwardedPreferenceWindow;
 
   final ProcessGroupController _processes;
+  final IosCommandRunner _commandRunner;
   final IosProcessStarter _processStarter;
   final IosPreLaunchCleanup? _preLaunchCleanup;
   final Future<bool> Function(Uri) _explorationReadyProbe;
@@ -302,12 +368,118 @@ class IosFollowerLauncher implements FollowerLauncher {
     final role = spec.role.isEmpty ? 'peripheral' : spec.role;
 
     // Terminate any prior instance of THIS app first: a leftover harness stays
-    // exploration-ready until the fresh `flutter run` foregrounds its own app
-    // and backgrounds the leftover — a race that hands the drive a
-    // soon-to-be-suspended app. Scoped to the bundle's install container so a
-    // co-installed Flutter app (also `Runner`) is never touched.
+    // exploration-ready until the fresh launch foregrounds its own app and
+    // backgrounds the leftover — a race that hands the drive a soon-to-be-
+    // suspended app. Scoped to the bundle's install container so a co-installed
+    // Flutter app (also `Runner`) is never touched.
     await _provision(resolvedDeviceId);
 
+    return switch (launchMode) {
+      IosFollowerLaunchMode.devicectl => _launchWithDevicectl(
+        resolvedDeviceId: resolvedDeviceId,
+        resolvedHarnessDirectory: resolvedHarnessDirectory,
+        role: role,
+      ),
+      IosFollowerLaunchMode.flutterRun => _launchWithFlutterRun(
+        resolvedDeviceId: resolvedDeviceId,
+        resolvedHarnessDirectory: resolvedHarnessDirectory,
+        role: role,
+      ),
+    };
+  }
+
+  Future<LaunchedDaemon> _launchWithDevicectl({
+    required String resolvedDeviceId,
+    required String resolvedHarnessDirectory,
+    required String role,
+  }) async {
+    await _checkedCommand(
+      flutterExecutable,
+      <String>['build', 'ios', '--profile', '--dart-define=ROLE=$role'],
+      workingDirectory: resolvedHarnessDirectory,
+      timeout: launchTimeout,
+    );
+    final runnerApp = Directory(
+      '$resolvedHarnessDirectory/build/ios/iphoneos/Runner.app',
+    ).absolute;
+    if (!runnerApp.existsSync()) {
+      throw StateError('profile iOS app missing at ${runnerApp.path}');
+    }
+
+    await _checkedCommand(xcrunExecutable, <String>[
+      'devicectl',
+      'device',
+      'install',
+      'app',
+      '--device',
+      resolvedDeviceId,
+      runnerApp.path,
+    ], timeout: launchTimeout);
+
+    final launchArguments = <String>[
+      'devicectl',
+      'device',
+      'process',
+      'launch',
+      '--console',
+      '--terminate-existing',
+      '--device',
+      resolvedDeviceId,
+      bundleId,
+      // CoreDevice does not create Flutter's usbmux forward. Bind the
+      // authenticated VM service where the engine-published mDNS address can
+      // reach it; the loopback relay remains the only published host endpoint.
+      '--vm-service-host=0.0.0.0',
+      '--enable-dart-profiling',
+    ];
+    _onLog('ios launcher: $xcrunExecutable ${launchArguments.join(' ')}');
+    final launchProcess = await _phase<Process>(
+      'install+launch',
+      launchTimeout,
+      _processStarter(
+        xcrunExecutable,
+        launchArguments,
+        workingDirectory: resolvedHarnessDirectory,
+        mode: ProcessStartMode.detachedWithStdio,
+      ),
+    );
+    final consoleVmService = Completer<_IosConsoleVmService>();
+    final outputTail = <String>[];
+    void rememberAndScrape(String line) {
+      _rememberOutput(outputTail, line, source: 'devicectl');
+      final service = _devicectlVmServiceFromLine(line);
+      if (service != null && !consoleVmService.isCompleted) {
+        consoleVmService.complete(service);
+      }
+    }
+
+    final streamsDone = _drainLaunchOutput(launchProcess, rememberAndScrape);
+    final launchExited = Completer<void>();
+    unawaited(
+      streamsDone.then<void>(
+        (_) => launchExited.complete(),
+        onError: (Object _, StackTrace __) => launchExited.complete(),
+      ),
+    );
+    return _finishLaunch(
+      launchProcess: launchProcess,
+      launchSource: 'devicectl',
+      outputTail: outputTail,
+      streamsDone: streamsDone,
+      resolvedDeviceId: resolvedDeviceId,
+      discover: _discoverDevicectlEndpoint(
+        DateTime.now().add(launchTimeout),
+        consoleVmService,
+        launchExited,
+      ),
+    );
+  }
+
+  Future<LaunchedDaemon> _launchWithFlutterRun({
+    required String resolvedDeviceId,
+    required String resolvedHarnessDirectory,
+    required String role,
+  }) async {
     _onLog(
       'ios launcher: flutter run --profile -d $resolvedDeviceId (ROLE=$role)',
     );
@@ -315,7 +487,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     // `flutter run --profile`: launches + holds a profile app (survives the
     // JIT-less standalone constraint). New session/group so the reaper can
     // signal it. It errors on attach (Local Network) but the app comes up.
-    final flutter = await _phase<Process>(
+    final launchProcess = await _phase<Process>(
       'install+launch',
       launchTimeout,
       _processStarter(
@@ -333,9 +505,9 @@ class IosFollowerLauncher implements FollowerLauncher {
     );
     final forwarded = Completer<String>();
     final flutterOutput = StringBuffer();
-    final flutterOutputTail = <String>[];
+    final outputTail = <String>[];
     void rememberAndScrape(String line) {
-      _rememberOutput(flutterOutputTail, line);
+      _rememberOutput(outputTail, line, source: 'flutter');
       flutterOutput.writeln(line);
       final uri = flutterForwardedVmServiceWsUri(flutterOutput.toString());
       if (uri != null && !forwarded.isCompleted) {
@@ -343,70 +515,18 @@ class IosFollowerLauncher implements FollowerLauncher {
       }
     }
 
-    final stdoutSubscription = flutter.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(rememberAndScrape, cancelOnError: false);
-    final stderrSubscription = flutter.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(rememberAndScrape, cancelOnError: false);
-    final stdoutDone = stdoutSubscription.asFuture<void>();
-    final stderrDone = stderrSubscription.asFuture<void>();
-    final flutterStreamsDone = Future.wait<void>([stdoutDone, stderrDone]);
-
-    Process? relay;
-    try {
-      final ready = await _phase<_IosReadyEndpoint>(
-        'install+launch',
-        launchTimeout,
-        Future.any<_IosReadyEndpoint>([
-          _discoverEndpoint(DateTime.now().add(launchTimeout), forwarded),
-          _flutterExitFailure(flutterStreamsDone, flutterOutputTail),
-        ]),
-      );
-      relay = ready.relay;
-      final endpointUri = ready.wsUri;
-
-      final pgid = await _processes.resolvePgid(flutter.pid) ?? flutter.pid;
-      final relayPid = relay?.pid;
-      _onLog(
-        'ios launcher: flutter pid ${flutter.pid} (pgid $pgid)'
-        '${relayPid == null ? '' : ', relay pid $relayPid'}; '
-        'published $endpointUri',
-      );
-      return _last = LaunchedDaemon(
-        pid: flutter.pid,
-        pgid: pgid,
-        endpoint: FollowerEndpoint(vmServiceUri: endpointUri, station: station),
-        exited: flutterStreamsDone,
-        onReap: () async {
-          if (relayPid != null) {
-            Process.killPid(relayPid, ProcessSignal.sigkill);
-          }
-          // Best-effort on-device terminate (the app else backgrounds/suspends).
-          try {
-            await Process.run('xcrun', [
-              'devicectl',
-              'device',
-              'process',
-              'terminate',
-              '--device',
-              resolvedDeviceId,
-              '--bundle-id',
-              bundleId,
-            ]).timeout(const Duration(seconds: 20));
-          } on Object {
-            // devicectl verb/availability varies; the app suspends regardless.
-          }
-        },
-      );
-    } on Object catch (error, stack) {
-      // Ready never arrived: reap what we started so nothing leaks.
-      relay?.kill(ProcessSignal.sigkill);
-      await _reapFailedFlutter(flutter, flutterStreamsDone);
-      Error.throwWithStackTrace(error, stack);
-    }
+    final streamsDone = _drainLaunchOutput(launchProcess, rememberAndScrape);
+    return _finishLaunch(
+      launchProcess: launchProcess,
+      launchSource: 'flutter',
+      outputTail: outputTail,
+      streamsDone: streamsDone,
+      resolvedDeviceId: resolvedDeviceId,
+      discover: _discoverFlutterRunEndpoint(
+        DateTime.now().add(launchTimeout),
+        forwarded,
+      ),
+    );
   }
 
   Future<T> _phase<T>(String name, Duration timeout, Future<T> future) =>
@@ -425,38 +545,192 @@ class IosFollowerLauncher implements FollowerLauncher {
         _terminateExisting(resolvedDeviceId),
   );
 
-  Future<Never> _flutterExitFailure(
-    Future<void> flutterStreamsDone,
+  Future<ProcessResult> _checkedCommand(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Duration? timeout,
+  }) async {
+    final result = await _commandRunner(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      timeout: timeout,
+    );
+    if (result.exitCode != 0) {
+      throw StateError(
+        '$executable ${arguments.join(' ')} exited ${result.exitCode}\n'
+        'stdout: ${result.stdout}\nstderr: ${result.stderr}',
+      );
+    }
+    _onLog('ios launcher: $executable ${arguments.join(' ')}');
+    return result;
+  }
+
+  Future<void> _drainLaunchOutput(
+    Process process,
+    void Function(String) onLine,
+  ) {
+    final stdoutDone = process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(onLine, cancelOnError: false)
+        .asFuture<void>();
+    final stderrDone = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(onLine, cancelOnError: false)
+        .asFuture<void>();
+    return Future.wait<void>([stdoutDone, stderrDone]);
+  }
+
+  _IosConsoleVmService? _devicectlVmServiceFromLine(String line) {
+    final match = RegExp(
+      r'The Dart VM service is listening on (https?://\S+)',
+    ).firstMatch(line);
+    final uri = Uri.tryParse(match?.group(1) ?? '');
+    if (uri == null || uri.port == 0 || uri.pathSegments.isEmpty) return null;
+    final authCode = uri.pathSegments.first;
+    if (authCode.isEmpty) return null;
+    return (port: uri.port, authCode: authCode);
+  }
+
+  Future<LaunchedDaemon> _finishLaunch({
+    required Process launchProcess,
+    required String launchSource,
+    required List<String> outputTail,
+    required Future<void> streamsDone,
+    required String resolvedDeviceId,
+    required Future<_IosReadyEndpoint> discover,
+  }) async {
+    Process? relay;
+    try {
+      final ready = await _phase<_IosReadyEndpoint>(
+        'install+launch',
+        launchTimeout,
+        Future.any<_IosReadyEndpoint>([
+          _launchProcessExitFailure(streamsDone, launchSource, outputTail),
+          discover,
+        ]),
+      );
+      relay = ready.relay;
+      final pgid =
+          await _processes.resolvePgid(launchProcess.pid) ?? launchProcess.pid;
+      final relayPid = relay?.pid;
+      _onLog(
+        'ios launcher: $launchSource pid ${launchProcess.pid} (pgid $pgid)'
+        '${relayPid == null ? '' : ', relay pid $relayPid'}; '
+        'published ${ready.wsUri}',
+      );
+      return _last = LaunchedDaemon(
+        pid: launchProcess.pid,
+        pgid: pgid,
+        endpoint: FollowerEndpoint(vmServiceUri: ready.wsUri, station: station),
+        exited: streamsDone,
+        onReap: () async {
+          if (relayPid != null) {
+            Process.killPid(relayPid, ProcessSignal.sigkill);
+          }
+          await _bestEffortTerminateOnDevice(resolvedDeviceId);
+        },
+      );
+    } on Object catch (error, stack) {
+      relay?.kill(ProcessSignal.sigkill);
+      await _reapFailedLaunchProcess(launchProcess, streamsDone, launchSource);
+      Error.throwWithStackTrace(error, stack);
+    }
+  }
+
+  Future<Never> _launchProcessExitFailure(
+    Future<void> streamsDone,
+    String source,
     List<String> outputTail,
   ) async {
-    await flutterStreamsDone;
+    await streamsDone;
     throw StateError(
-      'ios launcher: flutter exited before readiness\n'
+      'ios launcher: $source exited before readiness\n'
       'output tail:\n${outputTail.join('\n')}',
     );
   }
 
-  void _rememberOutput(List<String> tail, String line) {
+  void _rememberOutput(
+    List<String> tail,
+    String line, {
+    required String source,
+  }) {
     if (line.trim().isEmpty) return;
-    _onLog('  flutter: $line');
+    _onLog('  $source: $line');
     tail.add(line);
     if (tail.length > 40) tail.removeAt(0);
   }
 
-  Future<void> _reapFailedFlutter(
-    Process flutter,
-    Future<void> flutterStreamsDone,
+  Future<void> _reapFailedLaunchProcess(
+    Process process,
+    Future<void> streamsDone,
+    String source,
   ) async {
-    Process.killPid(flutter.pid, ProcessSignal.sigkill);
     try {
-      await flutterStreamsDone.timeout(const Duration(seconds: 2));
+      final pgid = await _processes.resolvePgid(process.pid) ?? process.pid;
+      _processes.signalGroup(pgid, ProcessSignal.sigkill);
     } on Object {
-      _onLog('ios launcher: flutter pid ${flutter.pid} reap did not confirm');
+      // The direct leader kill below remains the last-resort reap.
+    }
+    Process.killPid(process.pid, ProcessSignal.sigkill);
+    try {
+      await streamsDone.timeout(const Duration(seconds: 2));
+    } on Object {
+      _onLog('ios launcher: $source pid ${process.pid} reap did not confirm');
     }
   }
 
+  /// Resolves only the mDNS record named by the active console banner.
+  Future<_IosReadyEndpoint> _discoverDevicectlEndpoint(
+    DateTime deadline,
+    Completer<_IosConsoleVmService> consoleVmService,
+    Completer<void> launchExited,
+  ) async {
+    while (DateTime.now().isBefore(deadline)) {
+      if (launchExited.isCompleted) return _deferToLaunchExit();
+      final advertised =
+          await (_mdnsCandidateResolver?.call() ?? _resolveCandidates());
+      if (launchExited.isCompleted) return _deferToLaunchExit();
+      final console = consoleVmService.isCompleted
+          ? await consoleVmService.future
+          : null;
+      final candidates = console == null
+          ? advertised
+          : <IosMdnsCandidate>[
+              for (final candidate in advertised)
+                if (candidate.port == console.port)
+                  (
+                    ip: candidate.ip,
+                    port: candidate.port,
+                    authCode: console.authCode,
+                  ),
+            ];
+      final ready = await _firstExplorationReady(candidates);
+      if (ready != null) return ready;
+      if (advertised.isNotEmpty) {
+        _onLog(
+          console == null
+              ? 'ios launcher: console VM banner unavailable; '
+                    '${advertised.length} mDNS record(s), none '
+                    'exploration-ready yet — retrying'
+              : 'ios launcher: ${advertised.length} mDNS record(s), none on '
+                    'console port ${console.port} exploration-ready yet — '
+                    'retrying',
+        );
+      }
+      await Future<void>.delayed(const Duration(seconds: 3));
+    }
+    throw _noReadyVmService();
+  }
+
+  Future<_IosReadyEndpoint> _deferToLaunchExit() =>
+      Completer<_IosReadyEndpoint>().future;
+
   /// Prefers flutter's usbmux-forwarded endpoint, then tries wireless mDNS.
-  Future<_IosReadyEndpoint> _discoverEndpoint(
+  Future<_IosReadyEndpoint> _discoverFlutterRunEndpoint(
     DateTime deadline,
     Completer<String> forwarded,
   ) async {
@@ -481,27 +755,8 @@ class IosFollowerLauncher implements FollowerLauncher {
       }
       final candidates =
           await (_mdnsCandidateResolver?.call() ?? _resolveCandidates());
-      for (final candidate in candidates) {
-        final base = Uri.parse(
-          'http://${candidate.ip}:${candidate.port}/${candidate.authCode}/',
-        );
-        final explorationReady = await _phase<bool>(
-          'readiness',
-          readyTimeout,
-          _explorationReadyProbe(base),
-        );
-        if (explorationReady) {
-          final relay = await _phase<Process>(
-            'readiness',
-            readyTimeout,
-            _relayStarter?.call(candidate) ?? _startRelay(candidate),
-          );
-          return (
-            wsUri: 'ws://127.0.0.1:$relayPort/${candidate.authCode}/ws',
-            relay: relay,
-          );
-        }
-      }
+      final ready = await _firstExplorationReady(candidates);
+      if (ready != null) return ready;
       if (candidates.isNotEmpty) {
         _onLog(
           'ios launcher: ${candidates.length} mDNS record(s), none '
@@ -510,11 +765,39 @@ class IosFollowerLauncher implements FollowerLauncher {
       }
       await Future<void>.delayed(const Duration(seconds: 3));
     }
-    throw StateError(
-      'ios launcher: no exploration-ready VM service for $bundleId '
-      'within ${readyTimeout.inSeconds}s (device unlocked? app foreground?)',
-    );
+    throw _noReadyVmService();
   }
+
+  Future<_IosReadyEndpoint?> _firstExplorationReady(
+    List<IosMdnsCandidate> candidates,
+  ) async {
+    for (final candidate in candidates) {
+      final base = Uri.parse(
+        'http://${candidate.ip}:${candidate.port}/${candidate.authCode}/',
+      );
+      final explorationReady = await _phase<bool>(
+        'readiness',
+        readyTimeout,
+        _explorationReadyProbe(base),
+      );
+      if (!explorationReady) continue;
+      final relay = await _phase<Process>(
+        'readiness',
+        readyTimeout,
+        _relayStarter?.call(candidate) ?? _startRelay(candidate),
+      );
+      return (
+        wsUri: 'ws://127.0.0.1:$relayPort/${candidate.authCode}/ws',
+        relay: relay,
+      );
+    }
+    return null;
+  }
+
+  StateError _noReadyVmService() => StateError(
+    'ios launcher: no exploration-ready VM service for $bundleId '
+    'within ${readyTimeout.inSeconds}s (device unlocked? app foreground?)',
+  );
 
   /// One mDNS resolve → ALL advertised (port, authCode) records (a relaunch
   /// leaves the old SRV cached alongside the new), each paired with the
@@ -572,7 +855,7 @@ class IosFollowerLauncher implements FollowerLauncher {
         if (!exec.contains('Application/$uuid/')) continue;
         final pid = p['processIdentifier'];
         _onLog('ios launcher: terminating prior harness pid $pid');
-        await Process.run('xcrun', [
+        await _commandRunner(xcrunExecutable, <String>[
           'devicectl',
           'device',
           'process',
@@ -581,12 +864,15 @@ class IosFollowerLauncher implements FollowerLauncher {
           resolvedDeviceId,
           '--pid',
           '$pid',
-        ]).timeout(const Duration(seconds: 15));
+        ], timeout: const Duration(seconds: 15));
       }
     } on Object catch (e) {
       _onLog('ios launcher: pre-launch cleanup skipped: $e');
     }
   }
+
+  Future<void> _bestEffortTerminateOnDevice(String resolvedDeviceId) =>
+      _terminateExisting(resolvedDeviceId);
 
   List<Object?> _decodeList(String json, String key) {
     if (json.isEmpty) return const [];
@@ -603,14 +889,14 @@ class IosFollowerLauncher implements FollowerLauncher {
     final out = File(
       '${Directory.systemTemp.path}/butane_devicectl_$relayPort.json',
     );
-    await Process.run('xcrun', [
+    await _commandRunner(xcrunExecutable, <String>[
       'devicectl',
       ...args,
       '--device',
       resolvedDeviceId,
       '--json-output',
       out.path,
-    ]).timeout(const Duration(seconds: 30));
+    ], timeout: const Duration(seconds: 30));
     return out.existsSync() ? out.readAsStringSync() : '';
   }
 

@@ -1,8 +1,9 @@
-/// LIVE proof of the iOS follower launcher: [IosFollowerLauncher] runs the
-/// butane harness on a REAL tethered iOS device (via `flutter run --profile`),
-/// auto-discovers the device VM service, stands up the LAN-exempt loopback
-/// relay, and publishes a Dart-reachable endpoint — then the REAL
-/// `leonard_drive` attaches over that endpoint, perceives the butane
+/// LIVE proof of the default iOS follower launcher: [IosFollowerLauncher]
+/// builds the signed profile harness, installs and launches it through
+/// `devicectl --console`, binds the authenticated VM service to the device's
+/// network interfaces, resolves its engine-published record, stands up the
+/// LAN-exempt loopback relay, and publishes a Dart-reachable endpoint — then
+/// the REAL `leonard_drive` attaches over that endpoint, perceives the butane
 /// peripheral fragment, reaches a real `poweredOn` radio, and the launch is
 /// reaped.
 ///
@@ -97,8 +98,7 @@ void main() {
   });
 
   test(
-    'IosFollowerLauncher launches the harness on a REAL iOS device, '
-    'leonard_drive perceives the peripheral over the relay, and it reaps',
+    'default devicectl launch reaches a REAL iOS peripheral and reaps',
     () async {
       const order = Bead(id: 'live-ios-burn');
       final log = <String>[];
@@ -136,7 +136,7 @@ void main() {
       );
 
       try {
-        // --- launch: flutter run --profile → discover → relay → publish ---
+        // --- launch: build → devicectl install/console → relay → publish ---
         final endpoint = await runner.launch(
           LaunchSpec(
             app: 'butane_harness',
@@ -155,7 +155,38 @@ void main() {
         expect(
           endpoint.vmServiceUri,
           startsWith('ws://127.0.0.1:'),
-          reason: 'the published endpoint is the Dart-reachable loopback relay',
+          reason:
+              'the devicectl-owned launch must publish the Dart-reachable '
+              'loopback relay',
+        );
+        expect(
+          log,
+          contains(
+            startsWith(
+              'ios launcher: xcrun devicectl device install app --device ',
+            ),
+          ),
+          reason: 'the default route must install with devicectl',
+        );
+        expect(
+          log.where(
+            (line) =>
+                line.startsWith(
+                  'ios launcher: xcrun devicectl device process launch '
+                  '--console --terminate-existing --device ',
+                ) &&
+                line.endsWith(
+                  'com.nicospencer.butaneHarness '
+                  '--vm-service-host=0.0.0.0 --enable-dart-profiling',
+                ),
+          ),
+          hasLength(1),
+          reason: 'the default route must own the console launch',
+        );
+        expect(
+          log.where((line) => line.contains('flutter run --profile')),
+          isEmpty,
+          reason: 'the resident route must not use grant-bound flutter run',
         );
 
         // --- drive: the REAL leonard_drive over the relayed endpoint ---
@@ -188,12 +219,12 @@ void main() {
               '(log: ${log.join(' | ')})',
         );
       } finally {
-        // --- teardown: reaps flutter run + the relay + the on-device app ---
+        // --- teardown: reaps devicectl + relay + the on-device app ---
         final result = await runner.teardown();
         log.add('teardown → ${result.name}');
         expect(runner.isRunning, isFalse);
       }
     },
-    timeout: const Timeout(Duration(minutes: 8)),
+    timeout: const Timeout(Duration(minutes: 15)),
   );
 }
