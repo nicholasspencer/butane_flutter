@@ -452,7 +452,7 @@ class IosFollowerLauncher implements FollowerLauncher {
       streamsDone: streamsDone,
       resolvedDeviceId: resolvedDeviceId,
       discover: _discoverDevicectlEndpoint(
-        DateTime.now().add(launchTimeout),
+        DateTime.now().add(readyTimeout),
         consoleVmService,
         launchExited,
       ),
@@ -703,38 +703,61 @@ class IosFollowerLauncher implements FollowerLauncher {
     }
   }
 
-  /// Resolves only the mDNS record named by the active console banner.
+  /// Resolves the engine-published mDNS records, optionally using the console
+  /// banner to corroborate the current record.
   Future<_IosReadyEndpoint> _discoverDevicectlEndpoint(
     DateTime deadline,
     Completer<_IosConsoleVmService> consoleVmService,
     Completer<void> launchExited,
   ) async {
-    final console = await Future.any<_IosConsoleVmService?>([
-      consoleVmService.future,
-      launchExited.future.then<_IosConsoleVmService?>((_) => null),
-    ]);
-    if (console == null) return _deferToLaunchExit();
+    var missingBannerLogged = false;
+    var disagreementLogged = false;
 
     while (DateTime.now().isBefore(deadline)) {
       if (launchExited.isCompleted) return _deferToLaunchExit();
       final advertised =
           await (_mdnsCandidateResolver?.call() ?? _resolveCandidates());
       if (launchExited.isCompleted) return _deferToLaunchExit();
-      final candidates = <IosMdnsCandidate>[
-        for (final candidate in advertised)
-          if (candidate.port == console.port)
-            (
-              ip: candidate.ip,
-              port: candidate.port,
-              authCode: console.authCode,
-            ),
-      ];
+      final _IosConsoleVmService? console = consoleVmService.isCompleted
+          ? await consoleVmService.future
+          : null;
+      late final List<IosMdnsCandidate> candidates;
+      if (console == null) {
+        candidates = advertised;
+        if (advertised.isNotEmpty && !missingBannerLogged) {
+          missingBannerLogged = true;
+          _onLog('ios launcher: no console VM banner; using mDNS records');
+        }
+      } else {
+        final exact = <IosMdnsCandidate>[
+          for (final candidate in advertised)
+            if (candidate.port == console.port &&
+                candidate.authCode == console.authCode)
+              candidate,
+        ];
+        if (exact.isNotEmpty) {
+          candidates = exact;
+        } else {
+          if (advertised.isNotEmpty && !disagreementLogged) {
+            disagreementLogged = true;
+            _onLog(
+              'ios launcher: console VM banner disagrees with mDNS; '
+              'keeping mDNS endpoint',
+            );
+          }
+          final samePort = <IosMdnsCandidate>[
+            for (final candidate in advertised)
+              if (candidate.port == console.port) candidate,
+          ];
+          candidates = samePort.isNotEmpty ? samePort : advertised;
+        }
+      }
       final ready = await _firstExplorationReady(candidates);
       if (ready != null) return ready;
       if (advertised.isNotEmpty) {
         _onLog(
-          'ios launcher: ${advertised.length} mDNS record(s), none on '
-          'console port ${console.port} exploration-ready yet — retrying',
+          'ios launcher: ${advertised.length} mDNS record(s), none '
+          'exploration-ready yet — retrying',
         );
       }
       await Future<void>.delayed(const Duration(seconds: 3));
@@ -887,8 +910,22 @@ class IosFollowerLauncher implements FollowerLauncher {
     }
   }
 
-  Future<void> _bestEffortTerminateOnDevice(String resolvedDeviceId) =>
-      _terminateExisting(resolvedDeviceId);
+  Future<void> _bestEffortTerminateOnDevice(String resolvedDeviceId) async {
+    try {
+      await _commandRunner(xcrunExecutable, <String>[
+        'devicectl',
+        'device',
+        'process',
+        'terminate',
+        '--device',
+        resolvedDeviceId,
+        '--bundle-id',
+        bundleId,
+      ], timeout: const Duration(seconds: 20));
+    } on Object {
+      // The local process-group reap remains authoritative for teardown.
+    }
+  }
 
   List<Object?> _decodeList(String json, String key) {
     if (json.isEmpty) return const [];

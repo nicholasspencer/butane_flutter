@@ -1,11 +1,12 @@
 /// LIVE proof of the default iOS follower launcher: [IosFollowerLauncher]
 /// builds the signed profile harness, installs and launches it through
-/// PTY-backed `devicectl` console ownership. It binds the authenticated VM
-/// service to the device's network interfaces, resolves its engine-published
-/// record, stands up the LAN-exempt loopback relay, and publishes a
-/// Dart-reachable endpoint — then the REAL `leonard_drive` attaches over that
-/// endpoint, perceives the butane peripheral fragment, reaches a real
-/// `poweredOn` radio, and the launch is reaped.
+/// `devicectl`. Its PTY-backed console stays attached for logs and early-exit
+/// detection while the engine-published mDNS SRV port and TXT authentication
+/// own endpoint selection; the console VM banner is optional. It stands up the
+/// LAN-exempt loopback relay and publishes a Dart-reachable endpoint — then the
+/// REAL `leonard_drive` attaches over that endpoint, perceives the butane
+/// peripheral fragment, reaches a real `poweredOn` radio, and the launch is
+/// reaped.
 ///
 /// Tagged `integration`; ORDER metadata is canonical. `BURN_IOS_DEVICE`,
 /// `BURN_HARNESS_DIR`, and `LEONARD_DRIVE` are logged compatibility fallbacks.
@@ -98,7 +99,8 @@ void main() {
   });
 
   test(
-    'default devicectl launch reaches a REAL iOS peripheral and reaps',
+    'default devicectl launch reaches a REAL iOS peripheral through mDNS and '
+    'reaps',
     () async {
       const order = Bead(id: 'live-ios-burn');
       final log = <String>[];
@@ -136,7 +138,9 @@ void main() {
       );
 
       try {
-        // --- launch: build → devicectl install/console → relay → publish ---
+        // --- launch: build → devicectl install/console → engine mDNS → relay
+        // → publish. The console stays attached for logs and early-exit
+        // detection, but its VM-service banner is optional. ---
         final endpoint = await runner.launch(
           LaunchSpec(
             app: 'butane_harness',

@@ -514,12 +514,93 @@ Future<void> main() async {
       );
       expect(
         daemon.endpoint.vmServiceUri,
-        'ws://127.0.0.1:50999/current-auth/ws',
+        'ws://127.0.0.1:50999/cached-auth/ws',
       );
     });
 
     test(
-      'devicectl console and dns-sd transcripts resolve the current VM service',
+      'devicectl resolves dns-sd transcript without a console VM banner',
+      () async {
+        final harness = await Directory.systemTemp.createTemp(
+          'ios_follower_devicectl_no_banner_',
+        );
+        addTearDown(() => harness.delete(recursive: true));
+        await Directory(
+          '${harness.path}/build/ios/iphoneos/Runner.app',
+        ).create(recursive: true);
+        final launchFixture = _IosProcessFixture(_hangingHelper);
+        final relayFixture = _IosProcessFixture(_hangingHelper);
+        addTearDown(launchFixture.dispose);
+        addTearDown(relayFixture.dispose);
+        const lookupOutput = '''
+com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.local.:55683
+ authCode=mdns-only-auth
+''';
+        const addressOutput = '''
+10:11:12.000  Add  2  34 ipad.local.  0.0.0.0          0 No Such Record
+10:11:12.001  Add  2  35 ipad.local.  169.254.219.128 120
+''';
+        final candidates = resolveIosMdnsCandidates(
+          lookupOutput: lookupOutput,
+          addressOutput: addressOutput,
+        );
+        final probed = <Uri>[];
+        IosMdnsCandidate? relayed;
+        final logs = <String>[];
+        final launcher = IosFollowerLauncher(
+          deviceId: 'device',
+          harnessDirectory: harness.path,
+          preLaunchCleanup: (_) async {},
+          processes: _FakeProcessGroupController(),
+          commandRunner: (_, __, {workingDirectory, timeout}) async =>
+              ProcessResult(0, 0, '', ''),
+          processStarter: launchFixture.start,
+          mdnsCandidateResolver: () async => candidates,
+          explorationReadyProbe: (base) async {
+            probed.add(base);
+            return true;
+          },
+          relayStarter: (candidate) async {
+            relayed = candidate;
+            return relayFixture.start(
+              'python3',
+              const <String>[],
+              workingDirectory: harness.path,
+              mode: ProcessStartMode.detachedWithStdio,
+            );
+          },
+          onLog: logs.add,
+        );
+
+        final daemon = await launcher.launch(
+          const LaunchSpec(app: 'butane_harness', target: 'ios'),
+        );
+
+        expect(probed, <Uri>[
+          Uri.parse('http://169.254.219.128:55683/mdns-only-auth/'),
+        ]);
+        expect(relayed, (
+          ip: '169.254.219.128',
+          port: 55683,
+          authCode: 'mdns-only-auth',
+        ));
+        expect(
+          daemon.endpoint.vmServiceUri,
+          'ws://127.0.0.1:50999/mdns-only-auth/ws',
+        );
+        expect(
+          logs.where(
+            (line) =>
+                line ==
+                'ios launcher: no console VM banner; using mDNS records',
+          ),
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      'devicectl console corroboration never overrides mDNS authority',
       () async {
         final harness = await Directory.systemTemp.createTemp(
           'ios_follower_devicectl_transcript_',
@@ -559,6 +640,7 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
         final probed = <Uri>[];
         IosMdnsCandidate? relayed;
         final consoleLineLogged = Completer<void>();
+        final logs = <String>[];
         final launcher = IosFollowerLauncher(
           deviceId: 'device',
           harnessDirectory: harness.path,
@@ -585,6 +667,7 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
             );
           },
           onLog: (line) {
+            logs.add(line);
             if (line.contains('The Dart VM service is listening on') &&
                 !consoleLineLogged.isCompleted) {
               consoleLineLogged.complete();
@@ -597,16 +680,23 @@ com.nicospencer.butaneHarness._dartVmService._tcp.local. can be reached at ipad.
         );
 
         expect(probed, <Uri>[
-          Uri.parse('http://169.254.243.58:55434/current-auth/'),
+          Uri.parse('http://169.254.243.58:55434/advertised-auth/'),
         ]);
         expect(relayed, (
           ip: '169.254.243.58',
           port: 55434,
-          authCode: 'current-auth',
+          authCode: 'advertised-auth',
         ));
         expect(
           daemon.endpoint.vmServiceUri,
-          'ws://127.0.0.1:50999/current-auth/ws',
+          'ws://127.0.0.1:50999/advertised-auth/ws',
+        );
+        expect(
+          logs,
+          contains(
+            'ios launcher: console VM banner disagrees with mDNS; '
+            'keeping mDNS endpoint',
+          ),
         );
       },
     );
@@ -647,6 +737,7 @@ Future<void> main() async {
         addTearDown(relayFixture.dispose);
         final probed = <Uri>[];
         IosMdnsCandidate? relayed;
+        final validBannerLogged = Completer<void>();
         final launcher = IosFollowerLauncher(
           deviceId: 'device',
           harnessDirectory: harness.path,
@@ -655,16 +746,27 @@ Future<void> main() async {
           commandRunner: (_, __, {workingDirectory, timeout}) async =>
               ProcessResult(0, 0, '', ''),
           processStarter: launchFixture.start,
-          mdnsCandidateResolver: () async => const <IosMdnsCandidate>[
-            (ip: '169.254.219.128', port: 0, authCode: 'advertised-zero'),
-            (
-              ip: '169.254.219.128',
-              port: 55431,
-              authCode: 'advertised-no-path',
-            ),
-            (ip: '169.254.219.128', port: 55432, authCode: 'advertised-empty'),
-            (ip: '169.254.219.128', port: 55434, authCode: 'advertised-valid'),
-          ],
+          mdnsCandidateResolver: () async {
+            await validBannerLogged.future.timeout(_phaseTestCeiling);
+            return const <IosMdnsCandidate>[
+              (ip: '169.254.219.128', port: 0, authCode: 'advertised-zero'),
+              (
+                ip: '169.254.219.128',
+                port: 55431,
+                authCode: 'advertised-no-path',
+              ),
+              (
+                ip: '169.254.219.128',
+                port: 55432,
+                authCode: 'advertised-empty',
+              ),
+              (
+                ip: '169.254.219.128',
+                port: 55434,
+                authCode: 'advertised-valid',
+              ),
+            ];
+          },
           explorationReadyProbe: (base) async {
             probed.add(base);
             return true;
@@ -678,6 +780,12 @@ Future<void> main() async {
               mode: ProcessStartMode.detachedWithStdio,
             );
           },
+          onLog: (line) {
+            if (line.contains('http://0.0.0.0:55434/current-auth/') &&
+                !validBannerLogged.isCompleted) {
+              validBannerLogged.complete();
+            }
+          },
         );
 
         final daemon = await launcher.launch(
@@ -685,16 +793,98 @@ Future<void> main() async {
         );
 
         expect(probed, <Uri>[
-          Uri.parse('http://169.254.219.128:55434/current-auth/'),
+          Uri.parse('http://169.254.219.128:55434/advertised-valid/'),
         ]);
         expect(relayed, (
           ip: '169.254.219.128',
           port: 55434,
-          authCode: 'current-auth',
+          authCode: 'advertised-valid',
         ));
         expect(
           daemon.endpoint.vmServiceUri,
-          'ws://127.0.0.1:50999/current-auth/ws',
+          'ws://127.0.0.1:50999/advertised-valid/ws',
+        );
+      },
+    );
+
+    test(
+      'onReap uses direct bundle-id terminate without provisioning lookup',
+      () async {
+        final harness = await Directory.systemTemp.createTemp(
+          'ios_follower_devicectl_direct_reap_',
+        );
+        addTearDown(() => harness.delete(recursive: true));
+        await Directory(
+          '${harness.path}/build/ios/iphoneos/Runner.app',
+        ).create(recursive: true);
+        final launchFixture = _IosProcessFixture(_hangingHelper);
+        final relayFixture = _IosProcessFixture(_hangingHelper);
+        addTearDown(launchFixture.dispose);
+        addTearDown(relayFixture.dispose);
+        final commands = <_RanIosCommand>[];
+        final launcher = IosFollowerLauncher(
+          deviceId: '00008110-device',
+          harnessDirectory: harness.path,
+          preLaunchCleanup: (_) async {},
+          processes: _FakeProcessGroupController(),
+          commandRunner:
+              (executable, arguments, {workingDirectory, timeout}) async {
+                commands.add((
+                  executable: executable,
+                  arguments: List<String>.of(arguments),
+                  workingDirectory: workingDirectory,
+                  timeout: timeout,
+                ));
+                return ProcessResult(0, 0, '', '');
+              },
+          processStarter: launchFixture.start,
+          mdnsCandidateResolver: () async => const <IosMdnsCandidate>[
+            (ip: '169.254.219.128', port: 55683, authCode: 'reap-auth'),
+          ],
+          explorationReadyProbe: (_) async => true,
+          relayStarter: (candidate) => relayFixture.start(
+            'python3',
+            const <String>[],
+            workingDirectory: harness.path,
+            mode: ProcessStartMode.detachedWithStdio,
+          ),
+        );
+
+        final daemon = await launcher.launch(
+          const LaunchSpec(app: 'butane_harness', target: 'ios'),
+        );
+        await daemon.onReap!();
+
+        final reapCalls = commands.where(
+          (command) =>
+              command.arguments.length >= 4 &&
+              command.arguments[0] == 'devicectl' &&
+              command.arguments[1] == 'device' &&
+              command.arguments[2] == 'process' &&
+              command.arguments[3] == 'terminate',
+        );
+        expect(reapCalls, hasLength(1));
+        final reapCall = reapCalls.single;
+        expect(reapCall.executable, 'xcrun');
+        expect(reapCall.arguments, <String>[
+          'devicectl',
+          'device',
+          'process',
+          'terminate',
+          '--device',
+          '00008110-device',
+          '--bundle-id',
+          'com.nicospencer.butaneHarness',
+        ]);
+        expect(reapCall.workingDirectory, isNull);
+        expect(reapCall.timeout, const Duration(seconds: 20));
+        expect(
+          commands.where(
+            (command) =>
+                command.arguments.contains('apps') ||
+                command.arguments.contains('processes'),
+          ),
+          isEmpty,
         );
       },
     );
