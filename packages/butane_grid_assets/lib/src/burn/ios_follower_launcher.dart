@@ -31,8 +31,8 @@ import 'launch_scrape.dart';
 
 void _noLog(String _) {}
 
-const String _kCurrentButaneExtensionPrefix = 'ext.leonard.butane';
-const String _kLegacyButaneExtensionPrefix = 'ext.exploration.butane';
+const String _kCurrentButaneExtensionPrefix = 'ext.exploration.butane';
+const String _kLegacyButaneExtensionPrefix = 'ext.leonard.butane';
 
 /// The device and harness directory selected for one iOS launch.
 typedef IosLaunchInputs = ({String deviceId, String harnessDirectory});
@@ -101,36 +101,17 @@ Future<ProcessResult> _runIosCommand(
   return timeout == null ? result : result.timeout(timeout);
 }
 
-Future<Process> _startIosProcess(
+Future<Process> _runIosProcess(
   String executable,
   List<String> arguments, {
   required String workingDirectory,
   required ProcessStartMode mode,
-}) {
-  final devicectlConsoleLaunch =
-      arguments.length >= 5 &&
-      arguments[0] == 'devicectl' &&
-      arguments[1] == 'device' &&
-      arguments[2] == 'process' &&
-      arguments[3] == 'launch' &&
-      arguments.contains('--console');
-  if (devicectlConsoleLaunch) {
-    // devicectl only redirects the app's standard streams when it sees a TTY.
-    // Match Flutter's CoreDevice wrapper without adding launch environment.
-    return Process.start(
-      '/usr/bin/script',
-      <String>['-t', '0', '/dev/null', executable, ...arguments],
-      workingDirectory: workingDirectory,
-      mode: mode,
-    );
-  }
-  return Process.start(
-    executable,
-    arguments,
-    workingDirectory: workingDirectory,
-    mode: mode,
-  );
-}
+}) => Process.start(
+  executable,
+  arguments,
+  workingDirectory: workingDirectory,
+  mode: mode,
+);
 
 /// Whether the butane exploration extension is registered at [base].
 @visibleForTesting
@@ -235,6 +216,8 @@ asyncio.run(main())
 ''';
 
 /// Launches the butane harness on a physical iOS device as a burn follower.
+///
+/// The LAN-bound profile VM service is protected only by its authentication token.
 class IosFollowerLauncher implements FollowerLauncher {
   /// Creates a launcher for [deviceId] (the device UDID), building from
   /// [harnessDirectory] and publishing under [station]. [launchMode] defaults
@@ -258,7 +241,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     this.forwardedPreferenceWindow = const Duration(seconds: 15),
     ProcessGroupController processes = const SystemProcessGroupController(),
     IosCommandRunner commandRunner = _runIosCommand,
-    IosProcessStarter processStarter = _startIosProcess,
+    IosProcessStarter processStarter = _runIosProcess,
     IosPreLaunchCleanup? preLaunchCleanup,
     Future<bool> Function(Uri)? explorationReadyProbe,
     Future<List<IosMdnsCandidate>> Function()? mdnsCandidateResolver,
@@ -436,7 +419,8 @@ class IosFollowerLauncher implements FollowerLauncher {
     final launchProcess = await _phase<Process>(
       'install+launch',
       launchTimeout,
-      _processStarter(
+      _startIosProcess(
+        IosFollowerLaunchMode.devicectl,
         xcrunExecutable,
         launchArguments,
         workingDirectory: resolvedHarnessDirectory,
@@ -463,7 +447,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     );
     return _finishLaunch(
       launchProcess: launchProcess,
-      launchSource: 'devicectl',
+      launchSource: 'devicectl via /usr/bin/script',
       outputTail: outputTail,
       streamsDone: streamsDone,
       resolvedDeviceId: resolvedDeviceId,
@@ -490,7 +474,8 @@ class IosFollowerLauncher implements FollowerLauncher {
     final launchProcess = await _phase<Process>(
       'install+launch',
       launchTimeout,
-      _processStarter(
+      _startIosProcess(
+        IosFollowerLaunchMode.flutterRun,
         flutterExecutable,
         <String>[
           'run',
@@ -537,6 +522,41 @@ class IosFollowerLauncher implements FollowerLauncher {
           timeout,
         ),
       );
+
+  Future<Process> _startIosProcess(
+    IosFollowerLaunchMode launchMode,
+    String executable,
+    List<String> arguments, {
+    required String workingDirectory,
+    required ProcessStartMode mode,
+  }) async {
+    switch (launchMode) {
+      case IosFollowerLaunchMode.devicectl:
+        try {
+          // devicectl only redirects the app's standard streams when it sees a
+          // TTY. Match Flutter's CoreDevice wrapper without adding launch
+          // environment.
+          return await _processStarter(
+            '/usr/bin/script',
+            <String>['-t', '0', '/dev/null', executable, ...arguments],
+            workingDirectory: workingDirectory,
+            mode: mode,
+          );
+        } on Object catch (error) {
+          throw StateError(
+            'ios launcher: failed to start /usr/bin/script for the '
+            'devicectl console: $error',
+          );
+        }
+      case IosFollowerLaunchMode.flutterRun:
+        return _processStarter(
+          executable,
+          arguments,
+          workingDirectory: workingDirectory,
+          mode: mode,
+        );
+    }
+  }
 
   Future<void> _provision(String resolvedDeviceId) => _phase<void>(
     'provision',
@@ -689,36 +709,32 @@ class IosFollowerLauncher implements FollowerLauncher {
     Completer<_IosConsoleVmService> consoleVmService,
     Completer<void> launchExited,
   ) async {
+    final console = await Future.any<_IosConsoleVmService?>([
+      consoleVmService.future,
+      launchExited.future.then<_IosConsoleVmService?>((_) => null),
+    ]);
+    if (console == null) return _deferToLaunchExit();
+
     while (DateTime.now().isBefore(deadline)) {
       if (launchExited.isCompleted) return _deferToLaunchExit();
       final advertised =
           await (_mdnsCandidateResolver?.call() ?? _resolveCandidates());
       if (launchExited.isCompleted) return _deferToLaunchExit();
-      final console = consoleVmService.isCompleted
-          ? await consoleVmService.future
-          : null;
-      final candidates = console == null
-          ? advertised
-          : <IosMdnsCandidate>[
-              for (final candidate in advertised)
-                if (candidate.port == console.port)
-                  (
-                    ip: candidate.ip,
-                    port: candidate.port,
-                    authCode: console.authCode,
-                  ),
-            ];
+      final candidates = <IosMdnsCandidate>[
+        for (final candidate in advertised)
+          if (candidate.port == console.port)
+            (
+              ip: candidate.ip,
+              port: candidate.port,
+              authCode: console.authCode,
+            ),
+      ];
       final ready = await _firstExplorationReady(candidates);
       if (ready != null) return ready;
       if (advertised.isNotEmpty) {
         _onLog(
-          console == null
-              ? 'ios launcher: console VM banner unavailable; '
-                    '${advertised.length} mDNS record(s), none '
-                    'exploration-ready yet — retrying'
-              : 'ios launcher: ${advertised.length} mDNS record(s), none on '
-                    'console port ${console.port} exploration-ready yet — '
-                    'retrying',
+          'ios launcher: ${advertised.length} mDNS record(s), none on '
+          'console port ${console.port} exploration-ready yet — retrying',
         );
       }
       await Future<void>.delayed(const Duration(seconds: 3));

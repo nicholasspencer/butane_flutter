@@ -1,11 +1,11 @@
 /// LIVE proof of the default iOS follower launcher: [IosFollowerLauncher]
 /// builds the signed profile harness, installs and launches it through
-/// `devicectl --console`, binds the authenticated VM service to the device's
-/// network interfaces, resolves its engine-published record, stands up the
-/// LAN-exempt loopback relay, and publishes a Dart-reachable endpoint — then
-/// the REAL `leonard_drive` attaches over that endpoint, perceives the butane
-/// peripheral fragment, reaches a real `poweredOn` radio, and the launch is
-/// reaped.
+/// PTY-backed `devicectl` console ownership. It binds the authenticated VM
+/// service to the device's network interfaces, resolves its engine-published
+/// record, stands up the LAN-exempt loopback relay, and publishes a
+/// Dart-reachable endpoint — then the REAL `leonard_drive` attaches over that
+/// endpoint, perceives the butane peripheral fragment, reaches a real
+/// `poweredOn` radio, and the launch is reaped.
 ///
 /// Tagged `integration`; ORDER metadata is canonical. `BURN_IOS_DEVICE`,
 /// `BURN_HARNESS_DIR`, and `LEONARD_DRIVE` are logged compatibility fallbacks.
@@ -159,27 +159,24 @@ void main() {
               'the devicectl-owned launch must publish the Dart-reachable '
               'loopback relay',
         );
+        final runnerApp = Directory(
+          '${inputs.harnessDirectory}/build/ios/iphoneos/Runner.app',
+        ).absolute.path;
+        final installLog =
+            'ios launcher: xcrun devicectl device install app --device '
+            '${inputs.followerDevice} $runnerApp';
         expect(
-          log,
-          contains(
-            startsWith(
-              'ios launcher: xcrun devicectl device install app --device ',
-            ),
-          ),
-          reason: 'the default route must install with devicectl',
+          log.where((line) => line == installLog),
+          hasLength(1),
+          reason: 'the default route must install exactly once with devicectl',
         );
+        final launchLog =
+            'ios launcher: xcrun devicectl device process launch '
+            '--console --terminate-existing --device '
+            '${inputs.followerDevice} com.nicospencer.butaneHarness '
+            '--vm-service-host=0.0.0.0 --enable-dart-profiling';
         expect(
-          log.where(
-            (line) =>
-                line.startsWith(
-                  'ios launcher: xcrun devicectl device process launch '
-                  '--console --terminate-existing --device ',
-                ) &&
-                line.endsWith(
-                  'com.nicospencer.butaneHarness '
-                  '--vm-service-host=0.0.0.0 --enable-dart-profiling',
-                ),
-          ),
+          log.where((line) => line == launchLog),
           hasLength(1),
           reason: 'the default route must own the console launch',
         );
