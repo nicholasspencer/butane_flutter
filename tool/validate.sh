@@ -41,7 +41,7 @@ packages/butane_grid_assets/pubspec.yaml|grid_runtime|^0.2.0-rc.10
 packages/butane_grid_assets/pubspec.yaml|grid_exploration|^0.3.0-rc.4
 packages/butane_harness/pubspec.yaml|genesis_perception|^0.3.0
 packages/butane_harness/pubspec.yaml|leonard_contract|^0.2.2
-packages/butane_harness/pubspec.yaml|leonard_flutter|^0.3.1
+packages/butane_harness/pubspec.yaml|leonard_flutter|^0.4.0
 DEPENDENCIES
 
   if ! grep -Eq '^  sdk: \^3\.9\.0$' pubspec.yaml; then
