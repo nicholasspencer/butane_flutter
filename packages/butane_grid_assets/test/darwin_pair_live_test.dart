@@ -35,45 +35,25 @@ void main() {
     _require(selectedBead == _beadId, 'DARWIN_PAIR_BEAD must equal $_beadId');
 
     final metadata = await _loadBeadMetadata(selectedBead!);
-    for (final key in <String>[
-      BurnOrderInputs.followerDeviceKey,
-      BurnOrderInputs.harnessDirectoryKey,
-      BurnOrderInputs.leonardDriveKey,
-      BurnOrderInputs.followerTargetKey,
-      BurnOrderInputs.centralTargetKey,
-      BurnOrderInputs.preconditionsKey,
-    ]) {
-      _requireMetadataString(metadata, key);
-    }
-
-    final resolutionLog = <String>[];
-    final inputs = BurnOrderInputs.resolve(
-      metadata: metadata,
-      environment: const <String, String>{},
-      onLog: resolutionLog.add,
-    );
-    _require(
-      resolutionLog.isEmpty,
-      'canonical burn metadata must resolve without environment fallback: '
-      '$resolutionLog',
-    );
+    final inputs = resolveDarwinPairInputs(metadata);
     _require(
       Platform.environment['LEONARD_E2E_DEVICE'] == inputs.followerDevice,
-      'LEONARD_E2E_DEVICE must equal the resolved burn.follower_device',
+      'LEONARD_E2E_DEVICE must equal the resolved '
+      'darwin_pair.follower_device',
     );
     _require(
       inputs.followerTarget == 'ios',
-      'burn.follower_target must equal ios',
+      'darwin_pair.follower_target must equal ios',
     );
     _require(
       inputs.centralTarget == 'macos',
-      'burn.central_target must equal macos',
+      'darwin_pair.central_target must equal macos',
     );
     _require(
       inputs.preconditions.length == 1 &&
           inputs.preconditions.single.kind ==
               BurnPreconditionKind.followerIosAttached,
-      'burn.preconditions must contain exactly follower-ios-attached',
+      'darwin_pair.preconditions must contain exactly follower-ios-attached',
     );
 
     await systemBurnPreflight().validate(inputs);
@@ -370,14 +350,6 @@ Map<String, dynamic> _stringKeyedMap(Object? value, String label) {
     result[entry.key! as String] = entry.value;
   }
   return result;
-}
-
-void _requireMetadataString(Map<String, dynamic> metadata, String key) {
-  final value = metadata[key];
-  _require(
-    value is String && value.trim().isNotEmpty,
-    '$key must be a non-empty canonical metadata string',
-  );
 }
 
 Future<TestReport> _runScenario({

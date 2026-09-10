@@ -6,6 +6,78 @@ import 'burn_report.dart';
 import 'burn_scenario.dart';
 import 'follower.dart';
 
+/// Canonical metadata keys for the direct Darwin-pair proof.
+///
+/// These keys are deliberately isolated from the resident `burn.*` routing
+/// namespace so that a physical-pair receipt cannot allocate the burn circuit.
+abstract final class DarwinPairMetadataKeys {
+  /// Physical iOS follower device identifier.
+  static const String followerDevice = 'darwin_pair.follower_device';
+
+  /// Absolute directory containing the dual-role Flutter harness.
+  static const String harnessDirectory = 'darwin_pair.harness_dir';
+
+  /// Absolute path to the Leonard drive entry point.
+  static const String leonardDrive = 'darwin_pair.leonard_drive';
+
+  /// Flutter target name used for the follower role.
+  static const String followerTarget = 'darwin_pair.follower_target';
+
+  /// Flutter target name used for the central role.
+  static const String centralTarget = 'darwin_pair.central_target';
+
+  /// JSON-encoded list of physical-pair preconditions.
+  static const String preconditions = 'darwin_pair.preconditions';
+}
+
+/// Resolves isolated Darwin-pair [metadata] as resident burn inputs.
+///
+/// Every Darwin key must contain a non-empty string. Unrelated metadata,
+/// including resident `burn.*` values, is ignored and the source map is never
+/// mutated.
+BurnOrderInputs resolveDarwinPairInputs(Map<String, dynamic> metadata) {
+  String read(String key) {
+    final value = metadata[key];
+    if (value is! String || value.trim().isEmpty) {
+      throw StateError('$key must be a non-empty string');
+    }
+    return value;
+  }
+
+  final resolutionLog = <String>[];
+  final inputs = BurnOrderInputs.resolve(
+    metadata: <String, dynamic>{
+      BurnOrderInputs.followerDeviceKey: read(
+        DarwinPairMetadataKeys.followerDevice,
+      ),
+      BurnOrderInputs.harnessDirectoryKey: read(
+        DarwinPairMetadataKeys.harnessDirectory,
+      ),
+      BurnOrderInputs.leonardDriveKey: read(
+        DarwinPairMetadataKeys.leonardDrive,
+      ),
+      BurnOrderInputs.followerTargetKey: read(
+        DarwinPairMetadataKeys.followerTarget,
+      ),
+      BurnOrderInputs.centralTargetKey: read(
+        DarwinPairMetadataKeys.centralTarget,
+      ),
+      BurnOrderInputs.preconditionsKey: read(
+        DarwinPairMetadataKeys.preconditions,
+      ),
+    },
+    environment: const <String, String>{},
+    onLog: resolutionLog.add,
+  );
+  if (resolutionLog.isNotEmpty) {
+    throw StateError(
+      'Darwin pair metadata unexpectedly used an environment fallback: '
+      '$resolutionLog',
+    );
+  }
+  return inputs;
+}
+
 /// Maps [role]'s steps in [report] to `PASS` only when the non-empty subset all
 /// passed.
 String darwinPairRoleOutcome(TestReport report, BurnDeviceRole role) {

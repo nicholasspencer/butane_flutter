@@ -36,6 +36,119 @@ const _followerEndpoint = FollowerEndpoint(
 );
 
 void main() {
+  group('Darwin pair metadata', () {
+    const expected = <String, dynamic>{
+      DarwinPairMetadataKeys.followerDevice: 'ios-device',
+      DarwinPairMetadataKeys.harnessDirectory: '/harness',
+      DarwinPairMetadataKeys.leonardDrive: '/leonard_drive',
+      DarwinPairMetadataKeys.followerTarget: 'ios',
+      DarwinPairMetadataKeys.centralTarget: 'macos',
+      DarwinPairMetadataKeys.preconditions: '["follower-ios-attached"]',
+    };
+
+    test('declares the six isolated metadata keys exactly', () {
+      expect(
+        <String>[
+          DarwinPairMetadataKeys.followerDevice,
+          DarwinPairMetadataKeys.harnessDirectory,
+          DarwinPairMetadataKeys.leonardDrive,
+          DarwinPairMetadataKeys.followerTarget,
+          DarwinPairMetadataKeys.centralTarget,
+          DarwinPairMetadataKeys.preconditions,
+        ],
+        <String>[
+          'darwin_pair.follower_device',
+          'darwin_pair.harness_dir',
+          'darwin_pair.leonard_drive',
+          'darwin_pair.follower_target',
+          'darwin_pair.central_target',
+          'darwin_pair.preconditions',
+        ],
+      );
+    });
+
+    test('resolves the six isolated values and ignores resident decoys', () {
+      final metadata = <String, dynamic>{
+        ...expected,
+        BurnOrderInputs.followerDeviceKey: 'resident-device',
+        BurnOrderInputs.harnessDirectoryKey: '/resident-harness',
+        BurnOrderInputs.leonardDriveKey: '/resident-leonard-drive',
+        BurnOrderInputs.followerTargetKey: 'android',
+        BurnOrderInputs.centralTargetKey: 'windows',
+        BurnOrderInputs.preconditionsKey: '["windows-host-reachable"]',
+      };
+      final original = Map<String, dynamic>.of(metadata);
+
+      final inputs = resolveDarwinPairInputs(metadata);
+
+      expect(inputs.followerDevice, 'ios-device');
+      expect(inputs.harnessDirectory, '/harness');
+      expect(inputs.leonardDrive, '/leonard_drive');
+      expect(inputs.followerTarget, 'ios');
+      expect(inputs.centralTarget, 'macos');
+      expect(inputs.preconditions, hasLength(1));
+      expect(
+        inputs.preconditions.single.kind,
+        BurnPreconditionKind.followerIosAttached,
+      );
+      expect(metadata, original);
+    });
+
+    for (final key in expected.keys) {
+      test('rejects missing $key even with a resident decoy', () {
+        final metadata = <String, dynamic>{...expected}..remove(key);
+        metadata[_residentKeyFor(key)] = 'resident-decoy';
+
+        expect(
+          () => resolveDarwinPairInputs(metadata),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains(key),
+            ),
+          ),
+        );
+      });
+    }
+
+    test('rejects a blank Darwin value and names its key', () {
+      final metadata = <String, dynamic>{
+        ...expected,
+        DarwinPairMetadataKeys.harnessDirectory: '   ',
+      };
+
+      expect(
+        () => resolveDarwinPairInputs(metadata),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains(DarwinPairMetadataKeys.harnessDirectory),
+          ),
+        ),
+      );
+    });
+
+    test('rejects a non-string Darwin value and names its key', () {
+      final metadata = <String, dynamic>{
+        ...expected,
+        DarwinPairMetadataKeys.preconditions: <String>['follower-ios-attached'],
+      };
+
+      expect(
+        () => resolveDarwinPairInputs(metadata),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains(DarwinPairMetadataKeys.preconditions),
+          ),
+        ),
+      );
+    });
+  });
+
   group('Darwin pair outcomes', () {
     test('maps role subsets and aggregate scenario outcomes', () {
       final passed = _report(
@@ -309,6 +422,17 @@ void main() {
     },
   );
 }
+
+String _residentKeyFor(String darwinKey) => switch (darwinKey) {
+  DarwinPairMetadataKeys.followerDevice => BurnOrderInputs.followerDeviceKey,
+  DarwinPairMetadataKeys.harnessDirectory =>
+    BurnOrderInputs.harnessDirectoryKey,
+  DarwinPairMetadataKeys.leonardDrive => BurnOrderInputs.leonardDriveKey,
+  DarwinPairMetadataKeys.followerTarget => BurnOrderInputs.followerTargetKey,
+  DarwinPairMetadataKeys.centralTarget => BurnOrderInputs.centralTargetKey,
+  DarwinPairMetadataKeys.preconditions => BurnOrderInputs.preconditionsKey,
+  _ => throw ArgumentError.value(darwinKey, 'darwinKey'),
+};
 
 TestReport _report({
   required DriveScenario scenario,
