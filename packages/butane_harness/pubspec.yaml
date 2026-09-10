@@ -32,9 +32,9 @@ dependencies:
   # The extension contract (LeonardTool/ToolResult/BusyState/…) —
   # leonard_flutter re-exports only LeonardExtension.
   leonard_contract: ^0.2.2
-  # leonard_flutter 0.3.x is the genesis-0.3 line; it keeps the extensionsReady
-  # barrier the harness awaits before publishing its VM-service endpoint.
-  leonard_flutter: ^0.3.1
+  # leonard_flutter 0.4 is the current wave; the harness awaits its
+  # extensionsReady barrier before publishing its VM-service endpoint.
+  leonard_flutter: ^0.4.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
