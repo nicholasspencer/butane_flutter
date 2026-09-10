@@ -462,18 +462,18 @@ packages:
     dependency: transitive
     description:
       name: leonard_contract
-      sha256: "2e490406e8c1dd10719d6d3c2254ef827fbfd33d1a9c41fb1020ba980af2a516"
+      sha256: "5b16ed91c7a44e5ead728b673f2d3c090e0c8833a2bfd18b129a384906750f29"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.2"
+    version: "0.2.5"
   leonard_flutter:
     dependency: transitive
     description:
       name: leonard_flutter
-      sha256: f042a10370d5443f64e689a0e11db2c8c190352edacc9dcc2a1fa8814115d981
+      sha256: cbec0a0d8415c4abc6aae29e54613ed416b700de561ee7befc38b9ca6596d8dd
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.1"
+    version: "0.4.0"
   lints:
     dependency: transitive
     description:

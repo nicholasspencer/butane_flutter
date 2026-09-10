@@ -26,7 +26,7 @@ printf '%s\n' \
   'dependencies:' \
   '  genesis_perception: ^0.3.0' \
   '  leonard_contract: ^0.2.2' \
-  '  leonard_flutter: ^0.3.1' \
+  '  leonard_flutter: ^0.4.0' \
   > "$fixture_root/repo/packages/butane_harness/pubspec.yaml"
 
 git -C "$fixture_root/repo" init -q
