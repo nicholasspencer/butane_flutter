@@ -14,6 +14,7 @@ import 'package:butane_grid_assets/src/burn/burn_order_inputs.dart';
 import 'package:butane_grid_assets/src/burn/burn_preflight_io.dart';
 import 'package:butane_grid_assets/src/burn/burn_report.dart';
 import 'package:butane_grid_assets/src/burn/burn_scenario.dart';
+import 'package:butane_grid_assets/src/burn/darwin_pair_receipt.dart';
 import 'package:butane_grid_assets/src/burn/follower.dart';
 import 'package:butane_grid_assets/src/burn/ios_follower_launcher.dart';
 import 'package:butane_grid_assets/src/burn/macos_central_launcher.dart';
@@ -129,7 +130,7 @@ void main() {
 
     void recordScenario(TestReport report) {
       reports.add(report);
-      final receipt = _scenarioReceipt(report);
+      final receipt = darwinPairScenarioReceipt(report);
       scenarioReceipts.add(receipt);
       _emit('DARWIN_PAIR_SCENARIO', receipt);
     }
@@ -180,7 +181,7 @@ void main() {
           kNusRoundTripScenario,
         ]) {
           recordScenario(
-            _unobservedReport(
+            darwinPairUnobservedReport(
               scenario: scenario,
               inputs: inputs,
               centralEndpoint: centralEndpoint,
@@ -210,7 +211,7 @@ void main() {
             kNusRoundTripScenario,
           ]) {
             recordScenario(
-              _unobservedReport(
+              darwinPairUnobservedReport(
                 scenario: scenario,
                 inputs: inputs,
                 centralEndpoint: centralEndpoint,
@@ -272,7 +273,7 @@ void main() {
                 'NUS scenario held: smoke-to-NUS cleanup did not succeed',
               );
               recordScenario(
-                _unobservedReport(
+                darwinPairUnobservedReport(
                   scenario: kNusRoundTripScenario,
                   inputs: inputs,
                   centralEndpoint: centralEndpoint,
@@ -309,17 +310,21 @@ void main() {
     final allComplete = scenarioReceipts.every(
       (receipt) => receipt['complete'] == true,
     );
-    final recommendation = reports.every((report) => report.passed)
-        ? 'proven'
-        : allComplete
-        ? 'experimental'
-        : 'held-back';
     final summary = <String, Object?>{
-      'recommendation': recommendation,
-      'smoke': _reportOutcome(reports, kSmokeScenario.name),
-      'nus-round-trip': _reportOutcome(reports, kNusRoundTripScenario.name),
-      'ios': _crossScenarioRoleOutcome(reports, BurnDeviceRole.follower),
-      'macos': _crossScenarioRoleOutcome(reports, BurnDeviceRole.central),
+      'recommendation': darwinPairRecommendation(reports),
+      'smoke': darwinPairScenarioOutcome(reports, kSmokeScenario.name),
+      'nus-round-trip': darwinPairScenarioOutcome(
+        reports,
+        kNusRoundTripScenario.name,
+      ),
+      'ios': darwinPairCrossScenarioRoleOutcome(
+        reports,
+        BurnDeviceRole.follower,
+      ),
+      'macos': darwinPairCrossScenarioRoleOutcome(
+        reports,
+        BurnDeviceRole.central,
+      ),
       'complete': allComplete,
       if (diagnostics.isNotEmpty) 'diagnostics': diagnostics,
     };
@@ -396,62 +401,6 @@ Future<TestReport> _runScenario({
   followerLaunchOutcome: BurnLaunchOutcome.launched,
   followerTeardownConfirmation: BurnTeardownConfirmation.notObserved,
 );
-
-TestReport _unobservedReport({
-  required DriveScenario scenario,
-  required BurnOrderInputs inputs,
-  required FollowerEndpoint? centralEndpoint,
-  required FollowerEndpoint? followerEndpoint,
-}) => unobservedDriveReport(
-  scenario: scenario,
-  endpoint: followerEndpoint?.vmServiceUri ?? '',
-  central: inputs.centralTarget,
-  follower: inputs.followerTarget,
-  centralIdentity: centralEndpoint?.station ?? '',
-  centralLaunchOutcome: centralEndpoint == null
-      ? BurnLaunchOutcome.failed
-      : BurnLaunchOutcome.launched,
-  centralTeardownConfirmation: BurnTeardownConfirmation.notObserved,
-  followerIdentity: followerEndpoint?.station ?? '',
-  followerLaunchOutcome: followerEndpoint == null
-      ? BurnLaunchOutcome.failed
-      : BurnLaunchOutcome.launched,
-  followerTeardownConfirmation: BurnTeardownConfirmation.notObserved,
-);
-
-Map<String, Object?> _scenarioReceipt(TestReport report) {
-  final receipt = <String, Object?>{...report.toJson()};
-  receipt['complete'] = report.steps.every(
-    (step) => step.outcome != BurnStepOutcome.notObserved,
-  );
-  receipt['roleOutcomes'] = <String, String>{
-    BurnDeviceRole.central.wire: _roleOutcome(report, BurnDeviceRole.central),
-    BurnDeviceRole.follower.wire: _roleOutcome(report, BurnDeviceRole.follower),
-  };
-  return receipt;
-}
-
-String _roleOutcome(TestReport report, BurnDeviceRole role) {
-  final steps = report.steps.where((step) => step.role == role).toList();
-  return steps.isNotEmpty &&
-          steps.every((step) => step.outcome == BurnStepOutcome.passed)
-      ? 'PASS'
-      : 'FAIL';
-}
-
-String _crossScenarioRoleOutcome(
-  List<TestReport> reports,
-  BurnDeviceRole role,
-) =>
-    reports.isNotEmpty &&
-        reports.every((report) => _roleOutcome(report, role) == 'PASS')
-    ? 'PASS'
-    : 'FAIL';
-
-String _reportOutcome(List<TestReport> reports, String scenario) =>
-    reports.singleWhere((report) => report.scenario == scenario).passed
-    ? 'PASS'
-    : 'FAIL';
 
 Future<_ToolObservation> _invoke(
   ProcessLeonardDrive drive,
