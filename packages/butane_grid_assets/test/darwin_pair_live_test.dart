@@ -34,163 +34,137 @@ void main() {
     final selectedBead = Platform.environment['DARWIN_PAIR_BEAD'];
     _require(selectedBead == _beadId, 'DARWIN_PAIR_BEAD must equal $_beadId');
 
-    final metadata = await _loadBeadMetadata(selectedBead!);
-    final inputs = resolveDarwinPairInputs(metadata);
-    _require(
-      Platform.environment['LEONARD_E2E_DEVICE'] == inputs.followerDevice,
-      'LEONARD_E2E_DEVICE must equal the resolved '
-      'darwin_pair.follower_device',
-    );
-    _require(
-      inputs.followerTarget == 'ios',
-      'darwin_pair.follower_target must equal ios',
-    );
-    _require(
-      inputs.centralTarget == 'macos',
-      'darwin_pair.central_target must equal macos',
-    );
-    _require(
-      inputs.preconditions.length == 1 &&
-          inputs.preconditions.single.kind ==
-              BurnPreconditionKind.followerIosAttached,
-      'darwin_pair.preconditions must contain exactly follower-ios-attached',
-    );
-
-    await systemBurnPreflight().validate(inputs);
-    _emit('DARWIN_PAIR_PREFLIGHT', <String, Object?>{
-      'status': 'PASS',
-      'device': inputs.followerDevice,
-      'harnessDirectory': inputs.harnessDirectory,
-      'leonardDrive': inputs.leonardDrive,
-      'precondition': inputs.preconditions.single.declaration,
-    });
-
-    final macosLaunch =
-        'cd packages/butane_harness && flutter run --profile -d macos '
-        '--dart-define=ROLE=central';
-    final iosLaunch =
-        'cd packages/butane_harness && flutter run --profile '
-        '-d ${inputs.followerDevice} --dart-define=ROLE=peripheral';
-    _emit('DARWIN_PAIR_COMMANDS', <String, Object?>{
-      'macosLaunch': macosLaunch,
-      'iosLaunch': iosLaunch,
-    });
-
-    void liveLog(String line) => stderr.writeln('[darwin-pair] $line');
-
-    final centralDrive = ProcessLeonardDrive(
-      executableOverride: inputs.leonardDrive,
-      onLog: liveLog,
-    );
-    final followerDrive = ProcessLeonardDrive(
-      executableOverride: inputs.leonardDrive,
-      onLog: liveLog,
-    );
-    final centralRunner = ButaneFollowerRunner(
-      launcher: MacosCentralLauncher(
-        readyTimeout: const Duration(minutes: 5),
-        onLog: liveLog,
-      ),
-      processes: const SystemProcessGroupController(),
-      onLog: liveLog,
-    );
-    final followerRunner = ButaneFollowerRunner(
-      launcher: IosFollowerLauncher(onLog: liveLog),
-      processes: const SystemProcessGroupController(),
-      onLog: liveLog,
-    );
-
-    FollowerEndpoint? centralEndpoint;
-    FollowerEndpoint? followerEndpoint;
-    final diagnostics = <String>[];
-    final reports = <TestReport>[];
-    final scenarioReceipts = <Map<String, Object?>>[];
-    final teardownReceipts = <Map<String, Object?>>[];
-    var permissionCandidate = false;
-
-    void recordScenario(TestReport report) {
-      reports.add(report);
-      final receipt = darwinPairScenarioReceipt(report);
-      scenarioReceipts.add(receipt);
-      _emit('DARWIN_PAIR_SCENARIO', receipt);
-    }
-
+    final recorder = _DarwinPairReceiptRecorder(selectedBead!);
     try {
-      try {
-        final endpoint = await centralRunner.launch(
-          LaunchSpec(
-            app: 'butane_harness',
-            target: inputs.centralTarget,
-            role: 'central',
-            harnessDirectory: inputs.harnessDirectory,
-            leonardDrive: inputs.leonardDrive,
-          ),
-        );
-        if (endpoint.isPublished) {
-          centralEndpoint = endpoint;
-        } else {
-          diagnostics.add('macos central published no endpoint');
-        }
-      } on Object catch (error) {
-        diagnostics.add('macos central launch failed: $error');
+      await recorder.recordLiteral('DARWIN_PAIR_RUN_BEGIN');
+
+      final metadata = await _loadBeadMetadata(selectedBead);
+      final inputs = resolveDarwinPairInputs(metadata);
+      _require(
+        Platform.environment['LEONARD_E2E_DEVICE'] == inputs.followerDevice,
+        'LEONARD_E2E_DEVICE must equal the resolved '
+        'darwin_pair.follower_device',
+      );
+      _require(
+        inputs.followerTarget == 'ios',
+        'darwin_pair.follower_target must equal ios',
+      );
+      _require(
+        inputs.centralTarget == 'macos',
+        'darwin_pair.central_target must equal macos',
+      );
+      _require(
+        inputs.preconditions.length == 1 &&
+            inputs.preconditions.single.kind ==
+                BurnPreconditionKind.followerIosAttached,
+        'darwin_pair.preconditions must contain exactly follower-ios-attached',
+      );
+
+      await systemBurnPreflight().validate(inputs);
+      await recorder.record('DARWIN_PAIR_PREFLIGHT', <String, Object?>{
+        'status': 'PASS',
+        'device': inputs.followerDevice,
+        'harnessDirectory': inputs.harnessDirectory,
+        'leonardDrive': inputs.leonardDrive,
+        'precondition': inputs.preconditions.single.declaration,
+      });
+
+      final macosLaunch =
+          'cd packages/butane_harness && flutter run --profile -d macos '
+          '--dart-define=ROLE=central';
+      final iosLaunch =
+          'cd packages/butane_harness && flutter run --profile '
+          '-d ${inputs.followerDevice} --dart-define=ROLE=peripheral';
+      await recorder.record('DARWIN_PAIR_COMMANDS', <String, Object?>{
+        'macosLaunch': macosLaunch,
+        'iosLaunch': iosLaunch,
+      });
+
+      void liveLog(String line) => stderr.writeln('[darwin-pair] $line');
+
+      final centralDrive = ProcessLeonardDrive(
+        executableOverride: inputs.leonardDrive,
+        onLog: liveLog,
+      );
+      final followerDrive = ProcessLeonardDrive(
+        executableOverride: inputs.leonardDrive,
+        onLog: liveLog,
+      );
+      final centralRunner = ButaneFollowerRunner(
+        launcher: MacosCentralLauncher(
+          readyTimeout: const Duration(minutes: 5),
+          onLog: liveLog,
+        ),
+        processes: const SystemProcessGroupController(),
+        onLog: liveLog,
+      );
+      final followerRunner = ButaneFollowerRunner(
+        launcher: IosFollowerLauncher(onLog: liveLog),
+        processes: const SystemProcessGroupController(),
+        onLog: liveLog,
+      );
+
+      FollowerEndpoint? centralEndpoint;
+      FollowerEndpoint? followerEndpoint;
+      final diagnostics = <String>[];
+      final reports = <TestReport>[];
+      final scenarioReceipts = <Map<String, Object?>>[];
+      final teardownReceipts = <Map<String, Object?>>[];
+      var permissionCandidate = false;
+
+      Future<void> recordScenario(TestReport report) async {
+        reports.add(report);
+        final receipt = darwinPairScenarioReceipt(report);
+        scenarioReceipts.add(receipt);
+        await recorder.record('DARWIN_PAIR_SCENARIO', receipt);
       }
 
       try {
-        final endpoint = await followerRunner.launch(
-          LaunchSpec(
-            app: 'butane_harness',
-            target: inputs.followerTarget,
-            role: 'peripheral',
-            followerDevice: inputs.followerDevice,
-            harnessDirectory: inputs.harnessDirectory,
-            leonardDrive: inputs.leonardDrive,
-          ),
-        );
-        if (endpoint.isPublished) {
-          followerEndpoint = endpoint;
-        } else {
-          diagnostics.add('iOS follower published no endpoint');
-        }
-      } on Object catch (error) {
-        diagnostics.add('iOS follower launch failed: $error');
-      }
-
-      if (centralEndpoint == null || followerEndpoint == null) {
-        for (final scenario in const <DriveScenario>[
-          kSmokeScenario,
-          kNusRoundTripScenario,
-        ]) {
-          recordScenario(
-            darwinPairUnobservedReport(
-              scenario: scenario,
-              inputs: inputs,
-              centralEndpoint: centralEndpoint,
-              followerEndpoint: followerEndpoint,
+        try {
+          final endpoint = await centralRunner.launch(
+            LaunchSpec(
+              app: 'butane_harness',
+              target: inputs.centralTarget,
+              role: 'central',
+              harnessDirectory: inputs.harnessDirectory,
+              leonardDrive: inputs.leonardDrive,
             ),
           );
-        }
-      } else {
-        Object? centralAttachError;
-        Object? followerAttachError;
-        try {
-          await centralDrive.attach(centralEndpoint);
+          if (endpoint.isPublished) {
+            centralEndpoint = endpoint;
+          } else {
+            diagnostics.add('macos central published no endpoint');
+          }
         } on Object catch (error) {
-          centralAttachError = error;
-          diagnostics.add('macos central drive attach failed: $error');
-        }
-        try {
-          await followerDrive.attach(followerEndpoint);
-        } on Object catch (error) {
-          followerAttachError = error;
-          diagnostics.add('iOS follower drive attach failed: $error');
+          diagnostics.add('macos central launch failed: $error');
         }
 
-        if (centralAttachError != null || followerAttachError != null) {
+        try {
+          final endpoint = await followerRunner.launch(
+            LaunchSpec(
+              app: 'butane_harness',
+              target: inputs.followerTarget,
+              role: 'peripheral',
+              followerDevice: inputs.followerDevice,
+              harnessDirectory: inputs.harnessDirectory,
+              leonardDrive: inputs.leonardDrive,
+            ),
+          );
+          if (endpoint.isPublished) {
+            followerEndpoint = endpoint;
+          } else {
+            diagnostics.add('iOS follower published no endpoint');
+          }
+        } on Object catch (error) {
+          diagnostics.add('iOS follower launch failed: $error');
+        }
+
+        if (centralEndpoint == null || followerEndpoint == null) {
           for (final scenario in const <DriveScenario>[
             kSmokeScenario,
             kNusRoundTripScenario,
           ]) {
-            recordScenario(
+            await recordScenario(
               darwinPairUnobservedReport(
                 scenario: scenario,
                 inputs: inputs,
@@ -200,47 +174,63 @@ void main() {
             );
           }
         } else {
-          final readiness = await _invoke(
-            centralDrive,
-            'butane.wait_for_state',
-            const <String, Object?>{'timeoutMs': 10000},
-          );
-          if (!_readinessMatched(readiness)) {
-            permissionCandidate = true;
-            _emit('DARWIN_PAIR_PERMISSION_CANDIDATE', <String, Object?>{
-              'observed': readiness.observed,
-            });
+          Object? centralAttachError;
+          Object? followerAttachError;
+          try {
+            await centralDrive.attach(centralEndpoint);
+          } on Object catch (error) {
+            centralAttachError = error;
+            diagnostics.add('macos central drive attach failed: $error');
+          }
+          try {
+            await followerDrive.attach(followerEndpoint);
+          } on Object catch (error) {
+            followerAttachError = error;
+            diagnostics.add('iOS follower drive attach failed: $error');
+          }
+
+          if (centralAttachError != null || followerAttachError != null) {
+            for (final scenario in const <DriveScenario>[
+              kSmokeScenario,
+              kNusRoundTripScenario,
+            ]) {
+              await recordScenario(
+                darwinPairUnobservedReport(
+                  scenario: scenario,
+                  inputs: inputs,
+                  centralEndpoint: centralEndpoint,
+                  followerEndpoint: followerEndpoint,
+                ),
+              );
+            }
           } else {
-            recordScenario(
-              await _runScenario(
-                scenario: kSmokeScenario,
-                inputs: inputs,
-                centralEndpoint: centralEndpoint,
-                followerEndpoint: followerEndpoint,
-                centralDrive: centralDrive,
-                followerDrive: followerDrive,
-              ),
+            final readiness = await _invoke(
+              centralDrive,
+              'butane.wait_for_state',
+              const <String, Object?>{'timeoutMs': 10000},
             );
-
-            final stopAdvertising = await _invoke(
-              followerDrive,
-              'butane.stop_advertising',
-              const <String, Object?>{},
-            );
-            final removeService = await _invoke(
-              followerDrive,
-              'butane.remove_service',
-              const <String, Object?>{'uuid': kNusServiceUuid},
-            );
-            _emit('DARWIN_PAIR_TRANSITION', <String, Object?>{
-              'stopAdvertising': stopAdvertising.observed,
-              'removeService': removeService.observed,
-            });
-
-            if (stopAdvertising.ok && removeService.ok) {
-              recordScenario(
+            if (!_readinessMatched(readiness)) {
+              permissionCandidate = true;
+              await recorder.record(
+                'DARWIN_PAIR_PERMISSION_CANDIDATE',
+                <String, Object?>{'observed': readiness.observed},
+              );
+              if (_readinessUnauthorized(readiness)) {
+                await recorder.record(
+                  'DARWIN_PAIR_PERMISSION_BLOCKED',
+                  <String, Object?>{
+                    'prompt':
+                        '“butane_harness” would like to use Bluetooth.\n'
+                        'Butane Harness uses Bluetooth to test BLE central and '
+                        'peripheral roles.',
+                    'disposition': 'governor-grant-once-then-rerun',
+                  },
+                );
+              }
+            } else {
+              await recordScenario(
                 await _runScenario(
-                  scenario: kNusRoundTripScenario,
+                  scenario: kSmokeScenario,
                   inputs: inputs,
                   centralEndpoint: centralEndpoint,
                   followerEndpoint: followerEndpoint,
@@ -248,81 +238,114 @@ void main() {
                   followerDrive: followerDrive,
                 ),
               );
-            } else {
-              diagnostics.add(
-                'NUS scenario held: smoke-to-NUS cleanup did not succeed',
+
+              final stopAdvertising = await _invoke(
+                followerDrive,
+                'butane.stop_advertising',
+                const <String, Object?>{},
               );
-              recordScenario(
-                darwinPairUnobservedReport(
-                  scenario: kNusRoundTripScenario,
-                  inputs: inputs,
-                  centralEndpoint: centralEndpoint,
-                  followerEndpoint: followerEndpoint,
-                ),
+              final removeService = await _invoke(
+                followerDrive,
+                'butane.remove_service',
+                const <String, Object?>{'uuid': kNusServiceUuid},
               );
+              await recorder.record('DARWIN_PAIR_TRANSITION', <String, Object?>{
+                'stopAdvertising': stopAdvertising.observed,
+                'removeService': removeService.observed,
+              });
+
+              if (stopAdvertising.ok && removeService.ok) {
+                await recordScenario(
+                  await _runScenario(
+                    scenario: kNusRoundTripScenario,
+                    inputs: inputs,
+                    centralEndpoint: centralEndpoint,
+                    followerEndpoint: followerEndpoint,
+                    centralDrive: centralDrive,
+                    followerDrive: followerDrive,
+                  ),
+                );
+              } else {
+                diagnostics.add(
+                  'NUS scenario held: smoke-to-NUS cleanup did not succeed',
+                );
+                await recordScenario(
+                  darwinPairUnobservedReport(
+                    scenario: kNusRoundTripScenario,
+                    inputs: inputs,
+                    centralEndpoint: centralEndpoint,
+                    followerEndpoint: followerEndpoint,
+                  ),
+                );
+              }
             }
           }
         }
+      } finally {
+        final centralTeardown = await _teardown(
+          role: BurnDeviceRole.central,
+          drive: centralDrive,
+          runner: centralRunner,
+        );
+        teardownReceipts.add(centralTeardown);
+        await recorder.record('DARWIN_PAIR_TEARDOWN', centralTeardown);
+
+        final followerTeardown = await _teardown(
+          role: BurnDeviceRole.follower,
+          drive: followerDrive,
+          runner: followerRunner,
+        );
+        teardownReceipts.add(followerTeardown);
+        await recorder.record('DARWIN_PAIR_TEARDOWN', followerTeardown);
       }
-    } finally {
-      final centralTeardown = await _teardown(
-        role: BurnDeviceRole.central,
-        drive: centralDrive,
-        runner: centralRunner,
-      );
-      teardownReceipts.add(centralTeardown);
-      _emit('DARWIN_PAIR_TEARDOWN', centralTeardown);
 
-      final followerTeardown = await _teardown(
-        role: BurnDeviceRole.follower,
-        drive: followerDrive,
-        runner: followerRunner,
-      );
-      teardownReceipts.add(followerTeardown);
-      _emit('DARWIN_PAIR_TEARDOWN', followerTeardown);
-    }
+      if (permissionCandidate) {
+        _expectTeardownReceipts(teardownReceipts);
+        return;
+      }
 
-    if (permissionCandidate) {
+      final allComplete = scenarioReceipts.every(
+        (receipt) => receipt['complete'] == true,
+      );
+      final summary = <String, Object?>{
+        'recommendation': darwinPairRecommendation(reports),
+        'smoke': darwinPairScenarioOutcome(reports, kSmokeScenario.name),
+        'nus-round-trip': darwinPairScenarioOutcome(
+          reports,
+          kNusRoundTripScenario.name,
+        ),
+        'ios': darwinPairCrossScenarioRoleOutcome(
+          reports,
+          BurnDeviceRole.follower,
+        ),
+        'macos': darwinPairCrossScenarioRoleOutcome(
+          reports,
+          BurnDeviceRole.central,
+        ),
+        'complete': allComplete,
+        if (diagnostics.isNotEmpty) 'diagnostics': diagnostics,
+      };
+      await recorder.record('DARWIN_PAIR_SUMMARY', summary);
+
+      expect(
+        scenarioReceipts.map((receipt) => receipt['scenario']).toList(),
+        <String>[kSmokeScenario.name, kNusRoundTripScenario.name],
+      );
+      expect((scenarioReceipts[0]['steps']! as List<Object?>).length, 7);
+      expect((scenarioReceipts[1]['steps']! as List<Object?>).length, 14);
+      for (final receipt in scenarioReceipts) {
+        expect(receipt['complete'], isA<bool>());
+        final roleOutcomes = receipt['roleOutcomes']! as Map<String, String>;
+        expect(roleOutcomes.keys.toSet(), <String>{'central', 'follower'});
+        expect(
+          roleOutcomes.values,
+          everyElement(isIn(<String>['PASS', 'FAIL'])),
+        );
+      }
       _expectTeardownReceipts(teardownReceipts);
-      return;
+    } finally {
+      await recorder.recordLiteral('DARWIN_PAIR_RUN_END');
     }
-
-    final allComplete = scenarioReceipts.every(
-      (receipt) => receipt['complete'] == true,
-    );
-    final summary = <String, Object?>{
-      'recommendation': darwinPairRecommendation(reports),
-      'smoke': darwinPairScenarioOutcome(reports, kSmokeScenario.name),
-      'nus-round-trip': darwinPairScenarioOutcome(
-        reports,
-        kNusRoundTripScenario.name,
-      ),
-      'ios': darwinPairCrossScenarioRoleOutcome(
-        reports,
-        BurnDeviceRole.follower,
-      ),
-      'macos': darwinPairCrossScenarioRoleOutcome(
-        reports,
-        BurnDeviceRole.central,
-      ),
-      'complete': allComplete,
-      if (diagnostics.isNotEmpty) 'diagnostics': diagnostics,
-    };
-    _emit('DARWIN_PAIR_SUMMARY', summary);
-
-    expect(
-      scenarioReceipts.map((receipt) => receipt['scenario']).toList(),
-      <String>[kSmokeScenario.name, kNusRoundTripScenario.name],
-    );
-    expect((scenarioReceipts[0]['steps']! as List<Object?>).length, 7);
-    expect((scenarioReceipts[1]['steps']! as List<Object?>).length, 14);
-    for (final receipt in scenarioReceipts) {
-      expect(receipt['complete'], isA<bool>());
-      final roleOutcomes = receipt['roleOutcomes']! as Map<String, String>;
-      expect(roleOutcomes.keys.toSet(), <String>{'central', 'follower'});
-      expect(roleOutcomes.values, everyElement(isIn(<String>['PASS', 'FAIL'])));
-    }
-    _expectTeardownReceipts(teardownReceipts);
   }, timeout: const Timeout(Duration(minutes: 30)));
 }
 
@@ -399,6 +422,13 @@ bool _readinessMatched(_ToolObservation observation) {
   return inner is Map<dynamic, dynamic> && inner['matched'] == true;
 }
 
+bool _readinessUnauthorized(_ToolObservation observation) {
+  if (observation.observed is! Map<dynamic, dynamic>) return false;
+  final outer = observation.observed as Map<dynamic, dynamic>;
+  final inner = outer['value'];
+  return inner is Map<dynamic, dynamic> && inner['state'] == 'unauthorized';
+}
+
 Future<Map<String, Object?>> _teardown({
   required BurnDeviceRole role,
   required ProcessLeonardDrive drive,
@@ -435,8 +465,32 @@ void _expectTeardownReceipts(List<Map<String, Object?>> receipts) {
   expect(receipts.map((receipt) => receipt['attempted']), everyElement(isTrue));
 }
 
-void _emit(String kind, Map<String, Object?> receipt) {
-  stdout.writeln('$kind=${jsonEncode(receipt)}');
+final class _DarwinPairReceiptRecorder {
+  const _DarwinPairReceiptRecorder(this.beadId);
+
+  final String beadId;
+
+  Future<void> record(String kind, Map<String, Object?> receipt) =>
+      _recordLine('$kind=${jsonEncode(receipt)}');
+
+  Future<void> recordLiteral(String line) => _recordLine(line);
+
+  Future<void> _recordLine(String line) async {
+    final result = await Process.run('bd', <String>[
+      'update',
+      beadId,
+      '--append-notes',
+      line,
+    ]);
+    if (result.exitCode != 0) {
+      throw StateError(
+        'bd update $beadId --append-notes exited ${result.exitCode}\n'
+        'stdout: ${result.stdout}\n'
+        'stderr: ${result.stderr}',
+      );
+    }
+    stdout.writeln(line);
+  }
 }
 
 void _require(bool condition, String message) {
