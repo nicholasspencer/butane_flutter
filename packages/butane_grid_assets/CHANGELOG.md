@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0-rc.3
+
+- Fixed: raised the `grid_assets` floor to `^0.7.0-dev.1` (from `^0.6.0-rc.10`) so the
+  package admits the current wave and lunar's closure resolves override-free
+  (butane_flutter-vo0j). No other constraint changed; the resolved `grid_sdk`,
+  `grid_engine`, and `grid_runtime` versions still satisfy their existing floors.
+
 ## 0.2.0-rc.2
 
 - Added: the top-level `grid:` block declaring the `burn` skill pair, with the generated
