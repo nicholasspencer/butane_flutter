@@ -33,7 +33,7 @@ validate_repo() {
     fi
   done <<'DEPENDENCIES'
 packages/butane_grid_assets/pubspec.yaml|genesis_tree|^0.3.0
-packages/butane_grid_assets/pubspec.yaml|grid_assets|^0.6.0-rc.10
+packages/butane_grid_assets/pubspec.yaml|grid_assets|^0.7.0-dev.1
 packages/butane_grid_assets/pubspec.yaml|beads_dart|^0.2.0-rc.7
 packages/butane_grid_assets/pubspec.yaml|grid_engine|^0.3.0-rc.12
 packages/butane_grid_assets/pubspec.yaml|federated_grid_assets|^0.3.0-rc.3
