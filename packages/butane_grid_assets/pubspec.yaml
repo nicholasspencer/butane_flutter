@@ -10,7 +10,7 @@ description: >-
   (zero-model) scenario, and collects a domain `TestReport`. Lives with its
   system: `butane_flutter` is the pack's home (the ADR-0011 placement split,
   landed — grid assets belong with their system).
-version: 0.2.0-rc.3
+version: 0.2.0-rc.4
 publish_to: none
 repository: https://github.com/nicholasspencer/butane_flutter/tree/main/packages/butane_grid_assets
 resolution: workspace
@@ -25,16 +25,16 @@ environment:
 # the workspace resolve override-free against the wave.
 dependencies:
   args: ^2.5.0
-  genesis_tree: ^0.3.0
-  grid_assets: ^0.7.0-dev.1
-  grid_sdk: ^0.3.0-rc.11
+  genesis_tree: ^0.4.0
+  grid_assets: ^0.7.0-dev.2
+  grid_sdk: ^0.4.0-dev.3
   # Bead/controller models consumed by the follower daemon.
-  beads_dart: ^0.2.0-rc.7
-  grid_engine: ^0.3.0-rc.12
+  beads_dart: ^0.3.0-dev.2
+  grid_engine: ^0.4.0-dev.3
   # Federation transport implementations used by the burn; contracts are in
   # grid_engine and symbol imports migrate under butane_flutter-7ol.
   federated_grid_assets: ^0.3.0-rc.3
-  grid_runtime: ^0.2.0-rc.10
+  grid_runtime: ^0.2.1-dev.2
   meta: ^1.16.0
 
 dev_dependencies:
