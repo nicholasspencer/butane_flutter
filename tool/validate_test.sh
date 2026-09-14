@@ -13,12 +13,12 @@ printf '%s\n' '**/pubspec_overrides.yaml' > "$fixture_root/repo/.gitignore"
 printf '%s\n' 'environment:' '  sdk: ^3.9.0' > "$fixture_root/repo/pubspec.yaml"
 printf '%s\n' \
   'dependencies:' \
-  '  genesis_tree: ^0.3.0' \
-  '  grid_assets: ^0.7.0-dev.1' \
-  '  beads_dart: ^0.2.0-rc.7' \
-  '  grid_engine: ^0.3.0-rc.12' \
+  '  genesis_tree: ^0.4.0' \
+  '  grid_assets: ^0.7.0-dev.2' \
+  '  beads_dart: ^0.3.0-dev.2' \
+  '  grid_engine: ^0.4.0-dev.3' \
   '  federated_grid_assets: ^0.3.0-rc.3' \
-  '  grid_runtime: ^0.2.0-rc.10' \
+  '  grid_runtime: ^0.2.1-dev.2' \
   'dev_dependencies:' \
   '  grid_exploration: ^0.3.0-rc.4' \
   > "$fixture_root/repo/packages/butane_grid_assets/pubspec.yaml"
@@ -41,7 +41,7 @@ git -C "$fixture_root/repo" \
   bash tool/validate.sh --repo
 )
 
-sed -i.bak 's/grid_assets: \^0.7.0-dev.1/grid_assets: any/' \
+sed -i.bak 's/grid_assets: \^0.7.0-dev.2/grid_assets: any/' \
   "$fixture_root/repo/packages/butane_grid_assets/pubspec.yaml"
 if repo_output="$(
   cd "$fixture_root/repo"
@@ -50,7 +50,7 @@ if repo_output="$(
   echo 'validate_test.sh: obsolete grid_assets constraint passed' >&2
   exit 1
 fi
-if [[ "$repo_output" != *'expected tracked dependency declaration: grid_assets: ^0.7.0-dev.1'* ]]; then
+if [[ "$repo_output" != *'expected tracked dependency declaration: grid_assets: ^0.7.0-dev.2'* ]]; then
   echo 'validate_test.sh: missing current grid_assets floor diagnostic' >&2
   exit 1
 fi

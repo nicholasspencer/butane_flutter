@@ -200,8 +200,7 @@ void main() {
         final fCtx = _ctx(nodePath: _followerPath);
         alloc =
             follower.createAllocation(
-                  AllocationContext(
-                    treeContext: fCtx.context,
+                  AllocationInputs(
                     args: fCtx.args,
                     transport: FakeRuntimeProvider(),
                     address: AllocationAddress('tgdog-s', fCtx.args.nodePath),
@@ -211,7 +210,7 @@ void main() {
                   ),
                 )
                 as LeaseAllocation<BusLease>;
-        await alloc.startOrAdopt();
+        await alloc.startOrAdopt(fCtx.context);
 
         final ready = reports.whereType<AllocationReady>().toList();
         expect(

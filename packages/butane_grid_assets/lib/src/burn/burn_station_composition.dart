@@ -13,7 +13,7 @@ import 'package:grid_engine/grid_engine.dart'
         Circuit,
         DefaultCapabilityRegistry,
         Allocation,
-        AllocationContext,
+        AllocationInputs,
         AllocationFailed,
         AllocationReady,
         AllocationState,
@@ -211,12 +211,12 @@ final class _ResidentBurnFollowerCapability extends Capability {
   }
 
   @override
-  Allocation createAllocation(AllocationContext context) =>
-      _PublishedFollowerAllocation(this, context, log);
+  Allocation createAllocation(AllocationInputs inputs) =>
+      _PublishedFollowerAllocation(this, inputs, log);
 }
 
 final class _PublishedFollowerAllocation extends Allocation {
-  _PublishedFollowerAllocation(this.capability, super.context, this.log);
+  _PublishedFollowerAllocation(this.capability, super.inputs, this.log);
 
   final _ResidentBurnFollowerCapability capability;
   final _BeadNoteLog log;
@@ -227,26 +227,26 @@ final class _PublishedFollowerAllocation extends Allocation {
   String _followerTarget = 'ios';
 
   @override
-  Future<void> startOrAdopt() async {
+  Future<void> startOrAdopt(TreeContext treeContext) async {
     final name = address.providerName;
     try {
-      final base = await capability.spawn(context.treeContext, context.args);
+      final base = await capability.spawn(treeContext, inputs.args);
       _followerTarget = base.followerTarget;
       final config = base.config.copyWith(
-        env: {...base.config.env, ...context.env},
+        env: {...base.config.env, ...inputs.env},
       );
-      _eventSubscription = context.transport.events
+      _eventSubscription = inputs.transport.events
           .where((event) => event.name == name)
           .listen(_event);
       _started = true;
-      await context.transport.start(name, config);
+      await inputs.transport.start(name, config);
       // Subscribe AFTER start: output(name) is the session's transcript,
       // which exists only once start() registers the session — before that
       // the provider returns a permanently-empty stream and the publish line
       // can never arrive (the 2026-07-30 live hang). The publish is minutes
       // away (harness launch + readiness), so this cannot race it; a crash
       // in the gap is still caught by the events subscription above.
-      _outputSubscription = context.transport.output(name).listen(_line);
+      _outputSubscription = inputs.transport.output(name).listen(_line);
       state = AllocationState.live;
     } on Object catch (error) {
       _fail('resident burn follower failed to start: $error');
@@ -282,7 +282,7 @@ final class _PublishedFollowerAllocation extends Allocation {
     _terminal = true;
     state = AllocationState.ready;
     log.call('resident burn-receipt: follower published $uri');
-    context.sink(
+    inputs.sink(
       AllocationReady({
         'endpoint': uri,
         'station': _followerTarget == 'macos'
@@ -298,7 +298,7 @@ final class _PublishedFollowerAllocation extends Allocation {
     if (_terminal) return;
     _terminal = true;
     state = AllocationState.gone;
-    context.sink(AllocationFailed(reason));
+    inputs.sink(AllocationFailed(reason));
   }
 
   @override
@@ -306,7 +306,7 @@ final class _PublishedFollowerAllocation extends Allocation {
     state = AllocationState.dying;
     await _eventSubscription?.cancel();
     await _outputSubscription?.cancel();
-    if (_started) await context.transport.stop(address.providerName);
+    if (_started) await inputs.transport.stop(address.providerName);
     state = AllocationState.gone;
     log.call('teardown-receipt: resident follower supervisor stopped');
     await log.flush();

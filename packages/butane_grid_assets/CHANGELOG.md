@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0-rc.4
+
+- Fixed: raised the `genesis_tree` floor to `^0.4.0`, `grid_sdk` to `^0.4.0-dev.3`,
+  `beads_dart` to `^0.3.0-dev.2`, `grid_engine` to `^0.4.0-dev.3`, and `grid_runtime` to
+  `^0.2.1-dev.2` so the package admits the the_grid dev.3 wave and lunar's xvk closure
+  resolves override-free (butane_flutter-typ2); `grid_assets` moves to `^0.7.0-dev.2` in
+  step. `federated_grid_assets` and `grid_exploration` resolve within their existing
+  floors — no constraint change needed there.
+  Migration (internal only, no public API change): `grid_engine`'s
+  `Capability.createAllocation` now takes `AllocationInputs` (the `treeContext` field
+  moved off it) and `Allocation.startOrAdopt` takes the `TreeContext` directly as its
+  argument — `_PublishedFollowerAllocation` (the resident burn follower's daemon
+  allocation) and the test doubles that construct an allocation by hand migrate to the
+  new shape; behavior is unchanged.
+
 ## 0.2.0-rc.3
 
 - Fixed: raised the `grid_assets` floor to `^0.7.0-dev.1` (from `^0.6.0-rc.10`) so the

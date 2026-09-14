@@ -173,12 +173,10 @@ Capability _capability(CapabilityRegistry registry, int index) =>
             as CapabilityHost)
         .capability;
 
-AllocationContext _allocationContext({
+AllocationInputs _allocationInputs({
   required _TranscriptRuntimeProvider transport,
   required List<AllocationReport> reports,
-  required Bead bead,
-}) => AllocationContext(
-  treeContext: FakeTreeContext(values: {Bead: bead}),
+}) => AllocationInputs(
   args: stepArgs('order-1/$kBurnFollowerStep'),
   transport: transport,
   address: const AllocationAddress('order-1-session', 'order-1/burn-follower'),
@@ -186,6 +184,9 @@ AllocationContext _allocationContext({
   sink: reports.add,
   kind: StepKind.daemon,
 );
+
+TreeContext _followerContext(Bead bead) =>
+    FakeTreeContext(values: {Bead: bead});
 
 TreeContext _hostContext(Map<String, String> followerResult, Bead bead) =>
     FakeTreeContext(
@@ -280,16 +281,13 @@ void main() {
       );
       final transport = _TranscriptRuntimeProvider();
       final reports = <AllocationReport>[];
+      final bead = _order(_metadata);
       final allocation = _capability(registry, 0).createAllocation(
-        _allocationContext(
-          transport: transport,
-          reports: reports,
-          bead: _order(_metadata),
-        ),
+        _allocationInputs(transport: transport, reports: reports),
       );
 
       try {
-        await allocation.startOrAdopt();
+        await allocation.startOrAdopt(_followerContext(bead));
         expect(probes, isEmpty);
         expect(transport.started, hasLength(1));
         expect(reports.whereType<AllocationFailed>(), isEmpty);
@@ -332,21 +330,18 @@ void main() {
       );
       final transport = _TranscriptRuntimeProvider();
       final reports = <AllocationReport>[];
+      final bead = _order({
+        ..._metadata,
+        BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
+        BurnOrderInputs.preconditionsKey:
+            '["windows-host-reachable","peer=bench.local:8123"]',
+      });
       final allocation = _capability(registry, 0).createAllocation(
-        _allocationContext(
-          transport: transport,
-          reports: reports,
-          bead: _order({
-            ..._metadata,
-            BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
-            BurnOrderInputs.preconditionsKey:
-                '["windows-host-reachable","peer=bench.local:8123"]',
-          }),
-        ),
+        _allocationInputs(transport: transport, reports: reports),
       );
 
       try {
-        await allocation.startOrAdopt();
+        await allocation.startOrAdopt(_followerContext(bead));
         expect(probes, ['directory', 'file', 'host:yoga-from-bead']);
         expect(transport.started, isEmpty);
         expect(allocation.state, AllocationState.gone);
@@ -399,22 +394,19 @@ void main() {
       );
       final transport = _TranscriptRuntimeProvider();
       final reports = <AllocationReport>[];
+      final bead = _order({
+        ..._metadata,
+        BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
+        BurnOrderInputs.preconditionsKey:
+            '["follower-ios-attached","windows-host-reachable",'
+            '"peer=bench.local:8123"]',
+      });
       final allocation = _capability(registry, 0).createAllocation(
-        _allocationContext(
-          transport: transport,
-          reports: reports,
-          bead: _order({
-            ..._metadata,
-            BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
-            BurnOrderInputs.preconditionsKey:
-                '["follower-ios-attached","windows-host-reachable",'
-                '"peer=bench.local:8123"]',
-          }),
-        ),
+        _allocationInputs(transport: transport, reports: reports),
       );
       final name = allocation.address.providerName;
 
-      await allocation.startOrAdopt();
+      await allocation.startOrAdopt(_followerContext(bead));
       expect(probes, [
         'directory:/harness/from/bead',
         'file:/drive/from/bead',
@@ -464,15 +456,15 @@ void main() {
           driveFactory: (_) => _FakeLeonardDrive(),
         );
         final transport = _TranscriptRuntimeProvider();
+        final bead = _order(_metadata);
         allocation = _capability(registry, 0).createAllocation(
-          _allocationContext(
+          _allocationInputs(
             transport: transport,
             reports: <AllocationReport>[],
-            bead: _order(_metadata),
           ),
         );
 
-        await allocation.startOrAdopt();
+        await allocation.startOrAdopt(_followerContext(bead));
         final config = transport.started[allocation.address.providerName]!;
         final entrypoint = config.args[1];
         final packageRoot = File(entrypoint).parent.parent;
@@ -512,16 +504,13 @@ void main() {
         driveFactory: (_) => _FakeLeonardDrive(),
       );
       final transport = _TranscriptRuntimeProvider();
+      final bead = _order(_metadata);
       final allocation = _capability(registry, 0).createAllocation(
-        _allocationContext(
-          transport: transport,
-          reports: <AllocationReport>[],
-          bead: _order(_metadata),
-        ),
+        _allocationInputs(transport: transport, reports: <AllocationReport>[]),
       );
 
       try {
-        await allocation.startOrAdopt();
+        await allocation.startOrAdopt(_followerContext(bead));
         final config = transport.started[allocation.address.providerName]!;
         expect(config.args[1], entrypoint);
       } finally {
@@ -574,10 +563,10 @@ void main() {
       BurnOrderInputs.windowsHostKey: 'yoga-from-bead',
     });
     final allocation = follower.createAllocation(
-      _allocationContext(transport: transport, reports: reports, bead: bead),
+      _allocationInputs(transport: transport, reports: reports),
     );
 
-    await allocation.startOrAdopt();
+    await allocation.startOrAdopt(_followerContext(bead));
     final name = allocation.address.providerName;
     final config = transport.started[name]!;
     expect(config.command, isNotEmpty);
@@ -663,18 +652,15 @@ void main() {
       final follower = _capability(registry, 0);
       final transport = _TranscriptRuntimeProvider();
       final reports = <AllocationReport>[];
+      final bead = _order({
+        ..._metadata,
+        BurnOrderInputs.followerTargetKey: 'macos',
+      });
       final allocation = follower.createAllocation(
-        _allocationContext(
-          transport: transport,
-          reports: reports,
-          bead: _order({
-            ..._metadata,
-            BurnOrderInputs.followerTargetKey: 'macos',
-          }),
-        ),
+        _allocationInputs(transport: transport, reports: reports),
       );
 
-      await allocation.startOrAdopt();
+      await allocation.startOrAdopt(_followerContext(bead));
       final name = allocation.address.providerName;
       expect(
         transport.started[name]!.args,
@@ -706,15 +692,12 @@ void main() {
       final follower = _capability(registry, 0);
       final transport = _TranscriptRuntimeProvider();
       final reports = <AllocationReport>[];
+      final bead = _order(_metadata);
       final allocation = follower.createAllocation(
-        _allocationContext(
-          transport: transport,
-          reports: reports,
-          bead: _order(_metadata),
-        ),
+        _allocationInputs(transport: transport, reports: reports),
       );
 
-      await allocation.startOrAdopt();
+      await allocation.startOrAdopt(_followerContext(bead));
       final name = allocation.address.providerName;
       transport.emitOutput(name, 'burn-follower-published http://127.0.0.1/ws');
       await Future<void>.delayed(Duration.zero);
@@ -738,15 +721,12 @@ void main() {
       final follower = _capability(registry, 0);
       final transport = _TranscriptRuntimeProvider();
       final reports = <AllocationReport>[];
+      final bead = _order(_metadata);
       final allocation = follower.createAllocation(
-        _allocationContext(
-          transport: transport,
-          reports: reports,
-          bead: _order(_metadata),
-        ),
+        _allocationInputs(transport: transport, reports: reports),
       );
 
-      await allocation.startOrAdopt();
+      await allocation.startOrAdopt(_followerContext(bead));
       final name = allocation.address.providerName;
       transport.emit(Exited(name: name, exitCode: 1));
       await Future<void>.delayed(Duration.zero);
@@ -774,15 +754,12 @@ void main() {
     final follower = _capability(registry, 0);
     final transport = _TranscriptRuntimeProvider();
     final reports = <AllocationReport>[];
+    final bead = _order(_metadata);
     final allocation = follower.createAllocation(
-      _allocationContext(
-        transport: transport,
-        reports: reports,
-        bead: _order(_metadata),
-      ),
+      _allocationInputs(transport: transport, reports: reports),
     );
 
-    await allocation.startOrAdopt();
+    await allocation.startOrAdopt(_followerContext(bead));
     final name = allocation.address.providerName;
     transport.emit(
       SessionOrphaned(name: name, pgid: 4242, memberCount: 2, pid: 4242),
@@ -838,9 +815,9 @@ void main() {
     final transport = _TranscriptRuntimeProvider();
     final reports = <AllocationReport>[];
     final allocation = follower.createAllocation(
-      _allocationContext(transport: transport, reports: reports, bead: bead),
+      _allocationInputs(transport: transport, reports: reports),
     );
-    await allocation.startOrAdopt();
+    await allocation.startOrAdopt(_followerContext(bead));
 
     final hostArgs = stepArgs('order-1/$kBurnHostStep');
     final outcome = await host.run(
@@ -893,9 +870,9 @@ void main() {
     final transport = _TranscriptRuntimeProvider();
     final reports = <AllocationReport>[];
     final allocation = follower.createAllocation(
-      _allocationContext(transport: transport, reports: reports, bead: bead),
+      _allocationInputs(transport: transport, reports: reports),
     );
-    await allocation.startOrAdopt();
+    await allocation.startOrAdopt(_followerContext(bead));
 
     final hostArgs = stepArgs('order-1/$kBurnHostStep');
     final outcome = await host.run(
