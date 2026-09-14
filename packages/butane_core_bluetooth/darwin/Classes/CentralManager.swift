@@ -9,6 +9,12 @@ import FlutterMacOS
 #endif
 import CoreBluetooth
 
+typealias CentralManagerFactory = (
+  CBCentralManagerDelegate,
+  dispatch_queue_t?,
+  [String: Any]?
+) -> CBCentralManager
+
 class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   let identifier: String?
   
@@ -17,21 +23,36 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   let queue: dispatch_queue_t?
   
   let flutterApi: ButaneFlutterApi
+
+  private let centralManagerFactory: CentralManagerFactory
   
   var actors: [UUID: PeripheralActor] = [:]
   
   lazy var manager: CBCentralManager = {
     if let restorationIdentifier = restorationIdentifier {
-      return .init(delegate: self, queue: queue, options: [CBCentralManagerOptionRestoreIdentifierKey: restorationIdentifier])
+      return centralManagerFactory(
+        self,
+        queue,
+        [CBCentralManagerOptionRestoreIdentifierKey: restorationIdentifier]
+      )
     }
-    return .init(delegate: self, queue: queue)
+    return centralManagerFactory(self, queue, nil)
   }()
   
-  init(identifier: String?, restorationIdentifier: String?, flutterApi: ButaneFlutterApi, queue: dispatch_queue_t?) {
+  init(
+    identifier: String?,
+    restorationIdentifier: String?,
+    flutterApi: ButaneFlutterApi,
+    queue: dispatch_queue_t?,
+    centralManagerFactory: @escaping CentralManagerFactory = {
+      CBCentralManager(delegate: $0, queue: $1, options: $2)
+    }
+  ) {
     self.identifier = identifier
     self.restorationIdentifier = restorationIdentifier
     self.queue = queue
     self.flutterApi = flutterApi
+    self.centralManagerFactory = centralManagerFactory
   }
   
   func session(_ peripheral: CBPeripheral) -> PeripheralSession {
