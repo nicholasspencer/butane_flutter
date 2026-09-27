@@ -31,6 +31,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult as AndroidScanResult
 import android.bluetooth.le.ScanSettings
 import android.os.ParcelUuid
+import android.os.SystemClock
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -231,6 +232,8 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             override fun onScanResult(callbackType: Int, result: AndroidScanResult) {
                 val device = result.device
                 val address = device.address
+                val timestampMillis = System.currentTimeMillis() -
+                    SystemClock.elapsedRealtime() + result.timestampNanos / 1_000_000L
                 discoveredPeripherals[address] = device
 
                 val peripheralSession = PeripheralSession(
@@ -262,6 +265,9 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                     },
                     serviceUuids = result.scanRecord?.serviceUuids
                         ?.map { it.uuid.toString() },
+                    solicitedServiceUuids = result.scanRecord?.serviceSolicitationUuids
+                        ?.map { it.uuid.toString() },
+                    overflowServiceUuids = null,
                     serviceData = result.scanRecord?.serviceData
                         ?.mapKeys { it.key.uuid.toString() },
                     txPowerLevel = result.scanRecord?.txPowerLevel?.toLong(),
@@ -271,6 +277,8 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 val scanResult = ScanResult(
                     peripheral = peripheral,
                     advertisementData = advertisementData,
+                    rssi = result.rssi.toLong(),
+                    timestampMillis = timestampMillis,
                 )
                 flutterApi?.onScanResult(scanResult) {}
             }

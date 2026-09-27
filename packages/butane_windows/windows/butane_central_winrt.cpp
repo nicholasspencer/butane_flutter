@@ -5,6 +5,7 @@
 #undef CharacteristicProperty
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <chrono>
 #include <iomanip>
 #include <sstream>
 namespace butane_windows {
@@ -45,6 +46,16 @@ std::optional<bool> IsConnectable(BluetoothLEAdvertisementType type) {
   }
 }
 }  // namespace
+std::vector<std::string> ParseServiceSolicitationUuids(
+    uint8_t data_type, const std::vector<uint8_t>& data) {
+  const size_t uuid_size = data_type == 0x14 ? 2 :
+      (data_type == 0x1F ? 4 : (data_type == 0x15 ? 16 : 0));
+  if (!uuid_size || data.empty() || data.size() % uuid_size != 0) return {};
+  std::vector<std::string> uuids;
+  for (size_t offset = 0; offset < data.size(); offset += uuid_size)
+    uuids.push_back(HexUuid(data.data() + offset, uuid_size));
+  return uuids;
+}
 WindowsCentralBackend::WindowsCentralBackend(RssiCache& cache)
     : rssi_cache_(cache) {}
 WindowsCentralBackend::~WindowsCentralBackend() {
@@ -144,9 +155,13 @@ void WindowsCentralBackend::StopScan() {
 AdvertisementEvent WindowsCentralBackend::CopyAdvertisement(
     const BluetoothLEAdvertisementReceivedEventArgs& args) {
   auto advertisement = args.Advertisement();
+  const auto timestamp_millis = std::chrono::duration_cast<
+      std::chrono::milliseconds>(
+          args.Timestamp() - winrt::clock::from_time_t(0)).count();
   AdvertisementEvent event{args.BluetoothAddress(),
-      args.RawSignalStrengthInDBm(), std::nullopt, std::nullopt, {}, {}, {},
-      std::nullopt, IsConnectable(args.AdvertisementType())};
+      args.RawSignalStrengthInDBm(), timestamp_millis, std::nullopt,
+      std::nullopt, {}, {}, {}, {}, std::nullopt,
+      IsConnectable(args.AdvertisementType())};
   auto local_name = advertisement.LocalName();
   if (!local_name.empty()) {
     event.local_name = winrt::to_string(local_name);
@@ -159,14 +174,18 @@ AdvertisementEvent WindowsCentralBackend::CopyAdvertisement(
     event.service_uuids.push_back(winrt::to_string(winrt::to_hstring(uuid)));
   for (const auto& section : advertisement.DataSections()) {
     const uint8_t type = section.DataType();
+    auto bytes = CopyBuffer(section.Data());
+    auto solicited_uuids = ParseServiceSolicitationUuids(type, bytes);
+    event.solicited_service_uuids.insert(
+        event.solicited_service_uuids.end(), solicited_uuids.begin(),
+        solicited_uuids.end());
+    if (!solicited_uuids.empty()) continue;
     if (type == 0x0A) {
-      const auto bytes = CopyBuffer(section.Data());
       if (!bytes.empty()) event.tx_power = static_cast<int8_t>(bytes[0]);
       continue;
     }
     const size_t size = type == 0x16 ? 2 : (type == 0x20 ? 4 : (type == 0x21 ? 16 : 0));
     if (!size) continue;
-    auto bytes = CopyBuffer(section.Data());
     if (bytes.size() < size) continue;
     auto uuid = NormalizeUuid(HexUuid(bytes.data(), size));
     if (uuid) event.service_data[*uuid] =

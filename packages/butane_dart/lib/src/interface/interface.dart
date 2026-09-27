@@ -300,6 +300,8 @@ final class AdvertisementData {
     this.serviceData,
     this.txPowerLevel,
     this.isConnectable,
+    this.solicitedServiceUuids,
+    this.overflowServiceUuids,
   });
 
   final String? localName;
@@ -313,17 +315,27 @@ final class AdvertisementData {
   final int? txPowerLevel;
 
   final bool? isConnectable;
+
+  final List<String>? solicitedServiceUuids;
+
+  final List<String>? overflowServiceUuids;
 }
 
 final class ScanResult {
   const ScanResult({
     required this.peripheral,
     required this.advertisementData,
+    this.rssi,
+    this.timestampMillis,
   });
 
   final Peripheral peripheral;
 
   final AdvertisementData advertisementData;
+
+  final int? rssi;
+
+  final int? timestampMillis;
 }
 
 final class Service {

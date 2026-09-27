@@ -350,6 +350,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   // --- Mapping helpers ------------------------------------------------------
 
   ScanResult _toScanResult(BlueZDevice device) {
+    final timestampMillis = DateTime.now().millisecondsSinceEpoch;
     final session = PeripheralSession(peripheralIdentifier: device.address);
     // BlueZ vs CoreBluetooth naming mapping:
     //   device.alias  — user-editable friendly name → CBPeripheral.name
@@ -372,6 +373,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         serviceData: _mapServiceData(device.serviceData),
         txPowerLevel: device.txPower,
       ),
+      rssi: device.rssi,
+      timestampMillis: timestampMillis,
     );
   }
 

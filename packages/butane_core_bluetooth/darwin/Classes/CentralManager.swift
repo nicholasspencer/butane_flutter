@@ -335,6 +335,8 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     guard actors.keys.contains(peripheral.identifier) == false else {
       return
     }
+
+    let timestampMillis = Int64(Date().timeIntervalSince1970 * 1000)
     
     peripheral.delegate = self
     actors[peripheral.identifier] = PeripheralActor(peripheral: peripheral, flutterApi: flutterApi)
@@ -342,7 +344,9 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     flutterApi.onScanResult(
       scanResult: ScanResult(
         peripheral: peripheral.toPeripheral(session: session(peripheral), rssi: RSSI),
-        advertisementData: AdvertisementData(advertisementData: advertisementData)
+        advertisementData: AdvertisementData(advertisementData: advertisementData),
+        rssi: RSSI.int64Value,
+        timestampMillis: timestampMillis
       ),
       completion: onNativeResult
     )

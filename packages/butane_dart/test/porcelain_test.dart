@@ -174,6 +174,62 @@ void main() {
       expect(emitted, contains(PeerManagerState.poweredOn));
       expect(emitted, contains(PeerManagerState.unauthorized));
     });
+
+    test('scan preserves populated and absent advertisement metadata',
+        () async {
+      final platform = _FakePlatform(
+        scanResults: Stream.fromIterable([
+          api.ScanResult(
+            peripheral: const api.Peripheral(
+              session: api.PeripheralSession(
+                peripheralIdentifier: 'populated',
+              ),
+              name: 'populated',
+              rssi: -60,
+              state: api.ConnectionState.disconnected,
+            ),
+            advertisementData: const api.AdvertisementData(
+              solicitedServiceUuids: ['180f', '12345678'],
+              overflowServiceUuids: [
+                'abcdefab-cdef-abcd-efab-cdefabcdefab',
+              ],
+            ),
+            rssi: -42,
+            timestampMillis: 1720000000123,
+          ),
+          const api.ScanResult(
+            peripheral: api.Peripheral(
+              session: api.PeripheralSession(
+                peripheralIdentifier: 'absent',
+              ),
+              state: api.ConnectionState.disconnected,
+            ),
+            advertisementData: api.AdvertisementData(),
+          ),
+        ]),
+      );
+      final manager = CentralManager(platform: platform);
+      addTearDown(manager.dispose);
+
+      final results = await manager.scan().take(2).toList();
+      final populated = results.first;
+      final absent = results.last;
+
+      expect(
+        populated.advertisementData.solicitedServiceUuids,
+        ['180f', '12345678'],
+      );
+      expect(
+        populated.advertisementData.overflowServiceUuids,
+        ['abcdefab-cdef-abcd-efab-cdefabcdefab'],
+      );
+      expect(populated.rssi, -42);
+      expect(populated.timestampMillis, 1720000000123);
+      expect(absent.advertisementData.solicitedServiceUuids, isNull);
+      expect(absent.advertisementData.overflowServiceUuids, isNull);
+      expect(absent.rssi, isNull);
+      expect(absent.timestampMillis, isNull);
+    });
   });
 
   group('Peripheral descriptor and MTU operations', () {
@@ -289,16 +345,19 @@ final class _FakePlatform extends api.ButanePlatformInterface {
     this.clientStateValue = api.ClientState.poweredOn,
     this.characteristicsValue = const [],
     Stream<api.ClientState>? clientStates,
+    Stream<api.ScanResult>? scanResults,
     this.peripheralsValue = const [],
     this.servicesValue = const [],
     Uint8List? descriptorReadValue,
     this.effectiveMtu = 23,
   })  : _clientStates = clientStates,
+        _scanResults = scanResults,
         descriptorReadValue = descriptorReadValue ?? Uint8List(0);
 
   final api.ClientState clientStateValue;
   final Iterable<api.Characteristic> characteristicsValue;
   final Stream<api.ClientState>? _clientStates;
+  final Stream<api.ScanResult>? _scanResults;
   final Iterable<api.Peripheral> peripheralsValue;
   final Iterable<api.Service> servicesValue;
   final Uint8List descriptorReadValue;
@@ -332,15 +391,17 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   // --- Unused by these tests ------------------------------------------------
 
   @override
-  Future<void> scan({Iterable<String>? forServices, api.Session? session}) =>
-      throw UnimplementedError();
+  Future<void> scan({
+    Iterable<String>? forServices,
+    api.Session? session,
+  }) async {}
 
   @override
   Stream<api.ScanResult> scanStream([api.Session? session]) =>
-      throw UnimplementedError();
+      _scanResults ?? const Stream<api.ScanResult>.empty();
 
   @override
-  Future<void> cancelScan({api.Session? session}) => throw UnimplementedError();
+  Future<void> cancelScan({api.Session? session}) async {}
 
   @override
   Future<Iterable<api.Peripheral>> peripherals({

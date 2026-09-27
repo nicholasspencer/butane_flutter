@@ -684,13 +684,17 @@ AdvertisementData::AdvertisementData(
   const EncodableList* service_uuids,
   const EncodableMap* service_data,
   const int64_t* tx_power_level,
-  const bool* is_connectable)
+  const bool* is_connectable,
+  const EncodableList* solicited_service_uuids,
+  const EncodableList* overflow_service_uuids)
  : local_name_(local_name ? std::optional<std::string>(*local_name) : std::nullopt),
     manufacturer_data_(manufacturer_data ? std::optional<std::vector<uint8_t>>(*manufacturer_data) : std::nullopt),
     service_uuids_(service_uuids ? std::optional<EncodableList>(*service_uuids) : std::nullopt),
     service_data_(service_data ? std::optional<EncodableMap>(*service_data) : std::nullopt),
     tx_power_level_(tx_power_level ? std::optional<int64_t>(*tx_power_level) : std::nullopt),
-    is_connectable_(is_connectable ? std::optional<bool>(*is_connectable) : std::nullopt) {}
+    is_connectable_(is_connectable ? std::optional<bool>(*is_connectable) : std::nullopt),
+    solicited_service_uuids_(solicited_service_uuids ? std::optional<EncodableList>(*solicited_service_uuids) : std::nullopt),
+    overflow_service_uuids_(overflow_service_uuids ? std::optional<EncodableList>(*overflow_service_uuids) : std::nullopt) {}
 
 const std::string* AdvertisementData::local_name() const {
   return local_name_ ? &(*local_name_) : nullptr;
@@ -770,15 +774,43 @@ void AdvertisementData::set_is_connectable(bool value_arg) {
 }
 
 
+const EncodableList* AdvertisementData::solicited_service_uuids() const {
+  return solicited_service_uuids_ ? &(*solicited_service_uuids_) : nullptr;
+}
+
+void AdvertisementData::set_solicited_service_uuids(const EncodableList* value_arg) {
+  solicited_service_uuids_ = value_arg ? std::optional<EncodableList>(*value_arg) : std::nullopt;
+}
+
+void AdvertisementData::set_solicited_service_uuids(const EncodableList& value_arg) {
+  solicited_service_uuids_ = value_arg;
+}
+
+
+const EncodableList* AdvertisementData::overflow_service_uuids() const {
+  return overflow_service_uuids_ ? &(*overflow_service_uuids_) : nullptr;
+}
+
+void AdvertisementData::set_overflow_service_uuids(const EncodableList* value_arg) {
+  overflow_service_uuids_ = value_arg ? std::optional<EncodableList>(*value_arg) : std::nullopt;
+}
+
+void AdvertisementData::set_overflow_service_uuids(const EncodableList& value_arg) {
+  overflow_service_uuids_ = value_arg;
+}
+
+
 EncodableList AdvertisementData::ToEncodableList() const {
   EncodableList list;
-  list.reserve(6);
+  list.reserve(8);
   list.push_back(local_name_ ? EncodableValue(*local_name_) : EncodableValue());
   list.push_back(manufacturer_data_ ? EncodableValue(*manufacturer_data_) : EncodableValue());
   list.push_back(service_uuids_ ? EncodableValue(*service_uuids_) : EncodableValue());
   list.push_back(service_data_ ? EncodableValue(*service_data_) : EncodableValue());
   list.push_back(tx_power_level_ ? EncodableValue(*tx_power_level_) : EncodableValue());
   list.push_back(is_connectable_ ? EncodableValue(*is_connectable_) : EncodableValue());
+  list.push_back(solicited_service_uuids_ ? EncodableValue(*solicited_service_uuids_) : EncodableValue());
+  list.push_back(overflow_service_uuids_ ? EncodableValue(*overflow_service_uuids_) : EncodableValue());
   return list;
 }
 
@@ -808,11 +840,19 @@ AdvertisementData AdvertisementData::FromEncodableList(const EncodableList& list
   if (!encodable_is_connectable.IsNull()) {
     decoded.set_is_connectable(std::get<bool>(encodable_is_connectable));
   }
+  auto& encodable_solicited_service_uuids = list[6];
+  if (!encodable_solicited_service_uuids.IsNull()) {
+    decoded.set_solicited_service_uuids(std::get<EncodableList>(encodable_solicited_service_uuids));
+  }
+  auto& encodable_overflow_service_uuids = list[7];
+  if (!encodable_overflow_service_uuids.IsNull()) {
+    decoded.set_overflow_service_uuids(std::get<EncodableList>(encodable_overflow_service_uuids));
+  }
   return decoded;
 }
 
 bool AdvertisementData::operator==(const AdvertisementData& other) const {
-  return PigeonInternalDeepEquals(local_name_, other.local_name_) && PigeonInternalDeepEquals(manufacturer_data_, other.manufacturer_data_) && PigeonInternalDeepEquals(service_uuids_, other.service_uuids_) && PigeonInternalDeepEquals(service_data_, other.service_data_) && PigeonInternalDeepEquals(tx_power_level_, other.tx_power_level_) && PigeonInternalDeepEquals(is_connectable_, other.is_connectable_);
+  return PigeonInternalDeepEquals(local_name_, other.local_name_) && PigeonInternalDeepEquals(manufacturer_data_, other.manufacturer_data_) && PigeonInternalDeepEquals(service_uuids_, other.service_uuids_) && PigeonInternalDeepEquals(service_data_, other.service_data_) && PigeonInternalDeepEquals(tx_power_level_, other.tx_power_level_) && PigeonInternalDeepEquals(is_connectable_, other.is_connectable_) && PigeonInternalDeepEquals(solicited_service_uuids_, other.solicited_service_uuids_) && PigeonInternalDeepEquals(overflow_service_uuids_, other.overflow_service_uuids_);
 }
 
 bool AdvertisementData::operator!=(const AdvertisementData& other) const {
@@ -827,6 +867,8 @@ size_t AdvertisementData::Hash() const {
   result = result * 31 + PigeonInternalDeepHash(service_data_);
   result = result * 31 + PigeonInternalDeepHash(tx_power_level_);
   result = result * 31 + PigeonInternalDeepHash(is_connectable_);
+  result = result * 31 + PigeonInternalDeepHash(solicited_service_uuids_);
+  result = result * 31 + PigeonInternalDeepHash(overflow_service_uuids_);
   return result;
 }
 
@@ -842,13 +884,27 @@ ScanResult::ScanResult(
  : peripheral_(std::make_unique<Peripheral>(peripheral)),
     advertisement_data_(std::make_unique<AdvertisementData>(advertisement_data)) {}
 
+ScanResult::ScanResult(
+  const Peripheral& peripheral,
+  const AdvertisementData& advertisement_data,
+  const int64_t* rssi,
+  const int64_t* timestamp_millis)
+ : peripheral_(std::make_unique<Peripheral>(peripheral)),
+    advertisement_data_(std::make_unique<AdvertisementData>(advertisement_data)),
+    rssi_(rssi ? std::optional<int64_t>(*rssi) : std::nullopt),
+    timestamp_millis_(timestamp_millis ? std::optional<int64_t>(*timestamp_millis) : std::nullopt) {}
+
 ScanResult::ScanResult(const ScanResult& other)
  : peripheral_(std::make_unique<Peripheral>(*other.peripheral_)),
-    advertisement_data_(std::make_unique<AdvertisementData>(*other.advertisement_data_)) {}
+    advertisement_data_(std::make_unique<AdvertisementData>(*other.advertisement_data_)),
+    rssi_(other.rssi_ ? std::optional<int64_t>(*other.rssi_) : std::nullopt),
+    timestamp_millis_(other.timestamp_millis_ ? std::optional<int64_t>(*other.timestamp_millis_) : std::nullopt) {}
 
 ScanResult& ScanResult::operator=(const ScanResult& other) {
   peripheral_ = std::make_unique<Peripheral>(*other.peripheral_);
   advertisement_data_ = std::make_unique<AdvertisementData>(*other.advertisement_data_);
+  rssi_ = other.rssi_;
+  timestamp_millis_ = other.timestamp_millis_;
   return *this;
 }
 
@@ -870,11 +926,39 @@ void ScanResult::set_advertisement_data(const AdvertisementData& value_arg) {
 }
 
 
+const int64_t* ScanResult::rssi() const {
+  return rssi_ ? &(*rssi_) : nullptr;
+}
+
+void ScanResult::set_rssi(const int64_t* value_arg) {
+  rssi_ = value_arg ? std::optional<int64_t>(*value_arg) : std::nullopt;
+}
+
+void ScanResult::set_rssi(int64_t value_arg) {
+  rssi_ = value_arg;
+}
+
+
+const int64_t* ScanResult::timestamp_millis() const {
+  return timestamp_millis_ ? &(*timestamp_millis_) : nullptr;
+}
+
+void ScanResult::set_timestamp_millis(const int64_t* value_arg) {
+  timestamp_millis_ = value_arg ? std::optional<int64_t>(*value_arg) : std::nullopt;
+}
+
+void ScanResult::set_timestamp_millis(int64_t value_arg) {
+  timestamp_millis_ = value_arg;
+}
+
+
 EncodableList ScanResult::ToEncodableList() const {
   EncodableList list;
-  list.reserve(2);
+  list.reserve(4);
   list.push_back(CustomEncodableValue(*peripheral_));
   list.push_back(CustomEncodableValue(*advertisement_data_));
+  list.push_back(rssi_ ? EncodableValue(*rssi_) : EncodableValue());
+  list.push_back(timestamp_millis_ ? EncodableValue(*timestamp_millis_) : EncodableValue());
   return list;
 }
 
@@ -882,11 +966,19 @@ ScanResult ScanResult::FromEncodableList(const EncodableList& list) {
   ScanResult decoded(
     std::any_cast<const Peripheral&>(std::get<CustomEncodableValue>(list[0])),
     std::any_cast<const AdvertisementData&>(std::get<CustomEncodableValue>(list[1])));
+  auto& encodable_rssi = list[2];
+  if (!encodable_rssi.IsNull()) {
+    decoded.set_rssi(std::get<int64_t>(encodable_rssi));
+  }
+  auto& encodable_timestamp_millis = list[3];
+  if (!encodable_timestamp_millis.IsNull()) {
+    decoded.set_timestamp_millis(std::get<int64_t>(encodable_timestamp_millis));
+  }
   return decoded;
 }
 
 bool ScanResult::operator==(const ScanResult& other) const {
-  return PigeonInternalDeepEquals(peripheral_, other.peripheral_) && PigeonInternalDeepEquals(advertisement_data_, other.advertisement_data_);
+  return PigeonInternalDeepEquals(peripheral_, other.peripheral_) && PigeonInternalDeepEquals(advertisement_data_, other.advertisement_data_) && PigeonInternalDeepEquals(rssi_, other.rssi_) && PigeonInternalDeepEquals(timestamp_millis_, other.timestamp_millis_);
 }
 
 bool ScanResult::operator!=(const ScanResult& other) const {
@@ -897,6 +989,8 @@ size_t ScanResult::Hash() const {
   size_t result = 1;
   result = result * 31 + PigeonInternalDeepHash(peripheral_);
   result = result * 31 + PigeonInternalDeepHash(advertisement_data_);
+  result = result * 31 + PigeonInternalDeepHash(rssi_);
+  result = result * 31 + PigeonInternalDeepHash(timestamp_millis_);
   return result;
 }
 

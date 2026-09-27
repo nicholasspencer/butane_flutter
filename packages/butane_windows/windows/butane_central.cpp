@@ -23,6 +23,14 @@ ErrorOr<ScanResult> BuildScanResult(const AdvertisementEvent& event,
     if (!normalized) return FlutterError("invalid_argument", "Advertisement contains an invalid service UUID.");
     service_uuids.emplace_back(*normalized);
   }
+  flutter::EncodableList solicited_service_uuids;
+  for (const auto& uuid : event.solicited_service_uuids) {
+    auto normalized = NormalizeUuid(uuid);
+    if (!normalized) return FlutterError(
+        "invalid_argument",
+        "Advertisement contains an invalid solicited service UUID.");
+    solicited_service_uuids.emplace_back(*normalized);
+  }
   flutter::EncodableMap service_data;
   for (const auto& [uuid, bytes] : event.service_data) {
     auto normalized = NormalizeUuid(uuid);
@@ -50,8 +58,10 @@ ErrorOr<ScanResult> BuildScanResult(const AdvertisementEvent& event,
   AdvertisementData data(
       event.local_name ? &*event.local_name : nullptr, &manufacturer_bytes,
       &service_uuids, &service_data, event.tx_power ? &tx_power : nullptr,
-      event.is_connectable ? &*event.is_connectable : nullptr);
-  return ScanResult(peripheral, data);
+      event.is_connectable ? &*event.is_connectable : nullptr,
+      solicited_service_uuids.empty() ? nullptr : &solicited_service_uuids,
+      nullptr);
+  return ScanResult(peripheral, data, &rssi, &event.timestamp_millis);
 }
 ErrorOr<std::vector<std::string>> NormalizeServiceFilter(
     const flutter::EncodableList* for_services) {

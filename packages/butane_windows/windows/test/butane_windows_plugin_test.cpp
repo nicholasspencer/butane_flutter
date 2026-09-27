@@ -66,9 +66,10 @@ TEST(ServiceFilter, RejectsMalformedUuid) {
   EXPECT_EQ(result.error().code(), "invalid_argument");
 }
 AdvertisementEvent Advertisement() {
-  return {0x00A1B2C3D4E5ULL, int16_t{-63}, std::string("Peripheral"),
-      std::string("Local"), {{0x1234, {0xaa, 0xbb}}, {0x00ff, {0xcc}}},
-      {"180D"}, {{"180F", {1, 2, 3}}}, int16_t{-8}, true};
+  return {0x00A1B2C3D4E5ULL, int16_t{-63}, int64_t{1234567890},
+      std::string("Peripheral"), std::string("Local"),
+      {{0x1234, {0xaa, 0xbb}}, {0x00ff, {0xcc}}}, {"180D"},
+      {"1812"}, {{"180F", {1, 2, 3}}}, int16_t{-8}, true};
 }
 TEST(AdvertisementMapping, MapsCompleteAdvertisement) {
   const std::string client = "client";
@@ -86,23 +87,51 @@ TEST(AdvertisementMapping, MapsCompleteAdvertisement) {
       (std::vector<uint8_t>{0x34, 0x12, 0xaa, 0xbb, 0xff, 0x00, 0xcc}));
   EXPECT_EQ(std::get<std::string>((*data.service_uuids())[0]),
       "0000180d-0000-1000-8000-00805f9b34fb");
+  EXPECT_EQ(std::get<std::string>((*data.solicited_service_uuids())[0]),
+      "00001812-0000-1000-8000-00805f9b34fb");
+  EXPECT_EQ(data.overflow_service_uuids(), nullptr);
   auto key = flutter::EncodableValue("0000180f-0000-1000-8000-00805f9b34fb");
   EXPECT_EQ(std::get<std::vector<uint8_t>>(data.service_data()->at(key)),
       (std::vector<uint8_t>{1, 2, 3}));
   EXPECT_EQ(*data.tx_power_level(), -8);
   EXPECT_TRUE(*data.is_connectable());
+  EXPECT_EQ(*scan.rssi(), -63);
+  EXPECT_EQ(*scan.timestamp_millis(), 1234567890);
 }
 TEST(AdvertisementMapping, NullFieldsAndMalformedUuid) {
-  AdvertisementEvent event{1, int16_t{-80}, std::nullopt, std::nullopt, {}, {}, {},
-      std::nullopt, std::nullopt};
+  AdvertisementEvent event{1, int16_t{-80}, int64_t{123}, std::nullopt,
+      std::nullopt, {}, {}, {}, {}, std::nullopt, std::nullopt};
   auto result = BuildScanResult(event, nullptr);
   ASSERT_FALSE(result.has_error());
   EXPECT_EQ(result.value().peripheral().name(), nullptr);
   EXPECT_EQ(result.value().advertisement_data().local_name(), nullptr);
+  EXPECT_EQ(
+      result.value().advertisement_data().solicited_service_uuids(), nullptr);
+  EXPECT_EQ(
+      result.value().advertisement_data().overflow_service_uuids(), nullptr);
   event.service_data["bad"] = {};
   result = BuildScanResult(event, nullptr);
   ASSERT_TRUE(result.has_error());
   EXPECT_EQ(result.error().code(), "invalid_argument");
+}
+TEST(ServiceSolicitationParser, ParsesAllUuidWidths) {
+  EXPECT_EQ(ParseServiceSolicitationUuids(0x14, {0x0d, 0x18, 0x12, 0x18}),
+      (std::vector<std::string>{"180d", "1812"}));
+  EXPECT_EQ(ParseServiceSolicitationUuids(
+      0x1F, {0x78, 0x56, 0x34, 0x12}),
+      (std::vector<std::string>{"12345678"}));
+  EXPECT_EQ(ParseServiceSolicitationUuids(0x15,
+      {0x78, 0x56, 0x34, 0x12, 0xf0, 0xde, 0xbc, 0x9a,
+       0x78, 0x56, 0x34, 0x12, 0x78, 0x56, 0x34, 0x12}),
+      (std::vector<std::string>{
+          "12345678-1234-5678-9abc-def012345678"}));
+}
+TEST(ServiceSolicitationParser, IgnoresUnsupportedAndMalformedPayloads) {
+  EXPECT_TRUE(ParseServiceSolicitationUuids(0x16, {0x0d, 0x18}).empty());
+  EXPECT_TRUE(ParseServiceSolicitationUuids(0x14, {}).empty());
+  EXPECT_TRUE(ParseServiceSolicitationUuids(0x14, {0x0d}).empty());
+  EXPECT_TRUE(ParseServiceSolicitationUuids(
+      0x1F, {0x78, 0x56, 0x34, 0x12, 0xff}).empty());
 }
 class FakeCentral final : public CentralBackend {
  public:

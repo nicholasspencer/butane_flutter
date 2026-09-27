@@ -409,6 +409,8 @@ struct AdvertisementData: Hashable {
   var serviceData: [String?: FlutterStandardTypedData?]? = nil
   var txPowerLevel: Int64? = nil
   var isConnectable: Bool? = nil
+  var solicitedServiceUuids: [String?]? = nil
+  var overflowServiceUuids: [String?]? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -419,6 +421,8 @@ struct AdvertisementData: Hashable {
     let serviceData: [String?: FlutterStandardTypedData?]? = nilOrValue(pigeonVar_list[3])
     let txPowerLevel: Int64? = nilOrValue(pigeonVar_list[4])
     let isConnectable: Bool? = nilOrValue(pigeonVar_list[5])
+    let solicitedServiceUuids: [String?]? = nilOrValue(pigeonVar_list[6])
+    let overflowServiceUuids: [String?]? = nilOrValue(pigeonVar_list[7])
 
     return AdvertisementData(
       localName: localName,
@@ -426,7 +430,9 @@ struct AdvertisementData: Hashable {
       serviceUuids: serviceUuids,
       serviceData: serviceData,
       txPowerLevel: txPowerLevel,
-      isConnectable: isConnectable
+      isConnectable: isConnectable,
+      solicitedServiceUuids: solicitedServiceUuids,
+      overflowServiceUuids: overflowServiceUuids
     )
   }
   func toList() -> [Any?] {
@@ -437,13 +443,15 @@ struct AdvertisementData: Hashable {
       serviceData,
       txPowerLevel,
       isConnectable,
+      solicitedServiceUuids,
+      overflowServiceUuids,
     ]
   }
   static func == (lhs: AdvertisementData, rhs: AdvertisementData) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return deepEqualsApi(lhs.localName, rhs.localName) && deepEqualsApi(lhs.manufacturerData, rhs.manufacturerData) && deepEqualsApi(lhs.serviceUuids, rhs.serviceUuids) && deepEqualsApi(lhs.serviceData, rhs.serviceData) && deepEqualsApi(lhs.txPowerLevel, rhs.txPowerLevel) && deepEqualsApi(lhs.isConnectable, rhs.isConnectable)
+    return deepEqualsApi(lhs.localName, rhs.localName) && deepEqualsApi(lhs.manufacturerData, rhs.manufacturerData) && deepEqualsApi(lhs.serviceUuids, rhs.serviceUuids) && deepEqualsApi(lhs.serviceData, rhs.serviceData) && deepEqualsApi(lhs.txPowerLevel, rhs.txPowerLevel) && deepEqualsApi(lhs.isConnectable, rhs.isConnectable) && deepEqualsApi(lhs.solicitedServiceUuids, rhs.solicitedServiceUuids) && deepEqualsApi(lhs.overflowServiceUuids, rhs.overflowServiceUuids)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -454,6 +462,8 @@ struct AdvertisementData: Hashable {
     deepHashApi(value: serviceData, hasher: &hasher)
     deepHashApi(value: txPowerLevel, hasher: &hasher)
     deepHashApi(value: isConnectable, hasher: &hasher)
+    deepHashApi(value: solicitedServiceUuids, hasher: &hasher)
+    deepHashApi(value: overflowServiceUuids, hasher: &hasher)
   }
 }
 
@@ -461,35 +471,45 @@ struct AdvertisementData: Hashable {
 struct ScanResult: Hashable {
   var peripheral: Peripheral
   var advertisementData: AdvertisementData
+  var rssi: Int64? = nil
+  var timestampMillis: Int64? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> ScanResult? {
     let peripheral = pigeonVar_list[0] as! Peripheral
     let advertisementData = pigeonVar_list[1] as! AdvertisementData
+    let rssi: Int64? = nilOrValue(pigeonVar_list[2])
+    let timestampMillis: Int64? = nilOrValue(pigeonVar_list[3])
 
     return ScanResult(
       peripheral: peripheral,
-      advertisementData: advertisementData
+      advertisementData: advertisementData,
+      rssi: rssi,
+      timestampMillis: timestampMillis
     )
   }
   func toList() -> [Any?] {
     return [
       peripheral,
       advertisementData,
+      rssi,
+      timestampMillis,
     ]
   }
   static func == (lhs: ScanResult, rhs: ScanResult) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return deepEqualsApi(lhs.peripheral, rhs.peripheral) && deepEqualsApi(lhs.advertisementData, rhs.advertisementData)
+    return deepEqualsApi(lhs.peripheral, rhs.peripheral) && deepEqualsApi(lhs.advertisementData, rhs.advertisementData) && deepEqualsApi(lhs.rssi, rhs.rssi) && deepEqualsApi(lhs.timestampMillis, rhs.timestampMillis)
   }
 
   func hash(into hasher: inout Hasher) {
     hasher.combine("ScanResult")
     deepHashApi(value: peripheral, hasher: &hasher)
     deepHashApi(value: advertisementData, hasher: &hasher)
+    deepHashApi(value: rssi, hasher: &hasher)
+    deepHashApi(value: timestampMillis, hasher: &hasher)
   }
 }
 

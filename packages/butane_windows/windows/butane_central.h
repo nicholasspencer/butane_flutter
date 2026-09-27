@@ -11,10 +11,12 @@ struct ManufacturerSection { uint16_t company_id; std::vector<uint8_t> data; };
 struct AdvertisementEvent {
   uint64_t bluetooth_address;
   int16_t rssi;
+  int64_t timestamp_millis;
   std::optional<std::string> peripheral_name;
   std::optional<std::string> local_name;
   std::vector<ManufacturerSection> manufacturer_data;
   std::vector<std::string> service_uuids;
+  std::vector<std::string> solicited_service_uuids;
   std::map<std::string, std::vector<uint8_t>> service_data;
   std::optional<int16_t> tx_power;
   std::optional<bool> is_connectable;
@@ -24,6 +26,8 @@ ClientState MapClientState(bool adapter_present, bool access_denied,
                            NativeRadioState state);
 ErrorOr<ScanResult> BuildScanResult(const AdvertisementEvent& event,
                                     const ClientSession* session);
+std::vector<std::string> ParseServiceSolicitationUuids(
+    uint8_t data_type, const std::vector<uint8_t>& data);
 ErrorOr<std::vector<std::string>> NormalizeServiceFilter(
     const flutter::EncodableList* for_services);
 }  // namespace butane_windows

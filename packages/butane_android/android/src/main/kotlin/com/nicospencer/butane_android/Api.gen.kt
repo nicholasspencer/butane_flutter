@@ -444,7 +444,9 @@ data class AdvertisementData (
   val serviceUuids: List<String?>? = null,
   val serviceData: Map<String?, ByteArray?>? = null,
   val txPowerLevel: Long? = null,
-  val isConnectable: Boolean? = null
+  val isConnectable: Boolean? = null,
+  val solicitedServiceUuids: List<String?>? = null,
+  val overflowServiceUuids: List<String?>? = null
 )
  {
   companion object {
@@ -455,7 +457,9 @@ data class AdvertisementData (
       val serviceData = pigeonVar_list[3] as Map<String?, ByteArray?>?
       val txPowerLevel = pigeonVar_list[4] as Long?
       val isConnectable = pigeonVar_list[5] as Boolean?
-      return AdvertisementData(localName, manufacturerData, serviceUuids, serviceData, txPowerLevel, isConnectable)
+      val solicitedServiceUuids = pigeonVar_list[6] as List<String?>?
+      val overflowServiceUuids = pigeonVar_list[7] as List<String?>?
+      return AdvertisementData(localName, manufacturerData, serviceUuids, serviceData, txPowerLevel, isConnectable, solicitedServiceUuids, overflowServiceUuids)
     }
   }
   fun toList(): List<Any?> {
@@ -466,6 +470,8 @@ data class AdvertisementData (
       serviceData,
       txPowerLevel,
       isConnectable,
+      solicitedServiceUuids,
+      overflowServiceUuids,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -476,7 +482,7 @@ data class AdvertisementData (
       return true
     }
     val other = other as AdvertisementData
-    return ApiPigeonUtils.deepEquals(this.localName, other.localName) && ApiPigeonUtils.deepEquals(this.manufacturerData, other.manufacturerData) && ApiPigeonUtils.deepEquals(this.serviceUuids, other.serviceUuids) && ApiPigeonUtils.deepEquals(this.serviceData, other.serviceData) && ApiPigeonUtils.deepEquals(this.txPowerLevel, other.txPowerLevel) && ApiPigeonUtils.deepEquals(this.isConnectable, other.isConnectable)
+    return ApiPigeonUtils.deepEquals(this.localName, other.localName) && ApiPigeonUtils.deepEquals(this.manufacturerData, other.manufacturerData) && ApiPigeonUtils.deepEquals(this.serviceUuids, other.serviceUuids) && ApiPigeonUtils.deepEquals(this.serviceData, other.serviceData) && ApiPigeonUtils.deepEquals(this.txPowerLevel, other.txPowerLevel) && ApiPigeonUtils.deepEquals(this.isConnectable, other.isConnectable) && ApiPigeonUtils.deepEquals(this.solicitedServiceUuids, other.solicitedServiceUuids) && ApiPigeonUtils.deepEquals(this.overflowServiceUuids, other.overflowServiceUuids)
   }
 
   override fun hashCode(): Int {
@@ -487,6 +493,8 @@ data class AdvertisementData (
     result = 31 * result + ApiPigeonUtils.deepHash(this.serviceData)
     result = 31 * result + ApiPigeonUtils.deepHash(this.txPowerLevel)
     result = 31 * result + ApiPigeonUtils.deepHash(this.isConnectable)
+    result = 31 * result + ApiPigeonUtils.deepHash(this.solicitedServiceUuids)
+    result = 31 * result + ApiPigeonUtils.deepHash(this.overflowServiceUuids)
     return result
   }
 }
@@ -494,20 +502,26 @@ data class AdvertisementData (
 /** Generated class from Pigeon that represents data sent in messages. */
 data class ScanResult (
   val peripheral: Peripheral,
-  val advertisementData: AdvertisementData
+  val advertisementData: AdvertisementData,
+  val rssi: Long? = null,
+  val timestampMillis: Long? = null
 )
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): ScanResult {
       val peripheral = pigeonVar_list[0] as Peripheral
       val advertisementData = pigeonVar_list[1] as AdvertisementData
-      return ScanResult(peripheral, advertisementData)
+      val rssi = pigeonVar_list[2] as Long?
+      val timestampMillis = pigeonVar_list[3] as Long?
+      return ScanResult(peripheral, advertisementData, rssi, timestampMillis)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
       peripheral,
       advertisementData,
+      rssi,
+      timestampMillis,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -518,13 +532,15 @@ data class ScanResult (
       return true
     }
     val other = other as ScanResult
-    return ApiPigeonUtils.deepEquals(this.peripheral, other.peripheral) && ApiPigeonUtils.deepEquals(this.advertisementData, other.advertisementData)
+    return ApiPigeonUtils.deepEquals(this.peripheral, other.peripheral) && ApiPigeonUtils.deepEquals(this.advertisementData, other.advertisementData) && ApiPigeonUtils.deepEquals(this.rssi, other.rssi) && ApiPigeonUtils.deepEquals(this.timestampMillis, other.timestampMillis)
   }
 
   override fun hashCode(): Int {
     var result = javaClass.hashCode()
     result = 31 * result + ApiPigeonUtils.deepHash(this.peripheral)
     result = 31 * result + ApiPigeonUtils.deepHash(this.advertisementData)
+    result = 31 * result + ApiPigeonUtils.deepHash(this.rssi)
+    result = 31 * result + ApiPigeonUtils.deepHash(this.timestampMillis)
     return result
   }
 }
