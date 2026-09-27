@@ -1863,56 +1863,61 @@ EncodableValue PigeonInternalCodecSerializer::ReadValueOfType(
     case 130: {
         const auto& encodable_enum_arg = ReadValue(stream);
         const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
-        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<ConnectionState>(enum_arg_value));
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<ButaneErrorCode>(enum_arg_value));
       }
     case 131: {
         const auto& encodable_enum_arg = ReadValue(stream);
         const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
-        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<AttResult>(enum_arg_value));
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<ConnectionState>(enum_arg_value));
       }
     case 132: {
-        return CustomEncodableValue(ClientSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        const auto& encodable_enum_arg = ReadValue(stream);
+        const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<AttResult>(enum_arg_value));
       }
     case 133: {
-        return CustomEncodableValue(PeripheralSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(ClientSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 134: {
-        return CustomEncodableValue(PeripheralManagerSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(PeripheralSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 135: {
-        return CustomEncodableValue(Peripheral::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(PeripheralManagerSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 136: {
-        return CustomEncodableValue(AdvertisementData::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Peripheral::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 137: {
-        return CustomEncodableValue(ScanResult::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(AdvertisementData::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 138: {
-        return CustomEncodableValue(Service::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(ScanResult::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 139: {
-        return CustomEncodableValue(Characteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Service::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 140: {
-        return CustomEncodableValue(Descriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Characteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 141: {
-        return CustomEncodableValue(CharacteristicProperty::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Descriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 142: {
-        return CustomEncodableValue(CharacteristicPermission::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(CharacteristicProperty::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 143: {
-        return CustomEncodableValue(AttRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(CharacteristicPermission::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 144: {
-        return CustomEncodableValue(MutableDescriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(AttRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 145: {
-        return CustomEncodableValue(MutableCharacteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(MutableDescriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 146: {
+        return CustomEncodableValue(MutableCharacteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 147: {
         return CustomEncodableValue(MutableService::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     default:
@@ -1929,88 +1934,93 @@ void PigeonInternalCodecSerializer::WriteValue(
       WriteValue(EncodableValue(static_cast<int>(std::any_cast<ClientState>(*custom_value))), stream);
       return;
     }
-    if (custom_value->type() == typeid(ConnectionState)) {
+    if (custom_value->type() == typeid(ButaneErrorCode)) {
       stream->WriteByte(130);
+      WriteValue(EncodableValue(static_cast<int>(std::any_cast<ButaneErrorCode>(*custom_value))), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(ConnectionState)) {
+      stream->WriteByte(131);
       WriteValue(EncodableValue(static_cast<int>(std::any_cast<ConnectionState>(*custom_value))), stream);
       return;
     }
     if (custom_value->type() == typeid(AttResult)) {
-      stream->WriteByte(131);
+      stream->WriteByte(132);
       WriteValue(EncodableValue(static_cast<int>(std::any_cast<AttResult>(*custom_value))), stream);
       return;
     }
     if (custom_value->type() == typeid(ClientSession)) {
-      stream->WriteByte(132);
+      stream->WriteByte(133);
       WriteValue(EncodableValue(std::any_cast<ClientSession>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(PeripheralSession)) {
-      stream->WriteByte(133);
+      stream->WriteByte(134);
       WriteValue(EncodableValue(std::any_cast<PeripheralSession>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(PeripheralManagerSession)) {
-      stream->WriteByte(134);
+      stream->WriteByte(135);
       WriteValue(EncodableValue(std::any_cast<PeripheralManagerSession>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Peripheral)) {
-      stream->WriteByte(135);
+      stream->WriteByte(136);
       WriteValue(EncodableValue(std::any_cast<Peripheral>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(AdvertisementData)) {
-      stream->WriteByte(136);
+      stream->WriteByte(137);
       WriteValue(EncodableValue(std::any_cast<AdvertisementData>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(ScanResult)) {
-      stream->WriteByte(137);
+      stream->WriteByte(138);
       WriteValue(EncodableValue(std::any_cast<ScanResult>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Service)) {
-      stream->WriteByte(138);
+      stream->WriteByte(139);
       WriteValue(EncodableValue(std::any_cast<Service>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Characteristic)) {
-      stream->WriteByte(139);
+      stream->WriteByte(140);
       WriteValue(EncodableValue(std::any_cast<Characteristic>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Descriptor)) {
-      stream->WriteByte(140);
+      stream->WriteByte(141);
       WriteValue(EncodableValue(std::any_cast<Descriptor>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(CharacteristicProperty)) {
-      stream->WriteByte(141);
+      stream->WriteByte(142);
       WriteValue(EncodableValue(std::any_cast<CharacteristicProperty>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(CharacteristicPermission)) {
-      stream->WriteByte(142);
+      stream->WriteByte(143);
       WriteValue(EncodableValue(std::any_cast<CharacteristicPermission>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(AttRequest)) {
-      stream->WriteByte(143);
+      stream->WriteByte(144);
       WriteValue(EncodableValue(std::any_cast<AttRequest>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(MutableDescriptor)) {
-      stream->WriteByte(144);
+      stream->WriteByte(145);
       WriteValue(EncodableValue(std::any_cast<MutableDescriptor>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(MutableCharacteristic)) {
-      stream->WriteByte(145);
+      stream->WriteByte(146);
       WriteValue(EncodableValue(std::any_cast<MutableCharacteristic>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(MutableService)) {
-      stream->WriteByte(146);
+      stream->WriteByte(147);
       WriteValue(EncodableValue(std::any_cast<MutableService>(*custom_value).ToEncodableList()), stream);
       return;
     }

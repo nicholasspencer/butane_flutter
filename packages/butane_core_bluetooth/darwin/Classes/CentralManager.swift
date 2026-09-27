@@ -92,12 +92,16 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     return manager.retrieveConnectedPeripherals(withServices: uuids).map { $0.toPeripheral() }
   }
   
-  func connect(identifier: String) {
+  func connect(identifier: String) throws {
     guard
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      return
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     let peripheral = actor.peripheral
@@ -111,12 +115,16 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     manager.connect(peripheral)
   }
   
-  func cancelConnection(identifier: String) {
+  func cancelConnection(identifier: String) throws {
     guard
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      return
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     let peripheral = actor.peripheral
@@ -130,12 +138,16 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     manager.cancelPeripheralConnection(peripheral)
   }
   
-  func connectionState(identifier: String) -> ConnectionState {
+  func connectionState(identifier: String) throws -> ConnectionState {
     guard
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      return .disconnected
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     let peripheral = actor.peripheral
@@ -150,18 +162,26 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      return
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     try await actor.discoverServices(serviceUuids: serviceUuids)
   }
   
-  func services(identifier: String) -> [Service] {
+  func services(identifier: String) throws -> [Service] {
     guard
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      return []
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     return actor.peripheral.services?.map {
@@ -174,19 +194,34 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      return
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     try await actor.discoverCharacteristics(serviceUuid: serviceUuid, characteristicUuids: characteristicUuids)
   }
   
-  func characteristics(identifier: String, serviceUuid: String) -> [Characteristic] {
+  func characteristics(identifier: String, serviceUuid: String) throws -> [Characteristic] {
     guard
       let uuid = UUID(uuidString: identifier),
-      let actor = actors[uuid],
-      let service = actor.peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
+      let actor = actors[uuid]
     else {
-      return []
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
+    }
+
+    guard let service = actor.peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
     }
     
     return service.characteristics?.map {
@@ -219,26 +254,51 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      // TODO: Throw
-      return Data()
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     return try await actor.readCharacteristic(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
   }
   
   func writeCharacteristic(identifier: String, serviceUuid: String, characteristicUuid: String, value: Data, withoutResponse: Bool) async throws {
-    guard
-      let uuid = UUID(uuidString: identifier),
-      let actor = actors[uuid],
-      let service = actor.peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
-    else {
-      return
+    guard let uuid = UUID(uuidString: identifier), let actor = actors[uuid] else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
+    }
+
+    guard let service = actor.peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
+    }
+
+    guard let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No characteristic found with UUID: \(characteristicUuid)"
+      )
     }
     
     let peripheral = actor.peripheral
     
     if withoutResponse {
+      guard characteristic.properties.contains(.writeWithoutResponse) else {
+        throw butaneFlutterError(
+          nativeError: nil,
+          fallback: .unsupported,
+          message: "Characteristic \(characteristicUuid) does not support writes without response"
+        )
+      }
       peripheral.writeValue(
         value,
         for: characteristic,
@@ -255,7 +315,11 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      return
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     return try await actor.observeCharacteristic(observe: observe, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
@@ -266,8 +330,11 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      // TODO: Throw
-      return Data()
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     return try await actor.readDescriptor(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid)
@@ -278,10 +345,10 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      throw PigeonError(
-        code: "peripheral-not-found",
-        message: "No peripheral found with identifier: \(identifier)",
-        details: nil
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
       )
     }
 
@@ -298,7 +365,11 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      throw FlutterError()
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
+      )
     }
     
     return try await actor.rssi()
@@ -309,10 +380,10 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      throw PigeonError(
-        code: "peripheral-not-found",
-        message: "No peripheral found with identifier: \(identifier)",
-        details: nil
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No peripheral found with identifier: \(identifier)"
       )
     }
 
@@ -482,8 +553,11 @@ actor PeripheralActor: Equatable {
     guard
       let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
     else {
-      print("\(serviceUuid): discoverCharacteristics guard failed")
-      return
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
     }
     
     print("\(service.uuid.uuidString): discoverCharacteristics")
@@ -500,13 +574,28 @@ actor PeripheralActor: Equatable {
   }
   
   func readCharacteristic(serviceUuid: String, characteristicUuid: String) async throws -> Data {
-    guard
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
-      characteristic.properties.contains(.read)
-    else {
-      // TODO: Throw
-      return Data()
+    guard let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
+    }
+
+    guard let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No characteristic found with UUID: \(characteristicUuid)"
+      )
+    }
+
+    guard characteristic.properties.contains(.read) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .unsupported,
+        message: "Characteristic \(characteristicUuid) does not support reads"
+      )
     }
     
     characteristicReadContinuations[characteristic] = characteristicReadContinuations[characteristic] ?? [];
@@ -518,11 +607,28 @@ actor PeripheralActor: Equatable {
   }
   
   func writeCharacteristic(serviceUuid: String, characteristicUuid: String, value: Data, withoutResponse: Bool) async throws {
-    guard
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) })
-    else {
-      return
+    guard let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
+    }
+
+    guard let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No characteristic found with UUID: \(characteristicUuid)"
+      )
+    }
+
+    guard characteristic.properties.contains(.write) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .unsupported,
+        message: "Characteristic \(characteristicUuid) does not support writes with response"
+      )
     }
     
     characteristicWriteContinuations[characteristic] = characteristicWriteContinuations[characteristic] ?? [];
@@ -538,12 +644,28 @@ actor PeripheralActor: Equatable {
   }
   
   func observeCharacteristic(observe: Bool, serviceUuid: String, characteristicUuid: String) async throws {
-    guard
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
-      characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate)
-    else {
-      return
+    guard let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
+    }
+
+    guard let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No characteristic found with UUID: \(characteristicUuid)"
+      )
+    }
+
+    guard characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .unsupported,
+        message: "Characteristic \(characteristicUuid) does not support notifications"
+      )
     }
     
     observeCharacteristicContinuations[characteristic] = observeCharacteristicContinuations[characteristic] ?? [];
@@ -555,13 +677,28 @@ actor PeripheralActor: Equatable {
   }
   
   func readDescriptor(serviceUuid: String, characteristicUuid: String, descriptorUuid: String) async throws -> Data {
-    guard
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
-      let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) })
-    else {
-      // TODO: Throw
-      return Data()
+    guard let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
+    }
+
+    guard let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No characteristic found with UUID: \(characteristicUuid)"
+      )
+    }
+
+    guard let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No descriptor found with UUID: \(descriptorUuid)"
+      )
     }
     
     descriptorReadContinuations[characteristic] = descriptorReadContinuations[characteristic] ?? [];
@@ -573,15 +710,27 @@ actor PeripheralActor: Equatable {
   }
   
   func writeDescriptor(serviceUuid: String, characteristicUuid: String, descriptorUuid: String, value: Data) async throws {
-    guard
-      let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }),
-      let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }),
-      let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) })
-    else {
-      throw PigeonError(
-        code: "descriptor-not-found",
-        message: "No descriptor found with UUID: \(descriptorUuid) in characteristic: \(characteristicUuid)",
-        details: nil
+    guard let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
+      )
+    }
+
+    guard let characteristic = service.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No characteristic found with UUID: \(characteristicUuid)"
+      )
+    }
+
+    guard let descriptor = characteristic.descriptors?.first(where: { $0.uuid == CBUUID(string: descriptorUuid) }) else {
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No descriptor found with UUID: \(descriptorUuid)"
       )
     }
 
@@ -623,7 +772,11 @@ actor PeripheralActor: Equatable {
   func didReadRSSI(_ RSSI: NSNumber, error: Error?) {
     for continuation in rssiContinuations {
       if let error = error {
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         continuation.resume(returning: RSSI.int64Value)
       }
@@ -638,7 +791,11 @@ actor PeripheralActor: Equatable {
     for continuation in serviceDiscoveryContinuations {
       if let error = error {
         print("didDiscoverServices failed")
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         print("didDiscoverServices")
         continuation.resume()
@@ -660,7 +817,11 @@ actor PeripheralActor: Equatable {
     for continuation in continuations {
       if let error = error {
         print("\(service.uuid.uuidString): didDiscoverCharacteristics failed")
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         print("\(service.uuid.uuidString): didDiscoverCharacteristics")
         continuation.resume()
@@ -679,7 +840,11 @@ actor PeripheralActor: Equatable {
     
     for continuation in continuations {
       if let error = error {
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         continuation.resume(returning: characteristic.value ?? Data())
       }
@@ -695,7 +860,11 @@ actor PeripheralActor: Equatable {
     
     for continuation in continuations {
       if let error = error {
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         continuation.resume()
       }
@@ -714,7 +883,11 @@ actor PeripheralActor: Equatable {
 
     for continuation in continuations {
       if let error = error {
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         continuation.resume(returning: descriptor.value as? Data ?? Data())
       }
@@ -733,7 +906,11 @@ actor PeripheralActor: Equatable {
 
     for continuation in continuations {
       if let error = error {
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         continuation.resume()
       }
@@ -749,7 +926,11 @@ actor PeripheralActor: Equatable {
     
     for continuation in continuations {
       if let error = error {
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         continuation.resume()
       }

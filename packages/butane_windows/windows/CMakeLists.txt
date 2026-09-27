@@ -24,6 +24,8 @@ list(APPEND PLUGIN_SOURCES
   "butane_windows_plugin.h"
   "butane_conversions.cpp"
   "butane_conversions.h"
+  "butane_error.cpp"
+  "butane_error.h"
   "butane_central.cpp"
   "butane_central.h"
   "butane_central_winrt.cpp"

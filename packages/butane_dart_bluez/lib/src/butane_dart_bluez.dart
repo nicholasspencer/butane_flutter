@@ -2,11 +2,37 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:bluez/bluez.dart';
+import 'package:butane_dart/butane_dart.dart' show ButaneException;
 import 'package:butane_dart/interface.dart';
 import 'package:dbus/dbus.dart';
 
 import 'advertising.dart';
 import 'gatt_server.dart';
+
+ButaneException _bluezException(
+  ButaneErrorCode fallback,
+  String message, {
+  Object? cause,
+}) {
+  final nativeCode =
+      cause is DBusMethodResponseException ? cause.errorName : null;
+  final code = switch (nativeCode) {
+    'org.bluez.Error.NotSupported' => ButaneErrorCode.unsupported,
+    'org.bluez.Error.NotReady' => ButaneErrorCode.poweredOff,
+    'org.bluez.Error.NotAvailable' => ButaneErrorCode.unavailable,
+    'org.bluez.Error.DoesNotExist' => ButaneErrorCode.notFound,
+    'org.bluez.Error.NotConnected' => ButaneErrorCode.notConnected,
+    'org.bluez.Error.InvalidArguments' => ButaneErrorCode.invalidArgument,
+    _ => fallback,
+  };
+  return ButaneException(
+    code: code,
+    message: message,
+    platform: 'linux',
+    nativeCode: nativeCode,
+    cause: cause,
+  );
+}
 
 /// Linux implementation of `butane` backed by BlueZ over D-Bus.
 ///
@@ -185,7 +211,10 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final adapter = _defaultAdapter;
     if (adapter == null) {
-      throw StateError('No BlueZ adapter available');
+      throw _bluezException(
+        ButaneErrorCode.unavailable,
+        'No BlueZ adapter available',
+      );
     }
 
     // Purge stale cached devices that match our filter. BlueZ's
@@ -423,7 +452,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   BlueZDevice _requireDevice(PeripheralSession session) {
     final device = _findDevice(session.peripheralIdentifier);
     if (device == null) {
-      throw StateError(
+      throw _bluezException(
+        ButaneErrorCode.notFound,
         'Unknown peripheral ${session.peripheralIdentifier} — '
         'scan or pair the device first',
       );
@@ -436,7 +466,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     for (final svc in device.gattServices) {
       if (svc.uuid.toString().toLowerCase() == want) return svc;
     }
-    throw StateError(
+    throw _bluezException(
+      ButaneErrorCode.notFound,
       'Service $serviceUuid not found on ${device.address} — '
       'call discoverServices() first',
     );
@@ -452,7 +483,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     for (final char in service.characteristics) {
       if (char.uuid.toString().toLowerCase() == want) return char;
     }
-    throw StateError(
+    throw _bluezException(
+      ButaneErrorCode.notFound,
       'Characteristic $characteristicUuid not found in service '
       '$serviceUuid on ${device.address}',
     );
@@ -470,7 +502,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     for (final descriptor in characteristic.descriptors) {
       if (descriptor.uuid.toString().toLowerCase() == want) return descriptor;
     }
-    throw StateError(
+    throw _bluezException(
+      ButaneErrorCode.notFound,
       'Descriptor $descriptorUuid not found in characteristic '
       '$characteristicUuid on ${device.address}',
     );
@@ -543,7 +576,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       _charPathCache[cacheKey] = resolved;
       return resolved;
     }
-    throw StateError(
+    throw _bluezException(
+      ButaneErrorCode.notFound,
       'Could not resolve D-Bus path for characteristic '
       '$characteristicUuid (service $serviceUuid) on $deviceAddress',
     );
@@ -615,13 +649,16 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final deadline = DateTime.now().add(const Duration(seconds: 30));
     while (!device.connected) {
       if (connectError != null) {
-        throw StateError(
+        throw _bluezException(
+          ButaneErrorCode.connectFailed,
           'BlueZ Connect() failed for ${session.peripheralIdentifier}: '
           '$connectError',
+          cause: connectError,
         );
       }
       if (DateTime.now().isAfter(deadline)) {
-        throw StateError(
+        throw _bluezException(
+          ButaneErrorCode.timeout,
           'BlueZ connect timed out for ${session.peripheralIdentifier}: '
           'device never became connected within 30s',
         );
@@ -702,7 +739,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     await _ensureConnected();
     final device = _requireDevice(session);
     if (!device.connected) {
-      throw StateError(
+      throw _bluezException(
+        ButaneErrorCode.notConnected,
         'Cannot discover services on disconnected peripheral '
         '${session.peripheralIdentifier}',
       );
@@ -721,7 +759,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final deadline = DateTime.now().add(const Duration(seconds: 15));
     while (!device.servicesResolved || device.gattServices.isEmpty) {
       if (DateTime.now().isAfter(deadline)) {
-        throw TimeoutException(
+        throw _bluezException(
+          ButaneErrorCode.timeout,
           'BlueZ did not resolve services on '
           '${session.peripheralIdentifier} within 15 s',
         );
@@ -760,7 +799,8 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (service.characteristics.isEmpty) {
       if (DateTime.now().isAfter(deadline)) {
-        throw TimeoutException(
+        throw _bluezException(
+          ButaneErrorCode.timeout,
           'No characteristics materialized for service $serviceUuid on '
           '${session.peripheralIdentifier} within 10 s',
         );
@@ -873,9 +913,11 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         ],
       );
     } on DBusMethodResponseException catch (error) {
-      throw StateError(
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
         'BlueZ WriteValue failed on $charPath: '
         '${error.errorName} ${error.response.values}',
+        cause: error,
       );
     }
   }
@@ -944,9 +986,11 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         name: method,
       );
     } on DBusMethodResponseException catch (error) {
-      throw StateError(
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
         'BlueZ $method failed on $charPath: '
         '${error.errorName} ${error.response.values}',
+        cause: error,
       );
     }
   }
@@ -1021,6 +1065,7 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     required PeripheralSession session,
     required int mtu,
   }) async {
+    Object? failure;
     try {
       // BlueZ owns ATT negotiation and exposes no client-side target-MTU
       // request. Waiting for service resolution ensures its characteristic
@@ -1045,13 +1090,16 @@ base class ButaneDartBluez extends ButanePlatformInterface {
           return mtuValue.value;
         }
       }
-    } catch (_) {
+    } catch (error) {
+      failure = error;
       // Normalize lookup, D-Bus, and malformed-property failures to the same
       // platform-facing contract below.
     }
-    throw StateError(
+    throw _bluezException(
+      ButaneErrorCode.operationFailed,
       'BlueZ did not publish a negotiated ATT MTU for '
       '${session.peripheralIdentifier}',
+      cause: failure,
     );
   }
 
@@ -1075,11 +1123,18 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         interface: 'org.freedesktop.DBus.ObjectManager',
         name: 'GetManagedObjects',
       );
-    } on DBusMethodResponseException {
-      throw StateError('BlueZ GetManagedObjects returned no data');
+    } on DBusMethodResponseException catch (error) {
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
+        'BlueZ GetManagedObjects returned no data',
+        cause: error,
+      );
     }
     if (result.returnValues.isEmpty || result.returnValues.first is! DBusDict) {
-      throw StateError('BlueZ GetManagedObjects returned no data');
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
+        'BlueZ GetManagedObjects returned no data',
+      );
     }
     return result.returnValues.first as DBusDict;
   }
@@ -1102,7 +1157,10 @@ base class ButaneDartBluez extends ButanePlatformInterface {
         }
       }
     }
-    throw StateError('No BlueZ adapter found on the system bus');
+    throw _bluezException(
+      ButaneErrorCode.unavailable,
+      'No BlueZ adapter found on the system bus',
+    );
   }
 
   @override
@@ -1170,9 +1228,11 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       // Drop our reference so callers can retry with a fresh path. BlueZ did
       // not accept the object in this case, so it is inert.
       _advertisement = null;
-      throw StateError(
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
         'BlueZ RegisterAdvertisement failed: '
         '${error.errorName} ${error.response.values}',
+        cause: error,
       );
     } catch (_) {
       _advertisement = null;
@@ -1386,9 +1446,11 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       );
     } on DBusMethodResponseException catch (error) {
       _application = null;
-      throw StateError(
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
         'BlueZ RegisterApplication failed: '
         '${error.errorName} ${error.response.values}',
+        cause: error,
       );
     }
   }

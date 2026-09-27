@@ -63,7 +63,7 @@ TEST(ServiceFilter, RejectsMalformedUuid) {
   flutter::EncodableList values{flutter::EncodableValue("bad")};
   auto result = NormalizeServiceFilter(&values);
   ASSERT_TRUE(result.has_error());
-  EXPECT_EQ(result.error().code(), "invalid_argument");
+  EXPECT_EQ(result.error().code(), "invalidArgument");
 }
 AdvertisementEvent Advertisement() {
   return {0x00A1B2C3D4E5ULL, int16_t{-63}, std::string("Peripheral"),
@@ -102,7 +102,7 @@ TEST(AdvertisementMapping, NullFieldsAndMalformedUuid) {
   event.service_data["bad"] = {};
   result = BuildScanResult(event, nullptr);
   ASSERT_TRUE(result.has_error());
-  EXPECT_EQ(result.error().code(), "invalid_argument");
+  EXPECT_EQ(result.error().code(), "invalidArgument");
 }
 class FakeCentral final : public CentralBackend {
  public:
@@ -113,7 +113,7 @@ class FakeCentral final : public CentralBackend {
   }
   std::optional<FlutterError> StartScan(const std::vector<std::string>& uuids,
       AdvertisementCallback callback) override {
-    if (scanning) return FlutterError("scan_in_progress", "A Windows BLE scan is already active.");
+    if (scanning) return FlutterError("invalidArgument", "A Windows BLE scan is already active.");
     filters = uuids; receipt = std::move(callback); scanning = true;
     return std::nullopt;
   }
@@ -372,7 +372,7 @@ TEST(ButaneWindowsPlugin, ScanRejectsConcurrentStart) {
   Fixture f;
   f.plugin->Scan(nullptr, nullptr, [](auto error) { EXPECT_FALSE(error); });
   f.plugin->Scan(nullptr, nullptr, [](auto error) {
-    ASSERT_TRUE(error); EXPECT_EQ(error->code(), "scan_in_progress");
+    ASSERT_TRUE(error); EXPECT_EQ(error->code(), "invalidArgument");
   });
 }
 TEST(ButaneWindowsPlugin, CancelScanIsIdempotent) {
@@ -394,7 +394,7 @@ TEST(ButaneWindowsPlugin, ConnectRejectsMalformedAddress) {
   Fixture f;
   f.plugin->Connect(PeripheralSession("bad"), [](auto error) {
     ASSERT_TRUE(error);
-    EXPECT_EQ(error->code(), "invalid_argument");
+    EXPECT_EQ(error->code(), "invalidArgument");
   });
   EXPECT_EQ(f.connection->connects, 0);
 }
@@ -428,7 +428,7 @@ TEST(ButaneWindowsPlugin, ConnectFailureErasesPendingState) {
   f.plugin->Connect(session, [](auto) {});
   f.connection->Complete(
       0x00A1B2C3D4E5ULL,
-      FlutterError("connection_failed", "failed"));
+      FlutterError("connectFailed", "failed"));
   f.plugin->ConnectionState(session, [](auto state) {
     EXPECT_EQ(state.value(), ConnectionState::kDisconnected);
   });
@@ -448,11 +448,11 @@ TEST(ButaneWindowsPlugin, MalformedCancelAndStateReturnInvalidArgument) {
   const PeripheralSession malformed("not-an-address");
   f.plugin->CancelConnection(malformed, [](auto error) {
     ASSERT_TRUE(error);
-    EXPECT_EQ(error->code(), "invalid_argument");
+    EXPECT_EQ(error->code(), "invalidArgument");
   });
   f.plugin->ConnectionState(malformed, [](auto result) {
     ASSERT_TRUE(result.has_error());
-    EXPECT_EQ(result.error().code(), "invalid_argument");
+    EXPECT_EQ(result.error().code(), "invalidArgument");
   });
 }
 TEST(ButaneWindowsPlugin, ConnectionChangePostsBeforeFlutterApi) {
@@ -502,7 +502,7 @@ TEST(ButaneWindowsPlugin, DiscoverCharacteristicsRejectsUnknownService) {
       PeripheralSession("00:A1:B2:C3:D4:E5"), "180D", nullptr,
       [](auto error) {
         ASSERT_TRUE(error);
-        EXPECT_EQ(error->code(), "not-found");
+        EXPECT_EQ(error->code(), "notFound");
       });
   EXPECT_EQ(f.discovery->characteristic_address, 0u);
 }
@@ -568,18 +568,18 @@ TEST(ButaneWindowsPlugin, MalformedDiscoveryInputReturnsInvalidArgument) {
   f.plugin->DiscoverServices(PeripheralSession("bad"), nullptr,
       [](auto error) {
         ASSERT_TRUE(error);
-        EXPECT_EQ(error->code(), "invalid_argument");
+        EXPECT_EQ(error->code(), "invalidArgument");
       });
   f.plugin->Characteristics(PeripheralSession("00:A1:B2:C3:D4:E5"),
       "bad", [](auto result) {
         ASSERT_TRUE(result.has_error());
-        EXPECT_EQ(result.error().code(), "invalid_argument");
+        EXPECT_EQ(result.error().code(), "invalidArgument");
       });
   flutter::EncodableList invalid_filter{flutter::EncodableValue(int32_t{1})};
   f.plugin->DiscoverServices(PeripheralSession("00:A1:B2:C3:D4:E5"),
       &invalid_filter, [](auto error) {
         ASSERT_TRUE(error);
-        EXPECT_EQ(error->code(), "invalid_argument");
+        EXPECT_EQ(error->code(), "invalidArgument");
       });
 }
 TEST(ButaneWindowsPlugin, DiscoveryStatusUsesSharedErrors) {
@@ -589,7 +589,7 @@ TEST(ButaneWindowsPlugin, DiscoveryStatusUsesSharedErrors) {
   f.plugin->DiscoverServices(PeripheralSession("00:A1:B2:C3:D4:E5"),
       nullptr, [](auto error) {
         ASSERT_TRUE(error);
-        EXPECT_EQ(error->code(), "unauthorized");
+        EXPECT_EQ(error->code(), "operationFailed");
         EXPECT_EQ(error->message(), "Bluetooth GATT access was denied.");
       });
 }
@@ -608,7 +608,7 @@ TEST(ButaneWindowsPlugin, WriteCharacteristicRejectsMalformedIdentity) {
   Fixture f;
   f.plugin->WriteCharacteristic(PeripheralSession("bad"), "180D", "2A37",
       {}, false, [](auto error) {
-        ASSERT_TRUE(error); EXPECT_EQ(error->code(), "invalid_argument");
+        ASSERT_TRUE(error); EXPECT_EQ(error->code(), "invalidArgument");
       });
   EXPECT_EQ(f.operations->last_address, 0u);
 }
@@ -637,10 +637,10 @@ TEST(ButaneWindowsPlugin, UnobserveForwardsDisable) {
 }
 TEST(ButaneWindowsPlugin, WriteDescriptorForwardsFullPathAndErrors) {
   Fixture f;
-  f.operations->error = FlutterError("unauthorized", "denied");
+  f.operations->error = FlutterError("operationFailed", "denied");
   f.plugin->WriteDescriptor(PeripheralSession("00:A1:B2:C3:D4:E5"),
       "180D", "2A37", "2902", {9, 8}, [](auto error) {
-        ASSERT_TRUE(error); EXPECT_EQ(error->code(), "unauthorized");
+        ASSERT_TRUE(error); EXPECT_EQ(error->code(), "operationFailed");
       });
   EXPECT_EQ(f.operations->descriptor,
       "00002902-0000-1000-8000-00805f9b34fb");
@@ -657,12 +657,12 @@ TEST(ButaneWindowsPlugin, ReadRssiRejectsMissingAndStaleSnapshot) {
   Fixture f;
   f.plugin->ReadRssi(PeripheralSession("00:A1:B2:C3:D4:E5"),
       [](auto result) { ASSERT_TRUE(result.has_error());
-                        EXPECT_EQ(result.error().code(), "rssi-unavailable"); });
+                        EXPECT_EQ(result.error().code(), "unavailable"); });
   f.cache->Observe(0x00A1B2C3D4E5ULL, -61,
                    RssiCache::Clock::now() - 31s);
   f.plugin->ReadRssi(PeripheralSession("00:A1:B2:C3:D4:E5"),
       [](auto result) { ASSERT_TRUE(result.has_error());
-                        EXPECT_EQ(result.error().code(), "rssi-unavailable"); });
+                        EXPECT_EQ(result.error().code(), "unavailable"); });
 }
 TEST(ButaneWindowsPlugin, RequestMtuReturnsNegotiatedValueAndRejectsRange) {
   Fixture f;
@@ -672,7 +672,7 @@ TEST(ButaneWindowsPlugin, RequestMtuReturnsNegotiatedValueAndRejectsRange) {
   EXPECT_EQ(f.operations->mtu, 512);
   f.plugin->RequestMtu(PeripheralSession("00:A1:B2:C3:D4:E5"), 22,
       [](auto result) { ASSERT_TRUE(result.has_error());
-                        EXPECT_EQ(result.error().code(), "invalid_argument"); });
+                        EXPECT_EQ(result.error().code(), "invalidArgument"); });
   EXPECT_EQ(f.operations->mtu, 512);
 }
 TEST(ButaneWindowsPlugin, OperationsCloseBeforeDispatchDependencies) {

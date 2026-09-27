@@ -120,7 +120,7 @@ TEST(WindowsConnectionBackend, FailureClosesBeforeCallback) {
       },
       [&](auto error) {
         ASSERT_TRUE(error);
-        EXPECT_EQ(error->code(), "connection_failed");
+        EXPECT_EQ(error->code(), "connectFailed");
         factory->events->push_back("callback");
       });
   factory->events->clear();

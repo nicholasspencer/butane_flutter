@@ -9,8 +9,6 @@ import FlutterMacOS
 #endif
 import CoreBluetooth
 
-extension FlutterError: Error {}
-
 public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   var flutterApi: ButaneFlutterApi
   
@@ -108,21 +106,42 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   }
   
   func connect(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void) {
-    centralManager(session.session).connect(identifier: session.peripheralIdentifier)
-    
-    completion(.success)
+    do {
+      try centralManager(session.session).connect(identifier: session.peripheralIdentifier)
+      completion(.success)
+    } catch {
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .connectFailed,
+        message: error.localizedDescription
+      )))
+    }
   }
   
   func cancelConnection(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void) {
-    centralManager(session.session).cancelConnection(identifier: session.peripheralIdentifier)
-    
-    completion(.success)
+    do {
+      try centralManager(session.session).cancelConnection(identifier: session.peripheralIdentifier)
+      completion(.success)
+    } catch {
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
+    }
   }
   
   func connectionState(session: PeripheralSession, completion: @escaping (Result<ConnectionState, Error>) -> Void) {
-    let state = centralManager(session.session).connectionState(identifier: session.peripheralIdentifier)
-    
-    completion(.success(state))
+    do {
+      let state = try centralManager(session.session).connectionState(identifier: session.peripheralIdentifier)
+      completion(.success(state))
+    } catch {
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
+    }
   }
   
   func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -134,10 +153,17 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   
   func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void) {
     let central = centralManager(session.session)
-    
-    let services = central.services(identifier: session.peripheralIdentifier)
-    
-    completion(.success(services))
+
+    do {
+      let services = try central.services(identifier: session.peripheralIdentifier)
+      completion(.success(services))
+    } catch {
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
+    }
   }
   
   func discoverCharacteristics(session: PeripheralSession, serviceUuid: String, characteristicUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -149,10 +175,17 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
   
   func characteristics(session: PeripheralSession, serviceUuid: String, completion: @escaping (Result<[Characteristic], Error>) -> Void) {
     let central = centralManager(session.session)
-      
-    let characteristics = central.characteristics(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid)
-      
-    completion(.success(characteristics))
+
+    do {
+      let characteristics = try central.characteristics(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid)
+      completion(.success(characteristics))
+    } catch {
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
+    }
   }
   
   func readCharacteristic(session: PeripheralSession, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
@@ -186,7 +219,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       let effectiveMtu = try central.requestMtu(identifier: session.peripheralIdentifier, mtu: mtu)
       completion(.success(effectiveMtu))
     } catch {
-      completion(.failure(error))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -216,7 +253,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
         try await pm.addService(service: service)
         completion(.success)
       } catch {
-        completion(.failure(error))
+        completion(.failure(butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        )))
       }
     }
   }
@@ -227,7 +268,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       try pm.removeService(serviceUuid: serviceUuid)
       completion(.success)
     } catch {
-      completion(.failure(error))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -243,7 +288,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       try pm.respondToRequest(requestId: requestId, result: result, value: value)
       completion(.success)
     } catch {
-      completion(.failure(error))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -253,7 +302,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       let result = try pm.updateValue(serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, value: value)
       completion(.success(result))
     } catch {
-      completion(.failure(error))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -268,7 +321,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       try await central.discoverServices(identifier: session.peripheralIdentifier, serviceUuids: serviceUuids)
       completion(.success)
     } catch {
-      completion(.failure(FlutterError()))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -281,7 +338,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       try await central.discoverCharacteristics(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuids: characteristicUuids)
       completion(.success)
     } catch {
-      completion(.failure(FlutterError()))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -292,7 +353,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       let value = try await central.readCharacteristic(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
       completion(.success(FlutterStandardTypedData(bytes: value)))
     } catch {
-      completion(.failure(FlutterError()))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -303,7 +368,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       try await central.writeCharacteristic(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, value: value.data, withoutResponse: withoutResponse)
       completion(.success)
     } catch {
-      completion(.failure(FlutterError()))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -314,7 +383,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       try await central.observeCharacteristic(observe: observe, identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid)
       completion(.success)
     } catch {
-      completion(.failure(FlutterError()))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -325,7 +398,11 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       let value = try await central.readDescriptor(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid)
       completion(.success(FlutterStandardTypedData(bytes: value)))
     } catch {
-      completion(.failure(FlutterError()))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
@@ -336,17 +413,26 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       try await central.writeDescriptor(identifier: session.peripheralIdentifier, serviceUuid: serviceUuid, characteristicUuid: characteristicUuid, descriptorUuid: descriptorUuid, value: value.data)
       completion(.success)
     } catch {
-      completion(.failure(error))
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
   
   func readRssi(session: PeripheralSession, completion: @escaping (Result<Int64, Error>) -> Void) async {
     let central = centralManager(session.session)
-    
-    if let rssi = try? await central.readRssi(identifier: session.peripheralIdentifier) {
+
+    do {
+      let rssi = try await central.readRssi(identifier: session.peripheralIdentifier)
       completion(.success(rssi))
-    } else {
-      completion(.failure(FlutterError()))
+    } catch {
+      completion(.failure(butaneFlutterError(
+        nativeError: error,
+        fallback: .operationFailed,
+        message: error.localizedDescription
+      )))
     }
   }
 }

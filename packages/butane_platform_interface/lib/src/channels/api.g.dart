@@ -116,6 +116,26 @@ enum ClientState {
   poweredOn,
 }
 
+/// The shared error vocabulary emitted by every Butane backend.
+///
+/// On the platform channel, `FlutterError.code` is the lowerCamelCase enum
+/// member name and `FlutterError.message` is human-readable text. Its details
+/// are a map whose optional `platform` value is `darwin`, `android`, `windows`,
+/// or `linux`, and whose optional `nativeCode` value is the operating-system
+/// code or D-Bus error name.
+enum ButaneErrorCode {
+  unsupported,
+  unavailable,
+  poweredOff,
+  notFound,
+  notConnected,
+  connectFailed,
+  disconnected,
+  timeout,
+  invalidArgument,
+  operationFailed,
+}
+
 enum ConnectionState {
   disconnected,
   connecting,
@@ -1053,56 +1073,59 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is ClientState) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    } else if (value is ConnectionState) {
+    } else if (value is ButaneErrorCode) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    } else if (value is AttResult) {
+    } else if (value is ConnectionState) {
       buffer.putUint8(131);
       writeValue(buffer, value.index);
-    } else if (value is ClientSession) {
+    } else if (value is AttResult) {
       buffer.putUint8(132);
-      writeValue(buffer, value.encode());
-    } else if (value is PeripheralSession) {
+      writeValue(buffer, value.index);
+    } else if (value is ClientSession) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is PeripheralManagerSession) {
+    } else if (value is PeripheralSession) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is Peripheral) {
+    } else if (value is PeripheralManagerSession) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is AdvertisementData) {
+    } else if (value is Peripheral) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is ScanResult) {
+    } else if (value is AdvertisementData) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    } else if (value is Service) {
+    } else if (value is ScanResult) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    } else if (value is Characteristic) {
+    } else if (value is Service) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    } else if (value is Descriptor) {
+    } else if (value is Characteristic) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    } else if (value is CharacteristicProperty) {
+    } else if (value is Descriptor) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    } else if (value is CharacteristicPermission) {
+    } else if (value is CharacteristicProperty) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    } else if (value is AttRequest) {
+    } else if (value is CharacteristicPermission) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    } else if (value is MutableDescriptor) {
+    } else if (value is AttRequest) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    } else if (value is MutableCharacteristic) {
+    } else if (value is MutableDescriptor) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    } else if (value is MutableService) {
+    } else if (value is MutableCharacteristic) {
       buffer.putUint8(146);
+      writeValue(buffer, value.encode());
+    } else if (value is MutableService) {
+      buffer.putUint8(147);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1117,39 +1140,42 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : ClientState.values[value];
       case 130:
         final value = readValue(buffer) as int?;
-        return value == null ? null : ConnectionState.values[value];
+        return value == null ? null : ButaneErrorCode.values[value];
       case 131:
         final value = readValue(buffer) as int?;
-        return value == null ? null : AttResult.values[value];
+        return value == null ? null : ConnectionState.values[value];
       case 132:
-        return ClientSession.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : AttResult.values[value];
       case 133:
-        return PeripheralSession.decode(readValue(buffer)!);
+        return ClientSession.decode(readValue(buffer)!);
       case 134:
-        return PeripheralManagerSession.decode(readValue(buffer)!);
+        return PeripheralSession.decode(readValue(buffer)!);
       case 135:
-        return Peripheral.decode(readValue(buffer)!);
+        return PeripheralManagerSession.decode(readValue(buffer)!);
       case 136:
-        return AdvertisementData.decode(readValue(buffer)!);
+        return Peripheral.decode(readValue(buffer)!);
       case 137:
-        return ScanResult.decode(readValue(buffer)!);
+        return AdvertisementData.decode(readValue(buffer)!);
       case 138:
-        return Service.decode(readValue(buffer)!);
+        return ScanResult.decode(readValue(buffer)!);
       case 139:
-        return Characteristic.decode(readValue(buffer)!);
+        return Service.decode(readValue(buffer)!);
       case 140:
-        return Descriptor.decode(readValue(buffer)!);
+        return Characteristic.decode(readValue(buffer)!);
       case 141:
-        return CharacteristicProperty.decode(readValue(buffer)!);
+        return Descriptor.decode(readValue(buffer)!);
       case 142:
-        return CharacteristicPermission.decode(readValue(buffer)!);
+        return CharacteristicProperty.decode(readValue(buffer)!);
       case 143:
-        return AttRequest.decode(readValue(buffer)!);
+        return CharacteristicPermission.decode(readValue(buffer)!);
       case 144:
-        return MutableDescriptor.decode(readValue(buffer)!);
+        return AttRequest.decode(readValue(buffer)!);
       case 145:
-        return MutableCharacteristic.decode(readValue(buffer)!);
+        return MutableDescriptor.decode(readValue(buffer)!);
       case 146:
+        return MutableCharacteristic.decode(readValue(buffer)!);
+      case 147:
         return MutableService.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);

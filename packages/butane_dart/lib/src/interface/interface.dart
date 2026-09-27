@@ -229,6 +229,20 @@ abstract base class ButanePlatformInterface {
 
 /// Models
 
+/// The shared error vocabulary emitted by every Butane backend.
+enum ButaneErrorCode {
+  unsupported,
+  unavailable,
+  poweredOff,
+  notFound,
+  notConnected,
+  connectFailed,
+  disconnected,
+  timeout,
+  invalidArgument,
+  operationFailed,
+}
+
 enum ClientState {
   unknown,
   resetting,
