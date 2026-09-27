@@ -389,6 +389,14 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
     Task { await actor.didDiscoverCharacteristicsFor(service: service, error: error) }
   }
+
+  func peripheral(_ peripheral: CBPeripheral, didDiscoverDescriptorsFor characteristic: CBCharacteristic, error: Error?) {
+    guard let actor = actors[peripheral.identifier] else {
+      return
+    }
+
+    Task { await actor.didDiscoverDescriptorsFor(characteristic: characteristic, error: error) }
+  }
   
   func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
     flutterApi.onCharacteristicValue(
@@ -498,6 +506,15 @@ actor PeripheralActor: Equatable {
       peripheral.discoverCharacteristics(uuids, for: service)
     }
   }
+
+  func discoverDescriptors(for characteristic: CBCharacteristic) async {
+    descriptorDiscoveryContinuations[characteristic] = descriptorDiscoveryContinuations[characteristic] ?? [];
+
+    return await withCheckedContinuation { continuation in
+      descriptorDiscoveryContinuations[characteristic]?.append(continuation)
+      peripheral.discoverDescriptors(for: characteristic)
+    }
+  }
   
   func readCharacteristic(serviceUuid: String, characteristicUuid: String) async throws -> Data {
     guard
@@ -605,6 +622,8 @@ actor PeripheralActor: Equatable {
   var serviceDiscoveryContinuations: [CheckedContinuation<Void, Error>] = []
   
   var characteristicDiscoveryContinuations: [CBService:[CheckedContinuation<Void, Error>]] = [:]
+
+  var descriptorDiscoveryContinuations: [CBCharacteristic: [CheckedContinuation<Void, Never>]] = [:]
   
   var rssiContinuations: [CheckedContinuation<Int64, Error>] = []
   
@@ -650,26 +669,50 @@ actor PeripheralActor: Equatable {
     serviceDiscoveryContinuations.removeAll()
   }
   
-  func didDiscoverCharacteristicsFor(service: CBService, error: Error?) {
-    guard let continuations = characteristicDiscoveryContinuations[service] else {
+  func didDiscoverCharacteristicsFor(service: CBService, error: Error?) async {
+    guard let continuations = characteristicDiscoveryContinuations.removeValue(forKey: service) else {
       return
     }
     
     print("didDiscoverCharacteristicsFor(\(service.uuid.uuidString)) has \(characteristicDiscoveryContinuations.count) continuations")
-    
-    for continuation in continuations {
-      if let error = error {
+
+    if let error = error {
+      for continuation in continuations {
         print("\(service.uuid.uuidString): didDiscoverCharacteristics failed")
         continuation.resume(throwing: error)
-      } else {
-        print("\(service.uuid.uuidString): didDiscoverCharacteristics")
-        continuation.resume()
       }
+
+      return
+    }
+
+    await withTaskGroup(of: Void.self) { group in
+      for characteristic in service.characteristics ?? [] {
+        group.addTask {
+          await self.discoverDescriptors(for: characteristic)
+        }
+      }
+    }
+
+    for continuation in continuations {
+      print("\(service.uuid.uuidString): didDiscoverCharacteristics")
+      continuation.resume()
     }
     
     print("didDiscoverCharacteristicsFor(\(service.uuid.uuidString)) purging \(characteristicDiscoveryContinuations.count) continuations")
-    
-    characteristicDiscoveryContinuations[service]?.removeAll()
+  }
+
+  func didDiscoverDescriptorsFor(characteristic: CBCharacteristic, error: Error?) {
+    guard let continuations = descriptorDiscoveryContinuations.removeValue(forKey: characteristic) else {
+      return
+    }
+
+    if let error = error {
+      NSLog("\(characteristic.uuid.uuidString): didDiscoverDescriptors failed: \(error)")
+    }
+
+    for continuation in continuations {
+      continuation.resume()
+    }
   }
   
   func didUpdateValueFor(characteristic: CBCharacteristic, error: Error?) {
