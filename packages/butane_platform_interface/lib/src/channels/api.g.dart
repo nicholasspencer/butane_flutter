@@ -144,6 +144,12 @@ enum ConnectionState {
   disconnecting,
 }
 
+enum BondState {
+  none,
+  bonding,
+  bonded,
+}
+
 enum AttResult {
   success,
   invalidHandle,
@@ -1079,53 +1085,56 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is ConnectionState) {
       buffer.putUint8(131);
       writeValue(buffer, value.index);
-    } else if (value is AttResult) {
+    } else if (value is BondState) {
       buffer.putUint8(132);
       writeValue(buffer, value.index);
-    } else if (value is ClientSession) {
+    } else if (value is AttResult) {
       buffer.putUint8(133);
-      writeValue(buffer, value.encode());
-    } else if (value is PeripheralSession) {
+      writeValue(buffer, value.index);
+    } else if (value is ClientSession) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is PeripheralManagerSession) {
+    } else if (value is PeripheralSession) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is Peripheral) {
+    } else if (value is PeripheralManagerSession) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is AdvertisementData) {
+    } else if (value is Peripheral) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    } else if (value is ScanResult) {
+    } else if (value is AdvertisementData) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    } else if (value is Service) {
+    } else if (value is ScanResult) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    } else if (value is Characteristic) {
+    } else if (value is Service) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    } else if (value is Descriptor) {
+    } else if (value is Characteristic) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    } else if (value is CharacteristicProperty) {
+    } else if (value is Descriptor) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    } else if (value is CharacteristicPermission) {
+    } else if (value is CharacteristicProperty) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    } else if (value is AttRequest) {
+    } else if (value is CharacteristicPermission) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    } else if (value is MutableDescriptor) {
+    } else if (value is AttRequest) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    } else if (value is MutableCharacteristic) {
+    } else if (value is MutableDescriptor) {
       buffer.putUint8(146);
       writeValue(buffer, value.encode());
-    } else if (value is MutableService) {
+    } else if (value is MutableCharacteristic) {
       buffer.putUint8(147);
+      writeValue(buffer, value.encode());
+    } else if (value is MutableService) {
+      buffer.putUint8(148);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1146,36 +1155,39 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : ConnectionState.values[value];
       case 132:
         final value = readValue(buffer) as int?;
-        return value == null ? null : AttResult.values[value];
+        return value == null ? null : BondState.values[value];
       case 133:
-        return ClientSession.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : AttResult.values[value];
       case 134:
-        return PeripheralSession.decode(readValue(buffer)!);
+        return ClientSession.decode(readValue(buffer)!);
       case 135:
-        return PeripheralManagerSession.decode(readValue(buffer)!);
+        return PeripheralSession.decode(readValue(buffer)!);
       case 136:
-        return Peripheral.decode(readValue(buffer)!);
+        return PeripheralManagerSession.decode(readValue(buffer)!);
       case 137:
-        return AdvertisementData.decode(readValue(buffer)!);
+        return Peripheral.decode(readValue(buffer)!);
       case 138:
-        return ScanResult.decode(readValue(buffer)!);
+        return AdvertisementData.decode(readValue(buffer)!);
       case 139:
-        return Service.decode(readValue(buffer)!);
+        return ScanResult.decode(readValue(buffer)!);
       case 140:
-        return Characteristic.decode(readValue(buffer)!);
+        return Service.decode(readValue(buffer)!);
       case 141:
-        return Descriptor.decode(readValue(buffer)!);
+        return Characteristic.decode(readValue(buffer)!);
       case 142:
-        return CharacteristicProperty.decode(readValue(buffer)!);
+        return Descriptor.decode(readValue(buffer)!);
       case 143:
-        return CharacteristicPermission.decode(readValue(buffer)!);
+        return CharacteristicProperty.decode(readValue(buffer)!);
       case 144:
-        return AttRequest.decode(readValue(buffer)!);
+        return CharacteristicPermission.decode(readValue(buffer)!);
       case 145:
-        return MutableDescriptor.decode(readValue(buffer)!);
+        return AttRequest.decode(readValue(buffer)!);
       case 146:
-        return MutableCharacteristic.decode(readValue(buffer)!);
+        return MutableDescriptor.decode(readValue(buffer)!);
       case 147:
+        return MutableCharacteristic.decode(readValue(buffer)!);
+      case 148:
         return MutableService.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1364,6 +1376,46 @@ class ButaneHostApi {
       isNullValid: false,
     );
     return pigeonVar_replyValue! as ConnectionState;
+  }
+
+  /// Initiates bonding with the peripheral.
+  Future<void> bond({required PeripheralSession session}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.bond$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<BondState> bondState({required PeripheralSession session}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.bondState$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as BondState;
   }
 
   /// Discovers services offered by the peripheral.
@@ -1827,6 +1879,8 @@ abstract class ButaneFlutterApi {
   /// "Peripheral" APIs.
   void onConnectionState(Peripheral peripheral, ConnectionState state);
 
+  void onBondState(PeripheralSession session, BondState state);
+
   void onCharacteristicValue(
       Peripheral peripheral, Characteristic characteristic, Uint8List value);
 
@@ -1918,6 +1972,30 @@ abstract class ButaneFlutterApi {
           final ConnectionState arg_state = args[1]! as ConnectionState;
           try {
             api.onConnectionState(arg_peripheral, arg_state);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onBondState$messageChannelSuffix',
+          pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final PeripheralSession arg_session = args[0]! as PeripheralSession;
+          final BondState arg_state = args[1]! as BondState;
+          try {
+            api.onBondState(arg_session, arg_state);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

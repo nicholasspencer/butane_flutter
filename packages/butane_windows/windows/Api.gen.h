@@ -94,6 +94,12 @@ enum class ConnectionState {
   kDisconnecting = 4
 };
 
+enum class BondState {
+  kNone = 0,
+  kBonding = 1,
+  kBonded = 2
+};
+
 enum class AttResult {
   kSuccess = 0,
   kInvalidHandle = 1,
@@ -858,6 +864,13 @@ class ButaneHostApi {
   virtual void ConnectionState(
     const PeripheralSession& session,
     std::function<void(ErrorOr<::butane_windows::ConnectionState> reply)> result) = 0;
+  // Initiates bonding with the peripheral.
+  virtual void Bond(
+    const PeripheralSession& session,
+    std::function<void(std::optional<FlutterError> reply)> result) = 0;
+  virtual void BondState(
+    const PeripheralSession& session,
+    std::function<void(ErrorOr<BondState> reply)> result) = 0;
   // Discovers services offered by the peripheral.
   virtual void DiscoverServices(
     const PeripheralSession& session,
@@ -999,6 +1012,11 @@ class ButaneFlutterApi {
   void OnConnectionState(
     const Peripheral& peripheral,
     const ConnectionState& state,
+    std::function<void(void)>&& on_success,
+    std::function<void(const FlutterError&)>&& on_error);
+  void OnBondState(
+    const PeripheralSession& session,
+    const BondState& state,
     std::function<void(void)>&& on_success,
     std::function<void(const FlutterError&)>&& on_error);
   void OnCharacteristicValue(

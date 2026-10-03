@@ -6,6 +6,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
+#include "butane_bonding.h"
 #include "butane_central.h"
 #include "butane_connection.h"
 #include "butane_gatt_operations.h"
@@ -188,6 +189,50 @@ class FakeConnection final : public ConnectionBackend {
   std::unordered_map<uint64_t, StateCallback> callbacks;
   std::unordered_map<uint64_t, ConnectCallback> completions;
 };
+class FakeBondingBackend final : public BondingBackend {
+ public:
+  explicit FakeBondingBackend(
+      std::shared_ptr<std::vector<std::string>> lifecycle = nullptr)
+      : lifecycle(std::move(lifecycle)) {}
+  void Bond(uint64_t address, PeripheralSession session,
+            StateCallback callback, Completion completion) override {
+    ++bonds;
+    addresses.push_back(address);
+    sessions.push_back(std::move(session));
+    state_callback = std::move(callback);
+    bond_completion = std::move(completion);
+  }
+  void State(uint64_t address, StateCompletion completion) override {
+    ++state_queries;
+    addresses.push_back(address);
+    if (state_error) {
+      completion(*state_error);
+    } else {
+      completion(state);
+    }
+  }
+  void Close() override {
+    ++closes;
+    if (lifecycle) lifecycle->push_back("bonding");
+  }
+  void Emit(BondState value) {
+    state = value;
+    state_callback({sessions.back(), value});
+  }
+  void Complete(std::optional<FlutterError> error = std::nullopt) {
+    bond_completion(std::move(error));
+  }
+  int bonds = 0;
+  int state_queries = 0;
+  int closes = 0;
+  BondState state = BondState::kNone;
+  std::optional<FlutterError> state_error;
+  std::vector<uint64_t> addresses;
+  std::vector<PeripheralSession> sessions;
+  StateCallback state_callback;
+  Completion bond_completion;
+  std::shared_ptr<std::vector<std::string>> lifecycle;
+};
 class FakeGattDiscovery final : public GattDiscoveryBackend {
  public:
   void DiscoverServices(uint64_t address, std::vector<std::string> uuids,
@@ -300,6 +345,11 @@ class FakeSink final : public FlutterEventSink {
     connection_sessions.push_back(peripheral.session());
     connection_states.push_back(value);
   }
+  void OnBondState(const PeripheralSession& session,
+                   BondState value) override {
+    bond_sessions.push_back(session);
+    bond_states.push_back(value);
+  }
   void OnCharacteristicValue(const Peripheral& peripheral,
       const Characteristic& characteristic,
       const std::vector<uint8_t>& value) override {
@@ -312,18 +362,25 @@ class FakeSink final : public FlutterEventSink {
   std::vector<ScanResult> results;
   std::vector<PeripheralSession> connection_sessions;
   std::vector<ConnectionState> connection_states;
+  std::vector<PeripheralSession> bond_sessions;
+  std::vector<BondState> bond_states;
   std::vector<Peripheral> characteristic_peripherals;
   std::vector<Characteristic> characteristics;
   std::vector<std::vector<uint8_t>> characteristic_values;
   std::shared_ptr<std::vector<std::string>> lifecycle;
 };
 struct Fixture {
-  Fixture() {
+  explicit Fixture(bool bonding_available = true) {
     lifecycle = std::make_shared<std::vector<std::string>>();
     auto cache_value = std::make_unique<RssiCache>(); cache = cache_value.get();
     auto c = std::make_unique<FakeCentral>(cache); central = c.get();
     auto connection_value = std::make_unique<FakeConnection>();
     connection = connection_value.get();
+    std::unique_ptr<FakeBondingBackend> bonding_value;
+    if (bonding_available) {
+      bonding_value = std::make_unique<FakeBondingBackend>(lifecycle);
+      bonding = bonding_value.get();
+    }
     auto discovery_value = std::make_unique<FakeGattDiscovery>();
     discovery = discovery_value.get();
     auto operations_value = std::make_unique<FakeGattOperations>(lifecycle);
@@ -332,14 +389,15 @@ struct Fixture {
     auto s = std::make_unique<FakeSink>(lifecycle); sink = s.get();
     plugin = std::make_unique<ButaneWindowsPlugin>(
         std::move(cache_value), std::move(c), std::move(connection_value),
-        std::move(discovery_value), std::move(operations_value), std::move(r),
-        std::move(s));
+        std::move(bonding_value), std::move(discovery_value),
+        std::move(operations_value), std::move(r), std::move(s));
   }
   RssiCache* cache;
   FakeCentral* central;
   FakeRunner* runner;
   FakeSink* sink;
   FakeConnection* connection;
+  FakeBondingBackend* bonding = nullptr;
   FakeGattDiscovery* discovery;
   FakeGattOperations* operations;
   std::shared_ptr<std::vector<std::string>> lifecycle;
@@ -467,6 +525,68 @@ TEST(ButaneWindowsPlugin, ConnectionChangePostsBeforeFlutterApi) {
   EXPECT_EQ(f.sink->connection_states[0], ConnectionState::kConnected);
   EXPECT_EQ(f.sink->connection_sessions[0].peripheral_identifier(),
             session.peripheral_identifier());
+}
+TEST(ButaneWindowsPlugin, BondRejectsMalformedAddress) {
+  Fixture f;
+  f.plugin->Bond(PeripheralSession("bad"), [](auto error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "invalidArgument");
+  });
+  EXPECT_EQ(f.bonding->bonds, 0);
+}
+TEST(ButaneWindowsPlugin, BondForwardsSessionAndPostsCallback) {
+  Fixture f;
+  const PeripheralSession session(
+      "00:A1:B2:C3:D4:E5", nullptr, nullptr, nullptr);
+  bool completed = false;
+  f.plugin->Bond(session, [&](auto error) {
+    EXPECT_FALSE(error);
+    completed = true;
+  });
+  ASSERT_EQ(f.bonding->addresses.size(), 1u);
+  EXPECT_EQ(f.bonding->addresses[0], 0x00A1B2C3D4E5ULL);
+  EXPECT_EQ(f.bonding->sessions[0].peripheral_identifier(),
+            session.peripheral_identifier());
+  f.bonding->Emit(BondState::kBonding);
+  EXPECT_TRUE(f.sink->bond_states.empty());
+  f.runner->RunAll();
+  ASSERT_EQ(f.sink->bond_states.size(), 1u);
+  EXPECT_EQ(f.sink->bond_states[0], BondState::kBonding);
+  EXPECT_EQ(f.sink->bond_sessions[0].peripheral_identifier(),
+            session.peripheral_identifier());
+  f.bonding->Complete();
+  EXPECT_TRUE(completed);
+}
+TEST(ButaneWindowsPlugin, BondStateForwardsAddressAndResult) {
+  Fixture f;
+  f.bonding->state = BondState::kBonded;
+  f.plugin->BondState(PeripheralSession("00:A1:B2:C3:D4:E5"),
+                      [](auto result) {
+                        ASSERT_FALSE(result.has_error());
+                        EXPECT_EQ(result.value(), BondState::kBonded);
+                      });
+  EXPECT_EQ(f.bonding->state_queries, 1);
+  EXPECT_EQ(f.bonding->addresses[0], 0x00A1B2C3D4E5ULL);
+}
+TEST(ButaneWindowsPlugin, BondingUnavailableReturnsTypedError) {
+  Fixture f(false);
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  f.plugin->Bond(session, [](auto error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "unavailable");
+  });
+  f.plugin->BondState(session, [](auto result) {
+    ASSERT_TRUE(result.has_error());
+    EXPECT_EQ(result.error().code(), "unavailable");
+  });
+}
+TEST(ButaneWindowsPlugin, BondStateRejectsMalformedAddress) {
+  Fixture f;
+  f.plugin->BondState(PeripheralSession("bad"), [](auto result) {
+    ASSERT_TRUE(result.has_error());
+    EXPECT_EQ(result.error().code(), "invalidArgument");
+  });
+  EXPECT_EQ(f.bonding->state_queries, 0);
 }
 TEST(ButaneWindowsPlugin, DiscoverServicesNormalizesFilter) {
   Fixture f;
@@ -679,9 +799,10 @@ TEST(ButaneWindowsPlugin, OperationsCloseBeforeDispatchDependencies) {
   Fixture f;
   const auto lifecycle = f.lifecycle;
   f.plugin.reset();
-  ASSERT_EQ(lifecycle->size(), 3u);
+  ASSERT_EQ(lifecycle->size(), 4u);
   EXPECT_EQ((*lifecycle)[0], "operations");
-  EXPECT_EQ((*lifecycle)[1], "sink");
-  EXPECT_EQ((*lifecycle)[2], "runner");
+  EXPECT_EQ((*lifecycle)[1], "bonding");
+  EXPECT_EQ((*lifecycle)[2], "sink");
+  EXPECT_EQ((*lifecycle)[3], "runner");
 }
 }  // namespace butane_windows::test

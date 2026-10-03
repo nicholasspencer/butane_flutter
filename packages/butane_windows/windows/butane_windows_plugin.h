@@ -2,6 +2,7 @@
 #define FLUTTER_PLUGIN_BUTANE_WINDOWS_PLUGIN_H_
 
 #include "Api.gen.h"
+#include "butane_bonding.h"
 #include "butane_central_winrt.h"
 #include "butane_connection.h"
 #include "butane_gatt_discovery.h"
@@ -26,6 +27,8 @@ class FlutterEventSink {
   virtual void OnScanResult(const ScanResult& scan_result) = 0;
   virtual void OnConnectionState(const Peripheral& peripheral,
                                  ConnectionState state) = 0;
+  virtual void OnBondState(const PeripheralSession& session,
+                           BondState state) = 0;
   virtual void OnCharacteristicValue(
       const Peripheral& peripheral, const Characteristic& characteristic,
       const std::vector<uint8_t>& value) = 0;
@@ -45,6 +48,7 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
   ButaneWindowsPlugin(std::unique_ptr<RssiCache> rssi_cache,
                       std::unique_ptr<CentralBackend> central,
                       std::unique_ptr<ConnectionBackend> connection,
+                      std::unique_ptr<BondingBackend> bonding,
                       std::unique_ptr<GattDiscoveryBackend> discovery,
                       std::unique_ptr<GattOperationsBackend> operations,
                       std::unique_ptr<PlatformTaskRunner> platform_task_runner,
@@ -82,6 +86,13 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
   void ConnectionState(
       const PeripheralSession& session,
       std::function<void(ErrorOr<butane_windows::ConnectionState> reply)> result)
+      override;
+  void Bond(
+      const PeripheralSession& session,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
+  void BondState(
+      const PeripheralSession& session,
+      std::function<void(ErrorOr<butane_windows::BondState> reply)> result)
       override;
   void DiscoverServices(
       const PeripheralSession& session,
@@ -164,6 +175,7 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
   std::unique_ptr<FlutterEventSink> event_sink_;
   std::unique_ptr<CentralBackend> central_;
   std::unique_ptr<ConnectionBackend> connection_;
+  std::unique_ptr<BondingBackend> bonding_;
   std::unique_ptr<GattDiscoveryBackend> discovery_;
   std::unique_ptr<GattOperationsBackend> operations_;
 };

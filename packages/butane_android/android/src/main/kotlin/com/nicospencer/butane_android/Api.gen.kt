@@ -251,6 +251,18 @@ enum class ConnectionState(val raw: Int) {
   }
 }
 
+enum class BondState(val raw: Int) {
+  NONE(0),
+  BONDING(1),
+  BONDED(2);
+
+  companion object {
+    fun ofRaw(raw: Int): BondState? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 enum class AttResult(val raw: Int) {
   SUCCESS(0),
   INVALID_HANDLE(1),
@@ -1003,80 +1015,85 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
       }
       132.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          AttResult.ofRaw(it.toInt())
+          BondState.ofRaw(it.toInt())
         }
       }
       133.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ClientSession.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          AttResult.ofRaw(it.toInt())
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PeripheralSession.fromList(it)
+          ClientSession.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PeripheralManagerSession.fromList(it)
+          PeripheralSession.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Peripheral.fromList(it)
+          PeripheralManagerSession.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AdvertisementData.fromList(it)
+          Peripheral.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ScanResult.fromList(it)
+          AdvertisementData.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Service.fromList(it)
+          ScanResult.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Characteristic.fromList(it)
+          Service.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Descriptor.fromList(it)
+          Characteristic.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CharacteristicProperty.fromList(it)
+          Descriptor.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CharacteristicPermission.fromList(it)
+          CharacteristicProperty.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AttRequest.fromList(it)
+          CharacteristicPermission.fromList(it)
         }
       }
       145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MutableDescriptor.fromList(it)
+          AttRequest.fromList(it)
         }
       }
       146.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MutableCharacteristic.fromList(it)
+          MutableDescriptor.fromList(it)
         }
       }
       147.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MutableCharacteristic.fromList(it)
+        }
+      }
+      148.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           MutableService.fromList(it)
         }
@@ -1098,68 +1115,72 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
         stream.write(131)
         writeValue(stream, value.raw.toLong())
       }
-      is AttResult -> {
+      is BondState -> {
         stream.write(132)
         writeValue(stream, value.raw.toLong())
       }
-      is ClientSession -> {
+      is AttResult -> {
         stream.write(133)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is PeripheralSession -> {
+      is ClientSession -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is PeripheralManagerSession -> {
+      is PeripheralSession -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is Peripheral -> {
+      is PeripheralManagerSession -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is AdvertisementData -> {
+      is Peripheral -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is ScanResult -> {
+      is AdvertisementData -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is Service -> {
+      is ScanResult -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is Characteristic -> {
+      is Service -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is Descriptor -> {
+      is Characteristic -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is CharacteristicProperty -> {
+      is Descriptor -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is CharacteristicPermission -> {
+      is CharacteristicProperty -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is AttRequest -> {
+      is CharacteristicPermission -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is MutableDescriptor -> {
+      is AttRequest -> {
         stream.write(145)
         writeValue(stream, value.toList())
       }
-      is MutableCharacteristic -> {
+      is MutableDescriptor -> {
         stream.write(146)
         writeValue(stream, value.toList())
       }
-      is MutableService -> {
+      is MutableCharacteristic -> {
         stream.write(147)
+        writeValue(stream, value.toList())
+      }
+      is MutableService -> {
+        stream.write(148)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1189,6 +1210,9 @@ interface ButaneHostApi {
   /** Cancels an active or pending connection to the peripheral. */
   fun cancelConnection(session: PeripheralSession, callback: (Result<Unit>) -> Unit)
   fun connectionState(session: PeripheralSession, callback: (Result<ConnectionState>) -> Unit)
+  /** Initiates bonding with the peripheral. */
+  fun bond(session: PeripheralSession, callback: (Result<Unit>) -> Unit)
+  fun bondState(session: PeripheralSession, callback: (Result<BondState>) -> Unit)
   /** Discovers services offered by the peripheral. */
   fun discoverServices(session: PeripheralSession, serviceUuids: List<String>?, callback: (Result<Unit>) -> Unit)
   fun services(session: PeripheralSession, callback: (Result<List<Service>>) -> Unit)
@@ -1378,6 +1402,45 @@ interface ButaneHostApi {
             val args = message as List<Any?>
             val sessionArg = args[0] as PeripheralSession
             api.connectionState(sessionArg) { result: Result<ConnectionState> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(ApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.bond$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralSession
+            api.bond(sessionArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.bondState$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as PeripheralSession
+            api.bondState(sessionArg) { result: Result<BondState> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(ApiPigeonUtils.wrapError(error))
@@ -1849,6 +1912,23 @@ class ButaneFlutterApi(private val binaryMessenger: BinaryMessenger, private val
     val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(peripheralArg, stateArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(ApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onBondState(sessionArg: PeripheralSession, stateArg: BondState, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onBondState$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(sessionArg, stateArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

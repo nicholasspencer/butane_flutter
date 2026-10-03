@@ -3,9 +3,12 @@ import 'package:butane_dart/interface.dart';
 import 'package:butane_platform_interface/channels.dart';
 import 'package:butane_platform_interface/src/channels/api.g.dart' as api;
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:test/test.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
   late _FakeHostApi hostApi;
   late _TestButanePlatform platform;
   late PeripheralSession session;
@@ -64,6 +67,55 @@ void main() {
     expect(effectiveMtu, 185);
     expect(hostApi.requestMtuCall?.session, _expectedSession);
     expect(hostApi.requestMtuCall?.mtu, 247);
+  });
+
+  test('bridges bonding calls and maps every current state', () async {
+    await platform.bond(session: session);
+
+    expect(hostApi.bondCall?.peripheralIdentifier, 'peripheral');
+    expect(hostApi.bondCall?.clientIdentifier, 'client');
+    expect(hostApi.bondCall?.adapterIdentifier, 'adapter');
+    expect(hostApi.bondCall?.restorationIdentifier, 'restoration');
+
+    const mappings = {
+      api.BondState.none: BondState.none,
+      api.BondState.bonding: BondState.bonding,
+      api.BondState.bonded: BondState.bonded,
+    };
+    for (final MapEntry(key: channelState, value: expected)
+        in mappings.entries) {
+      hostApi.bondStateValue = channelState;
+      expect(await platform.bondState(session: session), expected);
+    }
+
+    expect(hostApi.bondStateCall?.peripheralIdentifier, 'peripheral');
+    expect(hostApi.bondStateCall?.clientIdentifier, 'client');
+    expect(hostApi.bondStateCall?.adapterIdentifier, 'adapter');
+    expect(hostApi.bondStateCall?.restorationIdentifier, 'restoration');
+  });
+
+  test('filters bond callbacks by client and peripheral identifiers', () async {
+    final flutterApi = _TestFlutterApi();
+    platform = _TestButanePlatform(hostApi, flutterApi: flutterApi);
+    final states = platform.bondStateStream(session: session).take(1).toList();
+
+    flutterApi.emitBondState(
+      api.PeripheralSession(
+        peripheralIdentifier: 'peripheral',
+        clientIdentifier: 'other-client',
+      ),
+      api.BondState.none,
+    );
+    flutterApi.emitBondState(
+      api.PeripheralSession(
+        peripheralIdentifier: 'other-peripheral',
+        clientIdentifier: 'client',
+      ),
+      api.BondState.bonded,
+    );
+    flutterApi.emitBondState(_expectedSession, api.BondState.bonding);
+
+    expect(await states, [BondState.bonding]);
   });
 
   test('connect notFound surfaces as ButaneException', () async {
@@ -198,18 +250,33 @@ final _expectedSession = api.PeripheralSession(
 );
 
 final class _TestButanePlatform extends ButanePlatform {
-  _TestButanePlatform(this._hostApi);
+  _TestButanePlatform(this._hostApi, {ButaneFlutterApi? flutterApi})
+      : _flutterApi = flutterApi;
 
   final api.ButaneHostApi _hostApi;
+  ButaneFlutterApi? _flutterApi;
 
   @override
   api.ButaneHostApi get hostApi => _hostApi;
+
+  @override
+  ButaneFlutterApi get flutterApi => _flutterApi ??= ButaneFlutterApi();
+}
+
+final class _TestFlutterApi extends ButaneFlutterApi {
+  void emitBondState(api.PeripheralSession session, api.BondState state) {
+    onBondState(session, state);
+  }
 }
 
 final class _FakeHostApi extends api.ButaneHostApi {
   Uint8List descriptorValue = Uint8List(0);
   int effectiveMtu = 23;
+  api.BondState bondStateValue = api.BondState.none;
   Object? thrownError;
+
+  api.PeripheralSession? bondCall;
+  api.PeripheralSession? bondStateCall;
 
   ({
     api.PeripheralSession session,
@@ -245,6 +312,19 @@ final class _FakeHostApi extends api.ButaneHostApi {
   @override
   Future<void> connect({required api.PeripheralSession session}) async {
     _throwConfiguredError();
+  }
+
+  @override
+  Future<void> bond({required api.PeripheralSession session}) async {
+    bondCall = session;
+  }
+
+  @override
+  Future<api.BondState> bondState({
+    required api.PeripheralSession session,
+  }) async {
+    bondStateCall = session;
+    return bondStateValue;
   }
 
   @override

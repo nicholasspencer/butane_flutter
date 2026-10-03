@@ -44,6 +44,8 @@ enum ConnectionState {
   disconnecting,
 }
 
+enum BondState { none, bonding, bonded }
+
 sealed class Session {}
 
 /// A unique identifier for a peripheral coupled with the [adapterIdentifier] and
@@ -355,6 +357,13 @@ abstract class ButaneHostApi {
   @async
   ConnectionState connectionState({required PeripheralSession session});
 
+  /// Initiates bonding with the peripheral.
+  @async
+  void bond({required PeripheralSession session});
+
+  @async
+  BondState bondState({required PeripheralSession session});
+
   /// Discovers services offered by the peripheral.
   @async
   void discoverServices({
@@ -497,6 +506,8 @@ abstract class ButaneFlutterApi {
   /// "Peripheral" APIs.
 
   void onConnectionState(Peripheral peripheral, ConnectionState state);
+
+  void onBondState(PeripheralSession session, BondState state);
 
   void onCharacteristicValue(
     Peripheral peripheral,

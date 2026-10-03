@@ -143,7 +143,23 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
       )))
     }
   }
-  
+
+  func bond(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void) {
+    completion(.failure(butaneFlutterError(
+      nativeError: nil,
+      fallback: .unsupported,
+      message: "Bonding is unsupported on Darwin."
+    )))
+  }
+
+  func bondState(session: PeripheralSession, completion: @escaping (Result<BondState, Error>) -> Void) {
+    completion(.failure(butaneFlutterError(
+      nativeError: nil,
+      fallback: .unsupported,
+      message: "Bonding is unsupported on Darwin."
+    )))
+  }
+
   func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     print("outer discoverServices")
     Task {

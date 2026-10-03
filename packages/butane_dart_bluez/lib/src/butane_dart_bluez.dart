@@ -732,6 +732,61 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   }
 
   @override
+  Future<void> bond({required PeripheralSession session}) async {
+    await _ensureConnected();
+    final device = _requireDevice(session);
+    if (device.paired) return;
+    try {
+      await device.pair();
+    } on DBusMethodResponseException catch (error) {
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
+        'BlueZ Pair() failed for ${session.peripheralIdentifier}',
+        cause: error,
+      );
+    }
+  }
+
+  @override
+  Future<BondState> bondState({required PeripheralSession session}) async {
+    await _ensureConnected();
+    return _requireDevice(session).paired ? BondState.bonded : BondState.none;
+  }
+
+  @override
+  Stream<BondState> bondStateStream({
+    required PeripheralSession session,
+  }) {
+    late StreamController<BondState> controller;
+    StreamSubscription<List<String>>? sub;
+
+    controller = StreamController<BondState>(
+      onListen: () async {
+        try {
+          await _ensureConnected();
+          final device = _requireDevice(session);
+          controller.add(device.paired ? BondState.bonded : BondState.none);
+          sub = device.propertiesChanged.listen((changed) {
+            if (changed.contains('Paired')) {
+              controller.add(
+                device.paired ? BondState.bonded : BondState.none,
+              );
+            }
+          });
+        } catch (error, stackTrace) {
+          controller.addError(error, stackTrace);
+        }
+      },
+      onCancel: () async {
+        await sub?.cancel();
+        sub = null;
+      },
+    );
+
+    return controller.stream;
+  }
+
+  @override
   Future<void> discoverServices({
     required PeripheralSession session,
     Iterable<String>? serviceUuids,

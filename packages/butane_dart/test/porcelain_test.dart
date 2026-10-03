@@ -243,6 +243,77 @@ void main() {
     });
   });
 
+  group('Peripheral bonding', () {
+    test('forwards the session and maps every current bond state', () async {
+      final platform = _FakePlatform();
+      final manager = CentralManager(
+        clientIdentifier: 'client-id',
+        restorationIdentifier: 'restoration-id',
+        platform: platform,
+      );
+      addTearDown(manager.dispose);
+      final peripheral = Peripheral(
+        manager: manager,
+        name: 'peripheral',
+        identifier: const StringIdentifier('peripheral-id'),
+      );
+
+      await peripheral.bond();
+
+      final invocation = platform.bondInvocation!;
+      expect(invocation.peripheralIdentifier, 'peripheral-id');
+      expect(invocation.clientIdentifier, 'client-id');
+      expect(invocation.adapterIdentifier, isNull);
+      expect(invocation.restorationIdentifier, 'restoration-id');
+
+      const mappings = {
+        api.BondState.none: BondState.none,
+        api.BondState.bonding: BondState.bonding,
+        api.BondState.bonded: BondState.bonded,
+      };
+      for (final MapEntry(key: platformState, value: expected)
+          in mappings.entries) {
+        platform.bondStateValue = platformState;
+        expect(await peripheral.bondState, expected);
+      }
+
+      final stateInvocation = platform.bondStateInvocation!;
+      expect(stateInvocation.peripheralIdentifier, 'peripheral-id');
+      expect(stateInvocation.clientIdentifier, 'client-id');
+      expect(stateInvocation.adapterIdentifier, isNull);
+      expect(stateInvocation.restorationIdentifier, 'restoration-id');
+    });
+
+    test('bondStateStream emits its seed and live platform states', () async {
+      final source = StreamController<api.BondState>();
+      final platform = _FakePlatform(
+        bondStateValue: api.BondState.none,
+        bondStates: source.stream,
+      );
+      final manager = CentralManager(platform: platform);
+      addTearDown(manager.dispose);
+      final peripheral = Peripheral(
+        manager: manager,
+        name: 'peripheral',
+        identifier: const StringIdentifier('peripheral-id'),
+      );
+      final emitted = <BondState>[];
+      final subscription = peripheral.bondStateStream.listen(emitted.add);
+
+      await Future<void>.delayed(Duration.zero);
+      source
+        ..add(api.BondState.bonding)
+        ..add(api.BondState.bonded);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(emitted, [BondState.none, BondState.bonding, BondState.bonded]);
+
+      await subscription.cancel();
+      await source.close();
+      peripheral.dispose();
+    });
+  });
+
   group('Peripheral descriptor and MTU operations', () {
     test('forward the discovered attribute chain to the platform', () async {
       final readValue = Uint8List.fromList([1, 2, 3]);
@@ -358,12 +429,15 @@ final class _FakePlatform extends api.ButanePlatformInterface {
     this.characteristicsValue = const [],
     Stream<api.ClientState>? clientStates,
     Stream<api.ScanResult>? scanResults,
+    this.bondStateValue = api.BondState.none,
+    Stream<api.BondState>? bondStates,
     this.peripheralsValue = const [],
     this.servicesValue = const [],
     Uint8List? descriptorReadValue,
     this.effectiveMtu = 23,
   })  : _clientStates = clientStates,
         _scanResults = scanResults,
+        _bondStates = bondStates,
         descriptorReadValue = descriptorReadValue ?? Uint8List(0);
 
   final api.ClientState clientStateValue;
@@ -371,6 +445,8 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   final Iterable<api.Characteristic> characteristicsValue;
   final Stream<api.ClientState>? _clientStates;
   final Stream<api.ScanResult>? _scanResults;
+  api.BondState bondStateValue;
+  final Stream<api.BondState>? _bondStates;
   final Iterable<api.Peripheral> peripheralsValue;
   final Iterable<api.Service> servicesValue;
   final Uint8List descriptorReadValue;
@@ -392,6 +468,8 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   })? writeDescriptorInvocation;
 
   ({api.PeripheralSession session, int mtu})? requestMtuInvocation;
+  api.PeripheralSession? bondInvocation;
+  api.PeripheralSession? bondStateInvocation;
 
   @override
   Future<api.ClientState> clientState([api.Session? session]) async {
@@ -453,6 +531,25 @@ final class _FakePlatform extends api.ButanePlatformInterface {
     required api.PeripheralSession session,
   }) =>
       throw UnimplementedError();
+
+  @override
+  Future<void> bond({required api.PeripheralSession session}) async {
+    bondInvocation = session;
+  }
+
+  @override
+  Future<api.BondState> bondState({
+    required api.PeripheralSession session,
+  }) async {
+    bondStateInvocation = session;
+    return bondStateValue;
+  }
+
+  @override
+  Stream<api.BondState> bondStateStream({
+    required api.PeripheralSession session,
+  }) =>
+      _bondStates ?? const Stream<api.BondState>.empty();
 
   @override
   Future<void> discoverServices({
