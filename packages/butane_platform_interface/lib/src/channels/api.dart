@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
 
+import 'package:butane_dart/butane_dart.dart' show ButaneException;
 import 'package:butane_dart/interface.dart';
 import 'api.g.dart' as api;
 
@@ -30,6 +31,38 @@ typedef CentralSubscriptionResult = ({
   String characteristicUuid,
 });
 
+Future<T> _invokeHostApi<T>(Future<T> Function() invoke) async {
+  try {
+    return await invoke();
+  } on PlatformException catch (error) {
+    ButaneErrorCode? code;
+    for (final candidate in ButaneErrorCode.values) {
+      if (candidate.name == error.code) {
+        code = candidate;
+        break;
+      }
+    }
+
+    final details = error.details;
+    final platform = details is Map && details['platform'] is String
+        ? details['platform'] as String
+        : null;
+    final nativeCode = code == null
+        ? error.code
+        : details is Map && details['nativeCode'] is String
+            ? details['nativeCode'] as String
+            : null;
+
+    throw ButaneException(
+      code: code ?? ButaneErrorCode.operationFailed,
+      message: error.message ?? error.code,
+      platform: platform,
+      nativeCode: nativeCode,
+      cause: error,
+    );
+  }
+}
+
 /// A default implementation of [ButanePlatformInterface] which uses generated
 /// method channels to call platform-specific code.
 base class ButanePlatform extends ButanePlatformInterface {
@@ -45,7 +78,9 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<ClientState> clientState([Session? session]) async {
-    final state = await hostApi.state(session: session?.toSession());
+    final state = await _invokeHostApi(
+      () => hostApi.state(session: session?.toSession()),
+    );
     return state.toClientState();
   }
 
@@ -57,9 +92,11 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> scan({Iterable<String>? forServices, Session? session}) async {
-    hostApi.scan(
-      session: session?.toSession(),
-      forServices: forServices?.toList(),
+    await _invokeHostApi(
+      () => hostApi.scan(
+        session: session?.toSession(),
+        forServices: forServices?.toList(),
+      ),
     );
   }
 
@@ -72,7 +109,9 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> cancelScan({Session? session}) {
-    return hostApi.cancelScan(session: session?.toSession());
+    return _invokeHostApi(
+      () => hostApi.cancelScan(session: session?.toSession()),
+    );
   }
 
   @override
@@ -80,9 +119,11 @@ base class ButanePlatform extends ButanePlatformInterface {
     Iterable<String> peripheralIdentifiers = const [],
     Session? session,
   }) async {
-    final peripherals = await hostApi.peripherals(
-      peripheralIdentifiers: peripheralIdentifiers.toList(),
-      session: session?.toSession(),
+    final peripherals = await _invokeHostApi(
+      () => hostApi.peripherals(
+        peripheralIdentifiers: peripheralIdentifiers.toList(),
+        session: session?.toSession(),
+      ),
     );
 
     return peripherals.nonNulls.map((e) => e.toPeripheral());
@@ -93,9 +134,11 @@ base class ButanePlatform extends ButanePlatformInterface {
     Iterable<String> serviceUuids = const [],
     Session? session,
   }) async {
-    final peripherals = await hostApi.connectedPeripherals(
-      serviceUuids: serviceUuids.toList(),
-      session: session?.toSession(),
+    final peripherals = await _invokeHostApi(
+      () => hostApi.connectedPeripherals(
+        serviceUuids: serviceUuids.toList(),
+        session: session?.toSession(),
+      ),
     );
 
     return peripherals.nonNulls.map((e) => e.toPeripheral());
@@ -103,19 +146,23 @@ base class ButanePlatform extends ButanePlatformInterface {
 
   @override
   Future<void> connect({required PeripheralSession session}) async {
-    return hostApi.connect(session: session.toSession());
+    return _invokeHostApi(() => hostApi.connect(session: session.toSession()));
   }
 
   @override
   Future<void> cancelConnection({required PeripheralSession session}) async {
-    return hostApi.cancelConnection(session: session.toSession());
+    return _invokeHostApi(
+      () => hostApi.cancelConnection(session: session.toSession()),
+    );
   }
 
   @override
   Future<ConnectionState> connectionState({
     required PeripheralSession session,
   }) async {
-    final state = await hostApi.connectionState(session: session.toSession());
+    final state = await _invokeHostApi(
+      () => hostApi.connectionState(session: session.toSession()),
+    );
 
     return state.toConnectionState();
   }
@@ -137,9 +184,11 @@ base class ButanePlatform extends ButanePlatformInterface {
     required PeripheralSession session,
     Iterable<String>? serviceUuids,
   }) async {
-    await hostApi.discoverServices(
-      session: session.toSession(),
-      serviceUuids: serviceUuids?.toList(),
+    await _invokeHostApi(
+      () => hostApi.discoverServices(
+        session: session.toSession(),
+        serviceUuids: serviceUuids?.toList(),
+      ),
     );
   }
 
@@ -147,7 +196,9 @@ base class ButanePlatform extends ButanePlatformInterface {
   Future<Iterable<Service>> services({
     required PeripheralSession session,
   }) async {
-    final services = await hostApi.services(session: session.toSession());
+    final services = await _invokeHostApi(
+      () => hostApi.services(session: session.toSession()),
+    );
 
     return services.nonNulls.map(ServiceConverter.fromService);
   }
@@ -158,10 +209,12 @@ base class ButanePlatform extends ButanePlatformInterface {
     required String serviceUuid,
     Iterable<String>? characteristicUuids,
   }) async {
-    await hostApi.discoverCharacteristics(
-      session: session.toSession(),
-      serviceUuid: serviceUuid,
-      characteristicUuids: characteristicUuids?.toList(),
+    await _invokeHostApi(
+      () => hostApi.discoverCharacteristics(
+        session: session.toSession(),
+        serviceUuid: serviceUuid,
+        characteristicUuids: characteristicUuids?.toList(),
+      ),
     );
   }
 
@@ -170,9 +223,11 @@ base class ButanePlatform extends ButanePlatformInterface {
     required PeripheralSession session,
     required String serviceUuid,
   }) async {
-    final characteristics = await hostApi.characteristics(
-      session: session.toSession(),
-      serviceUuid: serviceUuid,
+    final characteristics = await _invokeHostApi(
+      () => hostApi.characteristics(
+        session: session.toSession(),
+        serviceUuid: serviceUuid,
+      ),
     );
 
     return characteristics.nonNulls.map(
@@ -186,10 +241,12 @@ base class ButanePlatform extends ButanePlatformInterface {
     required String serviceUuid,
     required String characteristicUuid,
   }) async {
-    return hostApi.readCharacteristic(
-      session: session.toSession(),
-      serviceUuid: serviceUuid,
-      characteristicUuid: characteristicUuid,
+    return _invokeHostApi(
+      () => hostApi.readCharacteristic(
+        session: session.toSession(),
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+      ),
     );
   }
 
@@ -201,12 +258,14 @@ base class ButanePlatform extends ButanePlatformInterface {
     required Uint8List value,
     bool withoutResponse = false,
   }) {
-    return hostApi.writeCharacteristic(
-      session: session.toSession(),
-      serviceUuid: serviceUuid,
-      characteristicUuid: characteristicUuid,
-      value: value,
-      withoutResponse: withoutResponse,
+    return _invokeHostApi(
+      () => hostApi.writeCharacteristic(
+        session: session.toSession(),
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+        value: value,
+        withoutResponse: withoutResponse,
+      ),
     );
   }
 
@@ -219,11 +278,13 @@ base class ButanePlatform extends ButanePlatformInterface {
     required String characteristicUuid,
     bool observe = true,
   }) {
-    return hostApi.observeCharacteristic(
-      observe: observe,
-      session: session.toSession(),
-      serviceUuid: serviceUuid,
-      characteristicUuid: characteristicUuid,
+    return _invokeHostApi(
+      () => hostApi.observeCharacteristic(
+        observe: observe,
+        session: session.toSession(),
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+      ),
     );
   }
 
@@ -234,11 +295,13 @@ base class ButanePlatform extends ButanePlatformInterface {
     required String characteristicUuid,
     required String descriptorUuid,
   }) {
-    return hostApi.readDescriptor(
-      session: session.toSession(),
-      serviceUuid: serviceUuid,
-      characteristicUuid: characteristicUuid,
-      descriptorUuid: descriptorUuid,
+    return _invokeHostApi(
+      () => hostApi.readDescriptor(
+        session: session.toSession(),
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+        descriptorUuid: descriptorUuid,
+      ),
     );
   }
 
@@ -250,12 +313,14 @@ base class ButanePlatform extends ButanePlatformInterface {
     required String descriptorUuid,
     required Uint8List value,
   }) {
-    return hostApi.writeDescriptor(
-      session: session.toSession(),
-      serviceUuid: serviceUuid,
-      characteristicUuid: characteristicUuid,
-      descriptorUuid: descriptorUuid,
-      value: value,
+    return _invokeHostApi(
+      () => hostApi.writeDescriptor(
+        session: session.toSession(),
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+        descriptorUuid: descriptorUuid,
+        value: value,
+      ),
     );
   }
 
@@ -276,7 +341,9 @@ base class ButanePlatform extends ButanePlatformInterface {
   /// Requests a read of the RSSI for the peripheral.
   @override
   Future<int> readRssi({required PeripheralSession session}) {
-    return hostApi.readRssi(session: session.toSession());
+    return _invokeHostApi(
+      () => hostApi.readRssi(session: session.toSession()),
+    );
   }
 
   @override
@@ -284,7 +351,9 @@ base class ButanePlatform extends ButanePlatformInterface {
     required PeripheralSession session,
     required int mtu,
   }) {
-    return hostApi.requestMtu(session: session.toSession(), mtu: mtu);
+    return _invokeHostApi(
+      () => hostApi.requestMtu(session: session.toSession(), mtu: mtu),
+    );
   }
 
   // Peripheral Manager
@@ -293,9 +362,11 @@ base class ButanePlatform extends ButanePlatformInterface {
   Future<ClientState> peripheralManagerState([
     PeripheralManagerSession? session,
   ]) async {
-    final state = await hostApi.peripheralManagerState(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
+    final state = await _invokeHostApi(
+      () => hostApi.peripheralManagerState(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+      ),
     );
     return state.toClientState();
   }
@@ -316,19 +387,23 @@ base class ButanePlatform extends ButanePlatformInterface {
     String? localName,
     Iterable<String>? serviceUuids,
   }) {
-    return hostApi.startAdvertising(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
-      localName: localName,
-      serviceUuids: serviceUuids?.toList(),
+    return _invokeHostApi(
+      () => hostApi.startAdvertising(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+        localName: localName,
+        serviceUuids: serviceUuids?.toList(),
+      ),
     );
   }
 
   @override
   Future<void> stopAdvertising({PeripheralManagerSession? session}) {
-    return hostApi.stopAdvertising(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
+    return _invokeHostApi(
+      () => hostApi.stopAdvertising(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+      ),
     );
   }
 
@@ -337,10 +412,12 @@ base class ButanePlatform extends ButanePlatformInterface {
     PeripheralManagerSession? session,
     required MutableService service,
   }) {
-    return hostApi.addService(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
-      service: service.toMutableService(),
+    return _invokeHostApi(
+      () => hostApi.addService(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+        service: service.toMutableService(),
+      ),
     );
   }
 
@@ -357,18 +434,22 @@ base class ButanePlatform extends ButanePlatformInterface {
     PeripheralManagerSession? session,
     required String serviceUuid,
   }) {
-    return hostApi.removeService(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
-      serviceUuid: serviceUuid,
+    return _invokeHostApi(
+      () => hostApi.removeService(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+        serviceUuid: serviceUuid,
+      ),
     );
   }
 
   @override
   Future<void> removeAllServices({PeripheralManagerSession? session}) {
-    return hostApi.removeAllServices(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
+    return _invokeHostApi(
+      () => hostApi.removeAllServices(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+      ),
     );
   }
 
@@ -379,12 +460,14 @@ base class ButanePlatform extends ButanePlatformInterface {
     required AttResult result,
     Uint8List? value,
   }) {
-    return hostApi.respondToRequest(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
-      requestId: requestId,
-      result: result.toAttResult(),
-      value: value,
+    return _invokeHostApi(
+      () => hostApi.respondToRequest(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+        requestId: requestId,
+        result: result.toAttResult(),
+        value: value,
+      ),
     );
   }
 
@@ -395,12 +478,14 @@ base class ButanePlatform extends ButanePlatformInterface {
     required String characteristicUuid,
     required Uint8List value,
   }) {
-    return hostApi.updateValue(
-      session: session?.toPeripheralManagerSession() ??
-          api.PeripheralManagerSession(),
-      serviceUuid: serviceUuid,
-      characteristicUuid: characteristicUuid,
-      value: value,
+    return _invokeHostApi(
+      () => hostApi.updateValue(
+        session: session?.toPeripheralManagerSession() ??
+            api.PeripheralManagerSession(),
+        serviceUuid: serviceUuid,
+        characteristicUuid: characteristicUuid,
+        value: value,
+      ),
     );
   }
 

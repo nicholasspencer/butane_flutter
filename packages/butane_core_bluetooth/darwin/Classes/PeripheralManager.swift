@@ -82,10 +82,10 @@ class PeripheralManager: NSObject, CBPeripheralManagerDelegate {
 
   func removeService(serviceUuid: String) throws {
     guard let cbService = services[serviceUuid] else {
-      throw PigeonError(
-        code: "service-not-found",
-        message: "No service found with UUID: \(serviceUuid)",
-        details: nil
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
       )
     }
 
@@ -100,10 +100,10 @@ class PeripheralManager: NSObject, CBPeripheralManagerDelegate {
 
   func respondToRequest(requestId: Int64, result: AttResult, value: FlutterStandardTypedData?) throws {
     guard let request = pendingRequests[requestId] else {
-      throw PigeonError(
-        code: "request-not-found",
-        message: "No pending ATT request found with ID: \(requestId)",
-        details: nil
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No pending ATT request found with ID: \(requestId)"
       )
     }
 
@@ -117,18 +117,18 @@ class PeripheralManager: NSObject, CBPeripheralManagerDelegate {
 
   func updateValue(serviceUuid: String, characteristicUuid: String, value: FlutterStandardTypedData) throws -> Bool {
     guard let cbService = services[serviceUuid] else {
-      throw PigeonError(
-        code: "service-not-found",
-        message: "No service found with UUID: \(serviceUuid)",
-        details: nil
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No service found with UUID: \(serviceUuid)"
       )
     }
 
     guard let characteristic = cbService.characteristics?.first(where: { $0.uuid == CBUUID(string: characteristicUuid) }) as? CBMutableCharacteristic else {
-      throw PigeonError(
-        code: "characteristic-not-found",
-        message: "No characteristic found with UUID: \(characteristicUuid) in service: \(serviceUuid)",
-        details: nil
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .notFound,
+        message: "No characteristic found with UUID: \(characteristicUuid) in service: \(serviceUuid)"
       )
     }
 
@@ -149,7 +149,11 @@ class PeripheralManager: NSObject, CBPeripheralManagerDelegate {
     // Resume the addService continuation
     if let continuation = addServiceContinuations.removeValue(forKey: service.uuid) {
       if let error = error {
-        continuation.resume(throwing: error)
+        continuation.resume(throwing: butaneFlutterError(
+          nativeError: error,
+          fallback: .operationFailed,
+          message: error.localizedDescription
+        ))
       } else {
         continuation.resume()
       }

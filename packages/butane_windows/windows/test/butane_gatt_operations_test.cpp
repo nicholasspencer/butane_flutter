@@ -27,15 +27,15 @@ TEST_P(GattOperationErrorTest, MapsStatus) {
 INSTANTIATE_TEST_SUITE_P(
     Statuses, GattOperationErrorTest,
     testing::Values(
-        ErrorCase{GattOperationStatus::kUnreachable, "not-connected"},
-        ErrorCase{GattOperationStatus::kAccessDenied, "unauthorized"},
-        ErrorCase{GattOperationStatus::kNotFound, "not-found"},
+        ErrorCase{GattOperationStatus::kUnreachable, "notConnected"},
+        ErrorCase{GattOperationStatus::kAccessDenied, "operationFailed"},
+        ErrorCase{GattOperationStatus::kNotFound, "notFound"},
         ErrorCase{GattOperationStatus::kUnsupported, "unsupported"}));
 
 TEST(GattOperationErrorTest, MapsProtocolErrorWithOperationAndByte) {
   const auto error = GattOperationError(
       "write descriptor", GattOperationStatus::kProtocolError, uint8_t{42});
-  EXPECT_EQ(error.code(), "gatt-operation-failed");
+  EXPECT_EQ(error.code(), "operationFailed");
   EXPECT_NE(error.message().find("write descriptor"), std::string::npos);
   EXPECT_NE(error.message().find("42"), std::string::npos);
 }

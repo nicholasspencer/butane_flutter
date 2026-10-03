@@ -10,4 +10,5 @@
 /// an unprefixed co-import collides. Import one, or prefix the other.
 library;
 
+export 'src/interface/interface.dart' show ButaneErrorCode;
 export 'src/porcelain/porcelain.dart';

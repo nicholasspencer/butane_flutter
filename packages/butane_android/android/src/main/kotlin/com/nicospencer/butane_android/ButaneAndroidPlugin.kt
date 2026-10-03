@@ -4,13 +4,13 @@ import AdvertisementData
 import AttResult
 import ButaneFlutterApi
 import ButaneHostApi
+import ButaneErrorCode
 import Characteristic
 import CharacteristicProperty
 import ClientSession
 import ClientState
 import ConnectionState
 import Descriptor
-import FlutterError
 import MutableService
 import Peripheral
 import PeripheralManagerSession
@@ -158,10 +158,9 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     private fun <T> notImplemented(callback: (Result<T>) -> Unit) {
         callback(
             Result.failure(
-                FlutterError(
-                    "not-implemented",
+                butaneFlutterError(
+                    ButaneErrorCode.UNSUPPORTED,
                     "Not yet implemented on Android",
-                    null,
                 ),
             ),
         )
@@ -220,7 +219,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val scanner = bluetoothAdapter?.bluetoothLeScanner
         if (scanner == null) {
-            callback(Result.failure(FlutterError("unavailable", "BLE scanner not available", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "BLE scanner not available")))
             return
         }
 
@@ -354,7 +353,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     override fun connect(session: PeripheralSession, callback: (Result<Unit>) -> Unit) {
         val context = applicationContext
         if (context == null) {
-            callback(Result.failure(FlutterError("unavailable", "Context not available", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Context not available")))
             return
         }
 
@@ -362,7 +361,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         val device = discoveredPeripherals[address]
             ?: bluetoothAdapter?.getRemoteDevice(address)
         if (device == null) {
-            callback(Result.failure(FlutterError("not-found", "Peripheral $address not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Peripheral $address not found")))
             return
         }
 
@@ -379,9 +378,9 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 connection.connectDevice(device)
                 callback(Result.success(Unit))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("connect-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.CONNECT_FAILED, "Failed to connect to $address", e)))
             }
-        } ?: callback(Result.failure(FlutterError("unavailable", "Plugin not attached", null)))
+        } ?: callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Plugin not attached")))
     }
 
     override fun cancelConnection(
@@ -401,9 +400,9 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 connections.remove(address)
                 callback(Result.success(Unit))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("disconnect-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to disconnect from $address", e)))
             }
-        } ?: callback(Result.failure(FlutterError("unavailable", "Plugin not attached", null)))
+        } ?: callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Plugin not attached")))
     }
 
     override fun connectionState(
@@ -423,7 +422,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         // Nordic BleManager discovers services automatically on connect.
@@ -439,7 +438,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         val gattServices = connection.getDiscoveredServices()
@@ -460,7 +459,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         // Characteristics are discovered along with services by Nordic BleManager.
@@ -489,13 +488,13 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         val gattService = connection.getDiscoveredServices()
             .firstOrNull { it.uuid.toString().equals(serviceUuid, ignoreCase = true) }
         if (gattService == null) {
-            callback(Result.failure(FlutterError("not-found", "Service $serviceUuid not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Service $serviceUuid not found")))
             return
         }
         val result = gattService.characteristics.map { gattChar ->
@@ -522,12 +521,12 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         val characteristic = connection.findCharacteristic(serviceUuid, characteristicUuid)
         if (characteristic == null) {
-            callback(Result.failure(FlutterError("not-found", "Characteristic $characteristicUuid not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Characteristic $characteristicUuid not found")))
             return
         }
         scope?.launch {
@@ -535,7 +534,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 val value = connection.readCharacteristicValue(characteristic)
                 callback(Result.success(value))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("read-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to read characteristic", e)))
             }
         }
     }
@@ -550,12 +549,12 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         val characteristic = connection.findCharacteristic(serviceUuid, characteristicUuid)
         if (characteristic == null) {
-            callback(Result.failure(FlutterError("not-found", "Characteristic $characteristicUuid not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Characteristic $characteristicUuid not found")))
             return
         }
         scope?.launch {
@@ -563,7 +562,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 connection.writeCharacteristicValue(characteristic, value, withoutResponse)
                 callback(Result.success(Unit))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("write-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to write characteristic", e)))
             }
         }
     }
@@ -577,12 +576,12 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         val characteristic = connection.findCharacteristic(serviceUuid, characteristicUuid)
         if (characteristic == null) {
-            callback(Result.failure(FlutterError("not-found", "Characteristic $characteristicUuid not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Characteristic $characteristicUuid not found")))
             return
         }
         scope?.launch {
@@ -610,7 +609,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 }
                 callback(Result.success(Unit))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("notify-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to update characteristic notifications", e)))
             }
         }
     }
@@ -624,12 +623,12 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         val descriptor = connection.findDescriptor(serviceUuid, characteristicUuid, descriptorUuid)
         if (descriptor == null) {
-            callback(Result.failure(FlutterError("not-found", "Descriptor $descriptorUuid not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Descriptor $descriptorUuid not found")))
             return
         }
         scope?.launch {
@@ -637,7 +636,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 val value = connection.readDescriptorValue(descriptor)
                 callback(Result.success(value))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("read-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to read descriptor", e)))
             }
         }
     }
@@ -652,12 +651,12 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         val descriptor = connection.findDescriptor(serviceUuid, characteristicUuid, descriptorUuid)
         if (descriptor == null) {
-            callback(Result.failure(FlutterError("not-found", "Descriptor $descriptorUuid not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Descriptor $descriptorUuid not found")))
             return
         }
         scope?.launch {
@@ -665,7 +664,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 connection.writeDescriptorValue(descriptor, value)
                 callback(Result.success(Unit))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("write-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to write descriptor", e)))
             }
         }
     }
@@ -673,7 +672,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     override fun readRssi(session: PeripheralSession, callback: (Result<Long>) -> Unit) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         scope?.launch {
@@ -681,7 +680,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 val rssi = connection.readRemoteRssi()
                 callback(Result.success(rssi))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("rssi-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to read RSSI", e)))
             }
         }
     }
@@ -693,7 +692,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val connection = connections[session.peripheralIdentifier]
         if (connection == null) {
-            callback(Result.failure(FlutterError("not-connected", "Peripheral not connected", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_CONNECTED, "Peripheral not connected")))
             return
         }
         scope?.launch {
@@ -701,7 +700,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 val negotiatedMtu = connection.requestMtuValue(mtu.toInt())
                 callback(Result.success(negotiatedMtu))
             } catch (e: Exception) {
-                callback(Result.failure(FlutterError("mtu-failed", e.message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to request MTU", e)))
             }
         }
     }
@@ -752,7 +751,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val advertiser = bluetoothAdapter?.bluetoothLeAdvertiser
         if (advertiser == null) {
-            callback(Result.failure(FlutterError("unavailable", "BLE advertiser not available", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "BLE advertiser not available")))
             return
         }
 
@@ -786,7 +785,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                     AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
                     else -> "Unknown error: $errorCode"
                 }
-                callback(Result.failure(FlutterError("advertise-failed", message, null)))
+                callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, message, nativeCode = errorCode.toString())))
             }
         }
         advertiseCallback = cb
@@ -818,14 +817,14 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val server = getGattServer()
         if (server == null) {
-            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "GATT server not available")))
             return
         }
         try {
             server.addService(service)
             callback(Result.success(Unit))
         } catch (e: Exception) {
-            callback(Result.failure(FlutterError("add-service-failed", e.message, null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.OPERATION_FAILED, "Failed to add service", e)))
         }
     }
 
@@ -836,11 +835,11 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val server = getGattServer()
         if (server == null) {
-            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "GATT server not available")))
             return
         }
         if (!server.removeService(serviceUuid)) {
-            callback(Result.failure(FlutterError("not-found", "Service $serviceUuid not found", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Service $serviceUuid not found")))
             return
         }
         callback(Result.success(Unit))
@@ -863,7 +862,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val server = getGattServer()
         if (server == null) {
-            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "GATT server not available")))
             return
         }
         server.respondToRequest(requestId, result, value)
@@ -879,7 +878,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     ) {
         val server = getGattServer()
         if (server == null) {
-            callback(Result.failure(FlutterError("unavailable", "GATT server not available", null)))
+            callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "GATT server not available")))
             return
         }
         val sent = server.updateValue(serviceUuid, characteristicUuid, value)

@@ -88,7 +88,7 @@ TEST(WindowsGattDiscoveryBackend, CommunicationFailurePreservesCache) {
   native->status = GattDiscoveryStatus::kUnreachable;
   backend.DiscoverServices(1, {}, false, [](auto error) {
     ASSERT_TRUE(error);
-    EXPECT_EQ(error->code(), "not-connected");
+    EXPECT_EQ(error->code(), "notConnected");
   });
   EXPECT_EQ(backend.Services(1).value()[0].uuid, "a");
 }

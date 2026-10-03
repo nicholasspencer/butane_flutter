@@ -1,4 +1,5 @@
 #include "butane_central.h"
+#include "butane_error.h"
 #include <optional>
 #include <string_view>
 namespace butane_windows {
@@ -20,13 +21,22 @@ ErrorOr<ScanResult> BuildScanResult(const AdvertisementEvent& event,
   flutter::EncodableList service_uuids;
   for (const auto& uuid : event.service_uuids) {
     auto normalized = NormalizeUuid(uuid);
-    if (!normalized) return FlutterError("invalid_argument", "Advertisement contains an invalid service UUID.");
+    if (!normalized) {
+      return MakeButaneError(ButaneErrorCode::kInvalidArgument,
+                             "Advertisement contains an invalid service UUID.",
+                             "invalidAdvertisementServiceUuid");
+    }
     service_uuids.emplace_back(*normalized);
   }
   flutter::EncodableMap service_data;
   for (const auto& [uuid, bytes] : event.service_data) {
     auto normalized = NormalizeUuid(uuid);
-    if (!normalized) return FlutterError("invalid_argument", "Advertisement contains an invalid service-data UUID.");
+    if (!normalized) {
+      return MakeButaneError(
+          ButaneErrorCode::kInvalidArgument,
+          "Advertisement contains an invalid service-data UUID.",
+          "invalidAdvertisementServiceDataUuid");
+    }
     service_data.emplace(flutter::EncodableValue(*normalized),
                          flutter::EncodableValue(bytes));
   }
@@ -59,9 +69,17 @@ ErrorOr<std::vector<std::string>> NormalizeServiceFilter(
   if (!for_services) return result;
   for (const auto& value : *for_services) {
     const auto* uuid = std::get_if<std::string>(&value);
-    if (!uuid) return FlutterError("invalid_argument", "Service filters must contain only UUID strings.");
+    if (!uuid) {
+      return MakeButaneError(ButaneErrorCode::kInvalidArgument,
+                             "Service filters must contain only UUID strings.",
+                             "invalidServiceFilterType");
+    }
     auto normalized = NormalizeUuid(*uuid);
-    if (!normalized) return FlutterError("invalid_argument", "Service filter contains an invalid UUID.");
+    if (!normalized) {
+      return MakeButaneError(ButaneErrorCode::kInvalidArgument,
+                             "Service filter contains an invalid UUID.",
+                             "invalidServiceFilterUuid");
+    }
     result.push_back(*normalized);
   }
   return result;

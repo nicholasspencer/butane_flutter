@@ -1,8 +1,8 @@
-import 'dart:typed_data';
-
+import 'package:butane_dart/butane_dart.dart' show ButaneException;
 import 'package:butane_dart/interface.dart';
 import 'package:butane_platform_interface/channels.dart';
 import 'package:butane_platform_interface/src/channels/api.g.dart' as api;
+import 'package:flutter/services.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -65,6 +65,129 @@ void main() {
     expect(hostApi.requestMtuCall?.session, _expectedSession);
     expect(hostApi.requestMtuCall?.mtu, 247);
   });
+
+  test('connect notFound surfaces as ButaneException', () async {
+    final cause = PlatformException(
+      code: 'notFound',
+      message: 'No peripheral found',
+      details: const {'platform': 'test-platform'},
+    );
+    hostApi.thrownError = cause;
+
+    final error = await _captureError(platform.connect(session: session));
+
+    expect(error, isA<ButaneException>());
+    final exception = error as ButaneException;
+    expect(exception.code, ButaneErrorCode.notFound);
+    expect(exception.cause, same(cause));
+  });
+
+  test('scan awaits unavailable platform failures', () async {
+    final cause = PlatformException(
+      code: 'unavailable',
+      message: 'Bluetooth is unavailable',
+      details: const {'platform': 'test-platform'},
+    );
+    hostApi.thrownError = cause;
+
+    final error = await _captureError(platform.scan());
+
+    expect(error, isA<ButaneException>());
+    final exception = error as ButaneException;
+    expect(exception.code, ButaneErrorCode.unavailable);
+    expect(exception.cause, same(cause));
+  });
+
+  test('generated and public error vocabularies stay aligned', () {
+    expect(
+      api.ButaneErrorCode.values.map((code) => code.name),
+      ButaneErrorCode.values.map((code) => code.name),
+    );
+    expect(
+      ButaneErrorCode.values.map((code) => code.name),
+      [
+        'unsupported',
+        'unavailable',
+        'poweredOff',
+        'notFound',
+        'notConnected',
+        'connectFailed',
+        'disconnected',
+        'timeout',
+        'invalidArgument',
+        'operationFailed',
+      ],
+    );
+  });
+
+  for (final code in ButaneErrorCode.values) {
+    test('translates ${code.name} platform exceptions', () async {
+      final cause = PlatformException(
+        code: code.name,
+        message: '${code.name} message',
+        details: const {
+          'platform': 'test-platform',
+          'nativeCode': 'native-code',
+        },
+      );
+      hostApi.thrownError = cause;
+
+      final error = await _captureError(
+        platform.requestMtu(session: session, mtu: 247),
+      );
+
+      expect(error, isA<ButaneException>());
+      final exception = error as ButaneException;
+      expect(exception.code, code);
+      expect(exception.message, '${code.name} message');
+      expect(exception.platform, 'test-platform');
+      expect(exception.nativeCode, 'native-code');
+      expect(exception.cause, same(cause));
+    });
+  }
+
+  test('translates unknown platform codes to operationFailed', () async {
+    final cause = PlatformException(
+      code: 'backendSpecificFailure',
+      details: const {
+        'platform': 'test-platform',
+        'nativeCode': 'ignored-native-code',
+      },
+    );
+    hostApi.thrownError = cause;
+
+    final error = await _captureError(
+      platform.requestMtu(session: session, mtu: 247),
+    );
+
+    expect(error, isA<ButaneException>());
+    final exception = error as ButaneException;
+    expect(exception.code, ButaneErrorCode.operationFailed);
+    expect(exception.message, 'backendSpecificFailure');
+    expect(exception.platform, 'test-platform');
+    expect(exception.nativeCode, 'backendSpecificFailure');
+    expect(exception.cause, same(cause));
+  });
+
+  test('does not rewrite non-PlatformException failures', () async {
+    final cause = StateError('test failure');
+    hostApi.thrownError = cause;
+
+    final error = await _captureError(
+      platform.requestMtu(session: session, mtu: 247),
+    );
+
+    expect(error, same(cause));
+  });
+}
+
+Future<Object> _captureError(Future<Object?> future) async {
+  try {
+    await future;
+  } catch (error) {
+    return error;
+  }
+  throw StateError('Expected the future to fail');
 }
 
 final _expectedSession = api.PeripheralSession(
@@ -86,6 +209,7 @@ final class _TestButanePlatform extends ButanePlatform {
 final class _FakeHostApi extends api.ButaneHostApi {
   Uint8List descriptorValue = Uint8List(0);
   int effectiveMtu = 23;
+  Object? thrownError;
 
   ({
     api.PeripheralSession session,
@@ -103,6 +227,25 @@ final class _FakeHostApi extends api.ButaneHostApi {
   })? writeDescriptorCall;
 
   ({api.PeripheralSession session, int mtu})? requestMtuCall;
+
+  void _throwConfiguredError() {
+    if (thrownError case final error?) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> scan({
+    api.ClientSession? session,
+    List<String>? forServices,
+  }) async {
+    _throwConfiguredError();
+  }
+
+  @override
+  Future<void> connect({required api.PeripheralSession session}) async {
+    _throwConfiguredError();
+  }
 
   @override
   Future<Uint8List> readDescriptor({
@@ -143,6 +286,7 @@ final class _FakeHostApi extends api.ButaneHostApi {
     required int mtu,
   }) async {
     requestMtuCall = (session: session, mtu: mtu);
+    _throwConfiguredError();
     return effectiveMtu;
   }
 }

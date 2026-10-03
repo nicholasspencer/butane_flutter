@@ -4,12 +4,14 @@ import 'dart:typed_data';
 import 'package:meta/meta.dart';
 
 import '../interface/interface.dart' as api;
+import '../interface/interface.dart' show ButaneErrorCode;
 
 import 'services/platform_stream_controller.dart';
 
 part 'models/att_request.dart';
 part 'models/att_result.dart';
 part 'models/attribute.dart';
+part 'models/butane_exception.dart';
 part 'models/central.dart';
 part 'models/characteristic.dart';
 part 'models/characteristic_permissions.dart';

@@ -30,6 +30,39 @@ definitions live in `butane_platform_interface`.
 - Declare the relevant permissions in your app manifest; the plugin handles
   runtime requests.
 
+## Android manifest merging
+
+Android's manifest merger adds this package's BLE declarations to every
+consuming app. The defaults fit the common case: Butane apps require BLE
+hardware, and their scans are not used to derive physical location.
+
+`android:required="true"` on `android.hardware.bluetooth_le`
+makes Google Play Store filter out devices without BLE. If BLE is optional for
+your app, repeat the feature in `android/app/src/main/AndroidManifest.xml` and
+override the merged requirement:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+  <uses-feature
+      android:name="android.hardware.bluetooth_le"
+      tools:required="false" />
+</manifest>
+```
+
+`android:usesPermissionFlags="neverForLocation"` on `BLUETOOTH_SCAN` declares
+that your app never derives physical location from BLE scan results. If your
+app does derive physical location from scan results, remove the merged flag:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission
+      android:name="android.permission.BLUETOOTH_SCAN"
+      tools:remove="android:usesPermissionFlags" />
+</manifest>
+```
+
 ## Regenerating channels
 
 Pigeon output is checked in. After editing
