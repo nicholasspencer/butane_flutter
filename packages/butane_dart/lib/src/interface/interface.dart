@@ -65,6 +65,7 @@ abstract base class ButanePlatformInterface {
   /// Use [Peripheral.]
   Future<void> connect({
     required PeripheralSession session,
+    ConnectOptions? options,
   });
 
   /// Cancels an active or pending connection to the peripheral.
@@ -228,6 +229,34 @@ abstract base class ButanePlatformInterface {
 }
 
 /// Models
+
+/// Options controlling how a peripheral connection is established.
+///
+/// When [autoConnect] is null, the backend default is preserved. Android
+/// supports both values. Darwin and Windows support true but throw
+/// [ButaneErrorCode.unsupported] for false. BlueZ supports false but throws
+/// [ButaneErrorCode.unsupported] for true.
+///
+/// A positive [timeoutMillis] is enforced once by the Dart porcelain and is
+/// passed to backends only as an optional hint. Null requests no porcelain
+/// deadline.
+///
+/// [refreshGattCache] true is supported only on Android. BlueZ, Darwin, and
+/// Windows throw [ButaneErrorCode.unsupported]. False and null request no
+/// refresh.
+final class ConnectOptions {
+  const ConnectOptions({
+    this.autoConnect,
+    this.timeoutMillis,
+    this.refreshGattCache,
+  });
+
+  final bool? autoConnect;
+
+  final int? timeoutMillis;
+
+  final bool? refreshGattCache;
+}
 
 /// The shared error vocabulary emitted by every Butane backend.
 enum ButaneErrorCode {

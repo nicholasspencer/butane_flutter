@@ -90,6 +90,34 @@ class PeripheralSession extends Session {
   final String? restorationIdentifier;
 }
 
+/// Options controlling how a peripheral connection is established.
+///
+/// When [autoConnect] is null, the backend default is preserved. Android
+/// supports both values. Darwin and Windows support true but report
+/// [ButaneErrorCode.unsupported] for false. BlueZ supports false but reports
+/// [ButaneErrorCode.unsupported] for true.
+///
+/// A positive [timeoutMillis] is enforced once by the Dart porcelain and is
+/// passed to backends only as an optional hint. Null requests no porcelain
+/// deadline.
+///
+/// [refreshGattCache] true is supported only on Android. BlueZ, Darwin, and
+/// Windows report [ButaneErrorCode.unsupported]. False and null request no
+/// refresh.
+class ConnectOptions {
+  ConnectOptions({
+    this.autoConnect,
+    this.timeoutMillis,
+    this.refreshGattCache,
+  });
+
+  final bool? autoConnect;
+
+  final int? timeoutMillis;
+
+  final bool? refreshGattCache;
+}
+
 class PeripheralManagerSession extends Session {
   PeripheralManagerSession({
     this.clientIdentifier,
@@ -346,7 +374,10 @@ abstract class ButaneHostApi {
 
   /// Establishes a connection to the peripheral.
   @async
-  void connect({required PeripheralSession session});
+  void connect({
+    required PeripheralSession session,
+    ConnectOptions? options,
+  });
 
   /// Cancels an active or pending connection to the peripheral.
   @async

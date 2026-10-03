@@ -377,6 +377,65 @@ data class PeripheralSession (
   }
 }
 
+/**
+ * Options controlling how a peripheral connection is established.
+ *
+ * When [autoConnect] is null, the backend default is preserved. Android
+ * supports both values. Darwin and Windows support true but report
+ * [ButaneErrorCode.unsupported] for false. BlueZ supports false but reports
+ * [ButaneErrorCode.unsupported] for true.
+ *
+ * A positive [timeoutMillis] is enforced once by the Dart porcelain and is
+ * passed to backends only as an optional hint. Null requests no porcelain
+ * deadline.
+ *
+ * [refreshGattCache] true is supported only on Android. BlueZ, Darwin, and
+ * Windows report [ButaneErrorCode.unsupported]. False and null request no
+ * refresh.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class ConnectOptions (
+  val autoConnect: Boolean? = null,
+  val timeoutMillis: Long? = null,
+  val refreshGattCache: Boolean? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): ConnectOptions {
+      val autoConnect = pigeonVar_list[0] as Boolean?
+      val timeoutMillis = pigeonVar_list[1] as Long?
+      val refreshGattCache = pigeonVar_list[2] as Boolean?
+      return ConnectOptions(autoConnect, timeoutMillis, refreshGattCache)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      autoConnect,
+      timeoutMillis,
+      refreshGattCache,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as ConnectOptions
+    return ApiPigeonUtils.deepEquals(this.autoConnect, other.autoConnect) && ApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis) && ApiPigeonUtils.deepEquals(this.refreshGattCache, other.refreshGattCache)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ApiPigeonUtils.deepHash(this.autoConnect)
+    result = 31 * result + ApiPigeonUtils.deepHash(this.timeoutMillis)
+    result = 31 * result + ApiPigeonUtils.deepHash(this.refreshGattCache)
+    return result
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class PeripheralManagerSession (
   val clientIdentifier: String? = null,
@@ -1018,65 +1077,70 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PeripheralManagerSession.fromList(it)
+          ConnectOptions.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Peripheral.fromList(it)
+          PeripheralManagerSession.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AdvertisementData.fromList(it)
+          Peripheral.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ScanResult.fromList(it)
+          AdvertisementData.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Service.fromList(it)
+          ScanResult.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Characteristic.fromList(it)
+          Service.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Descriptor.fromList(it)
+          Characteristic.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CharacteristicProperty.fromList(it)
+          Descriptor.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CharacteristicPermission.fromList(it)
+          CharacteristicProperty.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AttRequest.fromList(it)
+          CharacteristicPermission.fromList(it)
         }
       }
       145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MutableDescriptor.fromList(it)
+          AttRequest.fromList(it)
         }
       }
       146.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MutableCharacteristic.fromList(it)
+          MutableDescriptor.fromList(it)
         }
       }
       147.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MutableCharacteristic.fromList(it)
+        }
+      }
+      148.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           MutableService.fromList(it)
         }
@@ -1110,56 +1174,60 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is PeripheralManagerSession -> {
+      is ConnectOptions -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is Peripheral -> {
+      is PeripheralManagerSession -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is AdvertisementData -> {
+      is Peripheral -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is ScanResult -> {
+      is AdvertisementData -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is Service -> {
+      is ScanResult -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is Characteristic -> {
+      is Service -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is Descriptor -> {
+      is Characteristic -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is CharacteristicProperty -> {
+      is Descriptor -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is CharacteristicPermission -> {
+      is CharacteristicProperty -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is AttRequest -> {
+      is CharacteristicPermission -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is MutableDescriptor -> {
+      is AttRequest -> {
         stream.write(145)
         writeValue(stream, value.toList())
       }
-      is MutableCharacteristic -> {
+      is MutableDescriptor -> {
         stream.write(146)
         writeValue(stream, value.toList())
       }
-      is MutableService -> {
+      is MutableCharacteristic -> {
         stream.write(147)
+        writeValue(stream, value.toList())
+      }
+      is MutableService -> {
+        stream.write(148)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1185,7 +1253,7 @@ interface ButaneHostApi {
   /** A list of connected peripherals identified by an offered service. */
   fun connectedPeripherals(session: ClientSession?, serviceUuids: List<String>, callback: (Result<List<Peripheral>>) -> Unit)
   /** Establishes a connection to the peripheral. */
-  fun connect(session: PeripheralSession, callback: (Result<Unit>) -> Unit)
+  fun connect(session: PeripheralSession, options: ConnectOptions?, callback: (Result<Unit>) -> Unit)
   /** Cancels an active or pending connection to the peripheral. */
   fun cancelConnection(session: PeripheralSession, callback: (Result<Unit>) -> Unit)
   fun connectionState(session: PeripheralSession, callback: (Result<ConnectionState>) -> Unit)
@@ -1339,7 +1407,8 @@ interface ButaneHostApi {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
             val sessionArg = args[0] as PeripheralSession
-            api.connect(sessionArg) { result: Result<Unit> ->
+            val optionsArg = args[1] as ConnectOptions?
+            api.connect(sessionArg, optionsArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(ApiPigeonUtils.wrapError(error))

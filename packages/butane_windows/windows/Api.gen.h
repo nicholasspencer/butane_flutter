@@ -208,6 +208,61 @@ class PeripheralSession {
 };
 
 
+// Options controlling how a peripheral connection is established.
+//
+// When [autoConnect] is null, the backend default is preserved. Android
+// supports both values. Darwin and Windows support true but report
+// [ButaneErrorCode.unsupported] for false. BlueZ supports false but reports
+// [ButaneErrorCode.unsupported] for true.
+//
+// A positive [timeoutMillis] is enforced once by the Dart porcelain and is
+// passed to backends only as an optional hint. Null requests no porcelain
+// deadline.
+//
+// [refreshGattCache] true is supported only on Android. BlueZ, Darwin, and
+// Windows report [ButaneErrorCode.unsupported]. False and null request no
+// refresh.
+//
+// Generated class from Pigeon that represents data sent in messages.
+class ConnectOptions {
+ public:
+  // Constructs an object setting all non-nullable fields.
+  ConnectOptions();
+
+  // Constructs an object setting all fields.
+  explicit ConnectOptions(
+    const bool* auto_connect,
+    const int64_t* timeout_millis,
+    const bool* refresh_gatt_cache);
+
+  const bool* auto_connect() const;
+  void set_auto_connect(const bool* value_arg);
+  void set_auto_connect(bool value_arg);
+
+  const int64_t* timeout_millis() const;
+  void set_timeout_millis(const int64_t* value_arg);
+  void set_timeout_millis(int64_t value_arg);
+
+  const bool* refresh_gatt_cache() const;
+  void set_refresh_gatt_cache(const bool* value_arg);
+  void set_refresh_gatt_cache(bool value_arg);
+
+  bool operator==(const ConnectOptions& other) const;
+  bool operator!=(const ConnectOptions& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+ private:
+  static ConnectOptions FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ButaneHostApi;
+  friend class ButaneFlutterApi;
+  friend class PigeonInternalCodecSerializer;
+  std::optional<bool> auto_connect_;
+  std::optional<int64_t> timeout_millis_;
+  std::optional<bool> refresh_gatt_cache_;
+};
+
+
 // Generated class from Pigeon that represents data sent in messages.
 class PeripheralManagerSession {
  public:
@@ -850,6 +905,7 @@ class ButaneHostApi {
   // Establishes a connection to the peripheral.
   virtual void Connect(
     const PeripheralSession& session,
+    const ConnectOptions* options,
     std::function<void(std::optional<FlutterError> reply)> result) = 0;
   // Cancels an active or pending connection to the peripheral.
   virtual void CancelConnection(

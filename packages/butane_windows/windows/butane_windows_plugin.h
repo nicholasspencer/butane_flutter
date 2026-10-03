@@ -75,6 +75,7 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
       override;
   void Connect(
       const PeripheralSession& session,
+      const ConnectOptions* options,
       std::function<void(std::optional<FlutterError> reply)> result) override;
   void CancelConnection(
       const PeripheralSession& session,

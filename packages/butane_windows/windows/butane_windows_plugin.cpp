@@ -280,7 +280,24 @@ void ButaneWindowsPlugin::ConnectedPeripherals(
 
 void ButaneWindowsPlugin::Connect(
     const PeripheralSession& session,
+    const ConnectOptions* options,
     std::function<void(std::optional<FlutterError> reply)> result) {
+  if (options && options->auto_connect() && !*options->auto_connect()) {
+    result(MakeButaneError(
+        ButaneErrorCode::kUnsupported,
+        "Windows connections use lazy connection semantics and do not support "
+        "direct connect.",
+        "directConnectUnsupported"));
+    return;
+  }
+  if (options && options->refresh_gatt_cache() &&
+      *options->refresh_gatt_cache()) {
+    result(MakeButaneError(
+        ButaneErrorCode::kUnsupported,
+        "Windows does not support refreshing the GATT cache.",
+        "refreshGattCacheUnsupported"));
+    return;
+  }
   const auto address = ParseBluetoothAddress(session.peripheral_identifier());
   if (!address) {
     result(MakeButaneError(

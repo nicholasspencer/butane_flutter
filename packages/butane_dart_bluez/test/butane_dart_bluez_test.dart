@@ -44,6 +44,75 @@ const _mutableService = MutableService(
 );
 
 void main() {
+  test('connect rejects autoConnect true as unsupported', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+
+    await expectLater(
+      fixture.backend.connect(
+        session: const PeripheralSession(peripheralIdentifier: _address),
+        options: const ConnectOptions(autoConnect: true),
+      ),
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.unsupported,
+            )
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+  });
+
+  test('connect rejects refreshGattCache true as unsupported', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+
+    await expectLater(
+      fixture.backend.connect(
+        session: const PeripheralSession(peripheralIdentifier: _address),
+        options: const ConnectOptions(refreshGattCache: true),
+      ),
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.unsupported,
+            )
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+  });
+
+  test('cancelConnection terminates a pending connect', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+    const session = PeripheralSession(peripheralIdentifier: _address);
+
+    final pendingConnect = fixture.backend.connect(session: session);
+    final pendingExpectation = expectLater(
+      pendingConnect,
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.disconnected,
+            )
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+    await _waitUntil(
+      () => fixture.device!.methodNames.contains('Connect'),
+    );
+    await fixture.backend.cancelConnection(session: session);
+
+    await pendingExpectation;
+    expect(fixture.device!.methodNames, ['Connect', 'Disconnect']);
+  });
+
   test('property changes drive client, scan, and connection streams', () async {
     final fixture = await _BlueZFixture.start(withDevice: true);
     addTearDown(fixture.close);
@@ -738,6 +807,34 @@ final class _FakeDevice extends _FakePropertiesObject {
             'ServicesResolved': const DBusBoolean(true),
           },
         );
+
+  final List<String> methodNames = [];
+  Completer<DBusMethodResponse>? _connectReply;
+
+  @override
+  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
+    if (methodCall.interface != interfaceName) {
+      return DBusMethodErrorResponse.unknownInterface();
+    }
+    methodNames.add(methodCall.name);
+    switch (methodCall.name) {
+      case 'Connect':
+        _connectReply = Completer<DBusMethodResponse>();
+        return _connectReply!.future;
+      case 'Disconnect':
+        final connectReply = _connectReply;
+        if (connectReply != null && !connectReply.isCompleted) {
+          connectReply.complete(
+            DBusMethodErrorResponse(
+              'org.bluez.Error.Failed',
+              const [DBusString('Connection cancelled')],
+            ),
+          );
+        }
+        return DBusMethodSuccessResponse();
+    }
+    return DBusMethodErrorResponse.unknownMethod();
+  }
 }
 
 final class _FakeGattService extends _FakePropertiesObject {

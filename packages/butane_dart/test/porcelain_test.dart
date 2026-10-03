@@ -243,6 +243,159 @@ void main() {
     });
   });
 
+  test('Peripheral.connect forwards ConnectOptions', () async {
+    final platform = _FakePlatform(
+      connectionStateValue: api.ConnectionState.connected,
+    );
+    final manager = CentralManager(platform: platform);
+    final peripheral = Peripheral(
+      manager: manager,
+      name: 'test peripheral',
+      identifier: const StringIdentifier('peripheral-id'),
+    );
+    const options = api.ConnectOptions(
+      autoConnect: true,
+      timeoutMillis: 1250,
+      refreshGattCache: true,
+    );
+    addTearDown(() {
+      peripheral.dispose();
+      manager.dispose();
+    });
+
+    await peripheral.connect(options: options);
+
+    expect(
+      platform.connectInvocation?.session.peripheralIdentifier,
+      'peripheral-id',
+    );
+    expect(platform.connectInvocation?.options, same(options));
+    expect(platform.connectInvocation?.options?.autoConnect, isTrue);
+    expect(platform.connectInvocation?.options?.timeoutMillis, 1250);
+    expect(platform.connectInvocation?.options?.refreshGattCache, isTrue);
+  });
+
+  test('Peripheral.connect timeout cancels and throws typed timeout', () async {
+    final platform = _FakePlatform();
+    final manager = CentralManager(platform: platform);
+    final peripheral = Peripheral(
+      manager: manager,
+      name: 'test peripheral',
+      identifier: const StringIdentifier('peripheral-id'),
+    );
+    addTearDown(() {
+      peripheral.dispose();
+      manager.dispose();
+    });
+
+    await expectLater(
+      peripheral.connect(
+        options: const api.ConnectOptions(timeoutMillis: 10),
+      ),
+      throwsA(
+        isA<ButaneException>().having(
+          (error) => error.code,
+          'code',
+          ButaneErrorCode.timeout,
+        ),
+      ),
+    );
+
+    expect(platform.connectInvocation, isNotNull);
+    expect(platform.cancelConnectionCount, 1);
+  });
+
+  test('Peripheral.connect timeout wins over cancellation failure', () async {
+    final connectCompleter = Completer<void>();
+    final platform = _FakePlatform(
+      connectCompleter: connectCompleter,
+      cancelConnectError: const ButaneException(
+        code: ButaneErrorCode.connectFailed,
+        message: 'connection cancelled',
+      ),
+    );
+    final manager = CentralManager(platform: platform);
+    final peripheral = Peripheral(
+      manager: manager,
+      name: 'test peripheral',
+      identifier: const StringIdentifier('peripheral-id'),
+    );
+    addTearDown(() {
+      peripheral.dispose();
+      manager.dispose();
+    });
+
+    await expectLater(
+      peripheral.connect(
+        options: const api.ConnectOptions(timeoutMillis: 10),
+      ),
+      throwsA(
+        isA<ButaneException>().having(
+          (error) => error.code,
+          'code',
+          ButaneErrorCode.timeout,
+        ),
+      ),
+    );
+
+    expect(connectCompleter.isCompleted, isTrue);
+    expect(platform.cancelConnectionCount, 1);
+  });
+
+  test('Peripheral.connect preserves immediate backend failures', () async {
+    const error = ButaneException(
+      code: ButaneErrorCode.unsupported,
+      message: 'unsupported connect mode',
+    );
+    final platform = _FakePlatform(connectError: error);
+    final manager = CentralManager(platform: platform);
+    final peripheral = Peripheral(
+      manager: manager,
+      name: 'test peripheral',
+      identifier: const StringIdentifier('peripheral-id'),
+    );
+    addTearDown(() {
+      peripheral.dispose();
+      manager.dispose();
+    });
+
+    await expectLater(
+      peripheral.connect(
+        options: const api.ConnectOptions(timeoutMillis: 1000),
+      ),
+      throwsA(same(error)),
+    );
+
+    expect(platform.cancelConnectionCount, 0);
+  });
+
+  test('Peripheral.connect rejects non-positive timeout', () async {
+    final platform = _FakePlatform();
+    final manager = CentralManager(platform: platform);
+    final peripheral = Peripheral(
+      manager: manager,
+      name: 'test peripheral',
+      identifier: const StringIdentifier('peripheral-id'),
+    );
+    addTearDown(manager.dispose);
+
+    await expectLater(
+      peripheral.connect(
+        options: const api.ConnectOptions(timeoutMillis: 0),
+      ),
+      throwsA(
+        isA<ButaneException>().having(
+          (error) => error.code,
+          'code',
+          ButaneErrorCode.invalidArgument,
+        ),
+      ),
+    );
+
+    expect(platform.connectInvocation, isNull);
+    expect(platform.cancelConnectionCount, 0);
+  });
+
   group('Peripheral descriptor and MTU operations', () {
     test('forward the discovered attribute chain to the platform', () async {
       final readValue = Uint8List.fromList([1, 2, 3]);
@@ -358,12 +511,18 @@ final class _FakePlatform extends api.ButanePlatformInterface {
     this.characteristicsValue = const [],
     Stream<api.ClientState>? clientStates,
     Stream<api.ScanResult>? scanResults,
+    this.connectionStateValue = api.ConnectionState.disconnected,
+    Stream<api.ConnectionState>? connectionStates,
+    this.connectError,
+    this.connectCompleter,
+    this.cancelConnectError,
     this.peripheralsValue = const [],
     this.servicesValue = const [],
     Uint8List? descriptorReadValue,
     this.effectiveMtu = 23,
   })  : _clientStates = clientStates,
         _scanResults = scanResults,
+        _connectionStates = connectionStates,
         descriptorReadValue = descriptorReadValue ?? Uint8List(0);
 
   final api.ClientState clientStateValue;
@@ -371,6 +530,11 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   final Iterable<api.Characteristic> characteristicsValue;
   final Stream<api.ClientState>? _clientStates;
   final Stream<api.ScanResult>? _scanResults;
+  final api.ConnectionState connectionStateValue;
+  final Stream<api.ConnectionState>? _connectionStates;
+  final ButaneException? connectError;
+  final Completer<void>? connectCompleter;
+  final Object? cancelConnectError;
   final Iterable<api.Peripheral> peripheralsValue;
   final Iterable<api.Service> servicesValue;
   final Uint8List descriptorReadValue;
@@ -392,6 +556,13 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   })? writeDescriptorInvocation;
 
   ({api.PeripheralSession session, int mtu})? requestMtuInvocation;
+
+  ({
+    api.PeripheralSession session,
+    api.ConnectOptions? options
+  })? connectInvocation;
+
+  int cancelConnectionCount = 0;
 
   @override
   Future<api.ClientState> clientState([api.Session? session]) async {
@@ -435,24 +606,44 @@ final class _FakePlatform extends api.ButanePlatformInterface {
       throw UnimplementedError();
 
   @override
-  Future<void> connect({required api.PeripheralSession session}) =>
-      throw UnimplementedError();
+  Future<void> connect({
+    required api.PeripheralSession session,
+    api.ConnectOptions? options,
+  }) async {
+    connectInvocation = (session: session, options: options);
+    if (connectError case final error?) {
+      throw error;
+    }
+    await connectCompleter?.future;
+  }
 
   @override
-  Future<void> cancelConnection({required api.PeripheralSession session}) =>
-      throw UnimplementedError();
+  Future<void> cancelConnection({
+    required api.PeripheralSession session,
+  }) async {
+    cancelConnectionCount += 1;
+    final completer = connectCompleter;
+    if (completer != null && !completer.isCompleted) {
+      final error = cancelConnectError;
+      if (error != null) {
+        completer.completeError(error);
+      } else {
+        completer.complete();
+      }
+    }
+  }
 
   @override
   Future<api.ConnectionState> connectionState({
     required api.PeripheralSession session,
-  }) =>
-      throw UnimplementedError();
+  }) async =>
+      connectionStateValue;
 
   @override
   Stream<api.ConnectionState> connectionStateStream({
     required api.PeripheralSession session,
   }) =>
-      throw UnimplementedError();
+      _connectionStates ?? const Stream<api.ConnectionState>.empty();
 
   @override
   Future<void> discoverServices({
