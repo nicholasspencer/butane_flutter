@@ -143,11 +143,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       let uuid = UUID(uuidString: identifier),
       let actor = actors[uuid]
     else {
-      throw butaneFlutterError(
-        nativeError: nil,
-        fallback: .notFound,
-        message: "No peripheral found with identifier: \(identifier)"
-      )
+      return .disconnected
     }
     
     let peripheral = actor.peripheral

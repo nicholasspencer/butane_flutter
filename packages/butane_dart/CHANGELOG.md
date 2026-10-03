@@ -1,6 +1,6 @@
 ## Unreleased
 
-- **Breaking:** Backend and platform failures now surface as `ButaneException`; consumers matching legacy `PlatformException.code` strings or BlueZ `StateError`/`TimeoutException` types must catch `ButaneException` and switch on `ButaneErrorCode`.
+- **Breaking:** Backend and platform failures now surface as `ButaneException`, and `CentralManager.scan()` now awaits backend startup and surfaces setup failures; consumers matching legacy exception types must catch `ButaneException` and switch on `ButaneErrorCode`.
 
 ## 0.1.0
 

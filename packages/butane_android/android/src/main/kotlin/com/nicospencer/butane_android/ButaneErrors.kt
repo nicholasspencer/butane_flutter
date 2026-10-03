@@ -44,9 +44,15 @@ fun butaneFlutterError(
     }
     val details = mutableMapOf<String, Any>("platform" to "android")
     resolvedNativeCode?.let { details["nativeCode"] = it }
+    val causeMessage = error?.message
+    val resolvedMessage = if (causeMessage.isNullOrBlank()) {
+        message
+    } else {
+        "$message: $causeMessage"
+    }
     return FlutterError(
         code.wireName(),
-        error?.message ?: message,
+        resolvedMessage,
         details,
     )
 }

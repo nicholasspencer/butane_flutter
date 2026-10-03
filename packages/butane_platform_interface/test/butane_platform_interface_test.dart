@@ -66,6 +66,38 @@ void main() {
     expect(hostApi.requestMtuCall?.mtu, 247);
   });
 
+  test('connect notFound surfaces as ButaneException', () async {
+    final cause = PlatformException(
+      code: 'notFound',
+      message: 'No peripheral found',
+      details: const {'platform': 'test-platform'},
+    );
+    hostApi.thrownError = cause;
+
+    final error = await _captureError(platform.connect(session: session));
+
+    expect(error, isA<ButaneException>());
+    final exception = error as ButaneException;
+    expect(exception.code, ButaneErrorCode.notFound);
+    expect(exception.cause, same(cause));
+  });
+
+  test('scan awaits unavailable platform failures', () async {
+    final cause = PlatformException(
+      code: 'unavailable',
+      message: 'Bluetooth is unavailable',
+      details: const {'platform': 'test-platform'},
+    );
+    hostApi.thrownError = cause;
+
+    final error = await _captureError(platform.scan());
+
+    expect(error, isA<ButaneException>());
+    final exception = error as ButaneException;
+    expect(exception.code, ButaneErrorCode.unavailable);
+    expect(exception.cause, same(cause));
+  });
+
   test('generated and public error vocabularies stay aligned', () {
     expect(
       api.ButaneErrorCode.values.map((code) => code.name),
@@ -196,6 +228,25 @@ final class _FakeHostApi extends api.ButaneHostApi {
 
   ({api.PeripheralSession session, int mtu})? requestMtuCall;
 
+  void _throwConfiguredError() {
+    if (thrownError case final error?) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> scan({
+    api.ClientSession? session,
+    List<String>? forServices,
+  }) async {
+    _throwConfiguredError();
+  }
+
+  @override
+  Future<void> connect({required api.PeripheralSession session}) async {
+    _throwConfiguredError();
+  }
+
   @override
   Future<Uint8List> readDescriptor({
     required api.PeripheralSession session,
@@ -235,9 +286,7 @@ final class _FakeHostApi extends api.ButaneHostApi {
     required int mtu,
   }) async {
     requestMtuCall = (session: session, mtu: mtu);
-    if (thrownError case final error?) {
-      throw error;
-    }
+    _throwConfiguredError();
     return effectiveMtu;
   }
 }
