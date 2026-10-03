@@ -1,4 +1,5 @@
 #include "butane_windows_plugin.h"
+#include "butane_bonding_winrt.h"
 #include "butane_central.h"
 #include "butane_connection_winrt.h"
 #include "butane_conversions.h"
@@ -109,6 +110,10 @@ class GeneratedFlutterEventSink final : public FlutterEventSink {
     api_.OnConnectionState(peripheral, state, [] {},
                            [](const FlutterError&) {});
   }
+  void OnBondState(const PeripheralSession& session,
+                   BondState state) override {
+    api_.OnBondState(session, state, [] {}, [](const FlutterError&) {});
+  }
   void OnCharacteristicValue(
       const Peripheral& peripheral, const Characteristic& characteristic,
       const std::vector<uint8_t>& value) override {
@@ -176,6 +181,7 @@ void ButaneWindowsPlugin::RegisterWithRegistrar(
     plugin->central_ =
         std::make_unique<WindowsCentralBackend>(*plugin->rssi_cache_);
     plugin->connection_ = std::make_unique<WindowsConnectionBackend>();
+    plugin->bonding_ = std::make_unique<WindowsBondingBackend>();
     plugin->discovery_ = std::make_unique<WindowsGattDiscoveryBackend>();
     plugin->operations_ = std::make_unique<WindowsGattOperationsBackend>(
         CreateNativeGattOperations());
@@ -189,6 +195,7 @@ ButaneWindowsPlugin::ButaneWindowsPlugin(
     std::unique_ptr<RssiCache> rssi_cache,
     std::unique_ptr<CentralBackend> central,
     std::unique_ptr<ConnectionBackend> connection,
+    std::unique_ptr<BondingBackend> bonding,
     std::unique_ptr<GattDiscoveryBackend> discovery,
     std::unique_ptr<GattOperationsBackend> operations,
     std::unique_ptr<PlatformTaskRunner> runner,
@@ -198,12 +205,15 @@ ButaneWindowsPlugin::ButaneWindowsPlugin(
       event_sink_(std::move(sink)),
       central_(std::move(central)),
       connection_(std::move(connection)),
+      bonding_(std::move(bonding)),
       discovery_(std::move(discovery)),
       operations_(std::move(operations)) {}
 ButaneWindowsPlugin::~ButaneWindowsPlugin() {
   if (central_) central_->StopScan();
   if (operations_) operations_->Close();
+  if (bonding_) bonding_->Close();
   operations_.reset();
+  bonding_.reset();
   connection_.reset();
   discovery_.reset();
   central_.reset();
@@ -334,6 +344,51 @@ void ButaneWindowsPlugin::ConnectionState(
   }
   result(connection_ ? connection_->State(*address)
                      : ConnectionState::kDisconnected);
+}
+
+void ButaneWindowsPlugin::Bond(
+    const PeripheralSession& session,
+    std::function<void(std::optional<FlutterError> reply)> result) {
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(MakeButaneError(
+        ButaneErrorCode::kInvalidArgument,
+        "Peripheral identifier must be a Bluetooth address.",
+        "invalidBluetoothAddress"));
+    return;
+  }
+  if (!bonding_) {
+    result(Unavailable("bond"));
+    return;
+  }
+  bonding_->Bond(
+      *address, session,
+      [runner = platform_task_runner_.get(),
+       sink = event_sink_.get()](BondSnapshot snapshot) {
+        if (!runner || !sink) return;
+        runner->PostTask([sink, snapshot = std::move(snapshot)] {
+          sink->OnBondState(snapshot.session, snapshot.state);
+        });
+      },
+      std::move(result));
+}
+
+void ButaneWindowsPlugin::BondState(
+    const PeripheralSession& session,
+    std::function<void(ErrorOr<butane_windows::BondState> reply)> result) {
+  const auto address = ParseBluetoothAddress(session.peripheral_identifier());
+  if (!address) {
+    result(MakeButaneError(
+        ButaneErrorCode::kInvalidArgument,
+        "Peripheral identifier must be a Bluetooth address.",
+        "invalidBluetoothAddress"));
+    return;
+  }
+  if (!bonding_) {
+    result(Unavailable("bond state"));
+    return;
+  }
+  bonding_->State(*address, std::move(result));
 }
 
 void ButaneWindowsPlugin::DiscoverServices(

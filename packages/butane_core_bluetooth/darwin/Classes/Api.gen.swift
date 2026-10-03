@@ -215,6 +215,12 @@ enum ConnectionState: Int {
   case disconnecting = 4
 }
 
+enum BondState: Int {
+  case none = 0
+  case bonding = 1
+  case bonded = 2
+}
+
 enum AttResult: Int {
   case success = 0
   case invalidHandle = 1
@@ -967,38 +973,44 @@ private class ApiPigeonCodecReader: FlutterStandardReader {
     case 132:
       let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
       if let enumResultAsInt = enumResultAsInt {
-        return AttResult(rawValue: enumResultAsInt)
+        return BondState(rawValue: enumResultAsInt)
       }
       return nil
     case 133:
-      return ClientSession.fromList(self.readValue() as! [Any?])
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return AttResult(rawValue: enumResultAsInt)
+      }
+      return nil
     case 134:
-      return PeripheralSession.fromList(self.readValue() as! [Any?])
+      return ClientSession.fromList(self.readValue() as! [Any?])
     case 135:
-      return PeripheralManagerSession.fromList(self.readValue() as! [Any?])
+      return PeripheralSession.fromList(self.readValue() as! [Any?])
     case 136:
-      return Peripheral.fromList(self.readValue() as! [Any?])
+      return PeripheralManagerSession.fromList(self.readValue() as! [Any?])
     case 137:
-      return AdvertisementData.fromList(self.readValue() as! [Any?])
+      return Peripheral.fromList(self.readValue() as! [Any?])
     case 138:
-      return ScanResult.fromList(self.readValue() as! [Any?])
+      return AdvertisementData.fromList(self.readValue() as! [Any?])
     case 139:
-      return Service.fromList(self.readValue() as! [Any?])
+      return ScanResult.fromList(self.readValue() as! [Any?])
     case 140:
-      return Characteristic.fromList(self.readValue() as! [Any?])
+      return Service.fromList(self.readValue() as! [Any?])
     case 141:
-      return Descriptor.fromList(self.readValue() as! [Any?])
+      return Characteristic.fromList(self.readValue() as! [Any?])
     case 142:
-      return CharacteristicProperty.fromList(self.readValue() as! [Any?])
+      return Descriptor.fromList(self.readValue() as! [Any?])
     case 143:
-      return CharacteristicPermission.fromList(self.readValue() as! [Any?])
+      return CharacteristicProperty.fromList(self.readValue() as! [Any?])
     case 144:
-      return AttRequest.fromList(self.readValue() as! [Any?])
+      return CharacteristicPermission.fromList(self.readValue() as! [Any?])
     case 145:
-      return MutableDescriptor.fromList(self.readValue() as! [Any?])
+      return AttRequest.fromList(self.readValue() as! [Any?])
     case 146:
-      return MutableCharacteristic.fromList(self.readValue() as! [Any?])
+      return MutableDescriptor.fromList(self.readValue() as! [Any?])
     case 147:
+      return MutableCharacteristic.fromList(self.readValue() as! [Any?])
+    case 148:
       return MutableService.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -1017,53 +1029,56 @@ private class ApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? ConnectionState {
       super.writeByte(131)
       super.writeValue(value.rawValue)
-    } else if let value = value as? AttResult {
+    } else if let value = value as? BondState {
       super.writeByte(132)
       super.writeValue(value.rawValue)
-    } else if let value = value as? ClientSession {
+    } else if let value = value as? AttResult {
       super.writeByte(133)
-      super.writeValue(value.toList())
-    } else if let value = value as? PeripheralSession {
+      super.writeValue(value.rawValue)
+    } else if let value = value as? ClientSession {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? PeripheralManagerSession {
+    } else if let value = value as? PeripheralSession {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? Peripheral {
+    } else if let value = value as? PeripheralManagerSession {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? AdvertisementData {
+    } else if let value = value as? Peripheral {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? ScanResult {
+    } else if let value = value as? AdvertisementData {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? Service {
+    } else if let value = value as? ScanResult {
       super.writeByte(139)
       super.writeValue(value.toList())
-    } else if let value = value as? Characteristic {
+    } else if let value = value as? Service {
       super.writeByte(140)
       super.writeValue(value.toList())
-    } else if let value = value as? Descriptor {
+    } else if let value = value as? Characteristic {
       super.writeByte(141)
       super.writeValue(value.toList())
-    } else if let value = value as? CharacteristicProperty {
+    } else if let value = value as? Descriptor {
       super.writeByte(142)
       super.writeValue(value.toList())
-    } else if let value = value as? CharacteristicPermission {
+    } else if let value = value as? CharacteristicProperty {
       super.writeByte(143)
       super.writeValue(value.toList())
-    } else if let value = value as? AttRequest {
+    } else if let value = value as? CharacteristicPermission {
       super.writeByte(144)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableDescriptor {
+    } else if let value = value as? AttRequest {
       super.writeByte(145)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableCharacteristic {
+    } else if let value = value as? MutableDescriptor {
       super.writeByte(146)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableService {
+    } else if let value = value as? MutableCharacteristic {
       super.writeByte(147)
+      super.writeValue(value.toList())
+    } else if let value = value as? MutableService {
+      super.writeByte(148)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -1105,6 +1120,9 @@ protocol ButaneHostApi {
   /// Cancels an active or pending connection to the peripheral.
   func cancelConnection(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void)
   func connectionState(session: PeripheralSession, completion: @escaping (Result<ConnectionState, Error>) -> Void)
+  /// Initiates bonding with the peripheral.
+  func bond(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void)
+  func bondState(session: PeripheralSession, completion: @escaping (Result<BondState, Error>) -> Void)
   /// Discovers services offered by the peripheral.
   func discoverServices(session: PeripheralSession, serviceUuids: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
   func services(session: PeripheralSession, completion: @escaping (Result<[Service], Error>) -> Void)
@@ -1288,6 +1306,41 @@ class ButaneHostApiSetup {
       }
     } else {
       connectionStateChannel.setMessageHandler(nil)
+    }
+    /// Initiates bonding with the peripheral.
+    let bondChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.bond\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      bondChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let sessionArg = args[0] as! PeripheralSession
+        api.bond(session: sessionArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      bondChannel.setMessageHandler(nil)
+    }
+    let bondStateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.bondState\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      bondStateChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let sessionArg = args[0] as! PeripheralSession
+        api.bondState(session: sessionArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      bondStateChannel.setMessageHandler(nil)
     }
     /// Discovers services offered by the peripheral.
     let discoverServicesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.discoverServices\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
@@ -1667,6 +1720,7 @@ protocol ButaneFlutterApiProtocol {
   func onScanResult(scanResult scanResultArg: ScanResult, completion: @escaping (Result<Void, PigeonError>) -> Void)
   /// "Peripheral" APIs.
   func onConnectionState(peripheral peripheralArg: Peripheral, state stateArg: ConnectionState, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onBondState(session sessionArg: PeripheralSession, state stateArg: BondState, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onCharacteristicValue(peripheral peripheralArg: Peripheral, characteristic characteristicArg: Characteristic, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onDescriptorValue(peripheral peripheralArg: Peripheral, descriptor descriptorArg: Descriptor, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
   /// "Peripheral Manager" APIs.
@@ -1730,6 +1784,24 @@ class ButaneFlutterApi: ButaneFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onConnectionState\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralArg, stateArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onBondState(session sessionArg: PeripheralSession, state stateArg: BondState, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.butane_platform_interface.ButaneFlutterApi.onBondState\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([sessionArg, stateArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

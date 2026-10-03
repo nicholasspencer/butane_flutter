@@ -90,6 +90,34 @@ void main() {
     );
   });
 
+  test(
+    'bond calls Device1.Pair and Paired changes drive bondStateStream',
+    () async {
+      final fixture = await _BlueZFixture.start(withDevice: true);
+      addTearDown(fixture.close);
+      final session = const PeripheralSession(peripheralIdentifier: _address);
+      final bondStates = <BondState>[];
+      fixture.track(
+        fixture.backend.bondStateStream(session: session).listen(
+              bondStates.add,
+            ),
+      );
+
+      await _waitUntil(() => bondStates.length == 1);
+      expect(await fixture.backend.bondState(session: session), BondState.none);
+
+      await fixture.backend.bond(session: session);
+      await _waitUntil(() => bondStates.length == 2);
+
+      expect(fixture.device!.methodNames, ['Pair']);
+      expect(bondStates, [BondState.none, BondState.bonded]);
+      expect(
+        await fixture.backend.bondState(session: session),
+        BondState.bonded,
+      );
+    },
+  );
+
   test('an InterfacesAdded device is emitted while scanning', () async {
     final fixture = await _BlueZFixture.start();
     addTearDown(fixture.close);
@@ -732,12 +760,28 @@ final class _FakeDevice extends _FakePropertiesObject {
             'Alias': const DBusString('Butane peer'),
             'Name': const DBusString('Butane peer'),
             'Connected': const DBusBoolean(false),
+            'Paired': const DBusBoolean(false),
             'RSSI': const DBusInt16(-70),
             'TxPower': const DBusInt16(4),
             'UUIDs': DBusArray.string(const [_serviceUuid]),
             'ServicesResolved': const DBusBoolean(true),
           },
         );
+
+  final List<String> methodNames = [];
+
+  @override
+  Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
+    if (methodCall.interface != interfaceName) {
+      return DBusMethodErrorResponse.unknownInterface();
+    }
+    methodNames.add(methodCall.name);
+    if (methodCall.name == 'Pair') {
+      await change('Paired', const DBusBoolean(true));
+      return DBusMethodSuccessResponse();
+    }
+    return DBusMethodErrorResponse.unknownMethod();
+  }
 }
 
 final class _FakeGattService extends _FakePropertiesObject {

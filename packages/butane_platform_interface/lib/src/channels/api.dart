@@ -14,6 +14,11 @@ typedef ConnectionStateResult = ({
   api.ConnectionState state,
 });
 
+typedef BondStateResult = ({
+  api.PeripheralSession session,
+  api.BondState state,
+});
+
 typedef CharacteristicValueResult = ({
   api.Peripheral peripheral,
   api.Characteristic characteristic,
@@ -177,6 +182,28 @@ base class ButanePlatform extends ButanePlatformInterface {
           event.peripheral.session.peripheralIdentifier ==
               session.peripheralIdentifier;
     }).map((event) => event.state.toConnectionState());
+  }
+
+  @override
+  Future<void> bond({required PeripheralSession session}) {
+    return _invokeHostApi(() => hostApi.bond(session: session.toSession()));
+  }
+
+  @override
+  Future<BondState> bondState({required PeripheralSession session}) async {
+    final state = await _invokeHostApi(
+      () => hostApi.bondState(session: session.toSession()),
+    );
+
+    return state.toBondState();
+  }
+
+  @override
+  Stream<BondState> bondStateStream({required PeripheralSession session}) {
+    return flutterApi.bondStateStream.where((event) {
+      return event.session.clientIdentifier == session.clientIdentifier &&
+          event.session.peripheralIdentifier == session.peripheralIdentifier;
+    }).map((event) => event.state.toBondState());
   }
 
   @override
@@ -552,6 +579,19 @@ base class ButaneFlutterApi extends api.ButaneFlutterApi {
   @override
   void onConnectionState(api.Peripheral peripheral, api.ConnectionState state) {
     connectionStateController.sink.add((peripheral: peripheral, state: state));
+  }
+
+  // Bond State
+
+  @protected
+  final bondStateController = StreamController<BondStateResult>.broadcast();
+
+  Stream<BondStateResult> get bondStateStream => bondStateController.stream;
+
+  @protected
+  @override
+  void onBondState(api.PeripheralSession session, api.BondState state) {
+    bondStateController.sink.add((session: session, state: state));
   }
 
   // Characteristic Value
@@ -936,6 +976,42 @@ extension ConnectionStateChannelConverter on api.ConnectionState {
       case api.ConnectionState.disconnecting:
         return ConnectionState.disconnecting;
     }
+  }
+}
+
+extension BondStateConverter on BondState {
+  static BondState fromBondState(api.BondState state) {
+    return switch (state) {
+      api.BondState.none => BondState.none,
+      api.BondState.bonding => BondState.bonding,
+      api.BondState.bonded => BondState.bonded,
+    };
+  }
+
+  api.BondState toBondState() {
+    return switch (this) {
+      BondState.none => api.BondState.none,
+      BondState.bonding => api.BondState.bonding,
+      BondState.bonded => api.BondState.bonded,
+    };
+  }
+}
+
+extension BondStateChannelConverter on api.BondState {
+  static api.BondState fromBondState(BondState state) {
+    return switch (state) {
+      BondState.none => api.BondState.none,
+      BondState.bonding => api.BondState.bonding,
+      BondState.bonded => api.BondState.bonded,
+    };
+  }
+
+  BondState toBondState() {
+    return switch (this) {
+      api.BondState.none => BondState.none,
+      api.BondState.bonding => BondState.bonding,
+      api.BondState.bonded => BondState.bonded,
+    };
   }
 }
 

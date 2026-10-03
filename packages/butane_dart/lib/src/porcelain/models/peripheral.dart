@@ -23,6 +23,8 @@ enum ConnectionState {
   }
 }
 
+enum BondState { none, bonding, bonded }
+
 base class ScanResult {
   const ScanResult({
     required this.peripheral,
@@ -98,6 +100,39 @@ base class Peripheral extends Peer {
 
   Future<void> cancelConnection() async {
     return manager.platform.cancelConnection(session: session);
+  }
+
+  /// Initiates bonding with this peripheral.
+  ///
+  /// Darwin does not expose an explicit bonding API. On Darwin this throws a
+  /// [ButaneException] whose code is [ButaneErrorCode.unsupported].
+  Future<void> bond() {
+    return platform.bond(session: session);
+  }
+
+  Future<BondState> get bondState async {
+    final state = await platform.bondState(session: session);
+
+    return state.toBondState();
+  }
+
+  @protected
+  PlatformStreamController<BondState, api.BondState>? bondStateController;
+
+  Stream<BondState> get bondStateStream {
+    bondStateController ??= PlatformStreamController<BondState, api.BondState>(
+      debugLabel: 'Peripheral($identifier).bondState',
+      platform: platform,
+      map: (value) => value.toBondState(),
+      createStream: (platform) {
+        return platform.bondStateStream(session: session);
+      },
+      sinkValue: (platform) {
+        return platform.bondState(session: session);
+      },
+    );
+
+    return bondStateController!.stream;
   }
 
   @protected
@@ -187,6 +222,7 @@ base class Peripheral extends Peer {
   @override
   void dispose() {
     stateController?.dispose();
+    bondStateController?.dispose();
     super.dispose();
   }
 }
@@ -216,6 +252,16 @@ extension ApiConnectionState on api.ConnectionState {
       case api.ConnectionState.reconnecting:
         return ConnectionState.reconnecting;
     }
+  }
+}
+
+extension ApiBondState on api.BondState {
+  BondState toBondState() {
+    return switch (this) {
+      api.BondState.none => BondState.none,
+      api.BondState.bonding => BondState.bonding,
+      api.BondState.bonded => BondState.bonded,
+    };
   }
 }
 
