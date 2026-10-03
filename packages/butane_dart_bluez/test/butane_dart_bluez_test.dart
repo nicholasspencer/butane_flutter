@@ -69,6 +69,7 @@ void main() {
     await fixture.clientBus.ping();
 
     await fixture.adapter.change('Powered', const DBusBoolean(false));
+    final timestampBeforeRssiChange = DateTime.now().millisecondsSinceEpoch;
     await fixture.device!.change('RSSI', const DBusInt16(-55));
     await fixture.device!.change('Connected', const DBusBoolean(true));
 
@@ -78,11 +79,20 @@ void main() {
           scanResults.length == 1 &&
           connectionStates.length == 2,
     );
+    final timestampAfterReceipt = DateTime.now().millisecondsSinceEpoch;
     expect(
       clientStates,
       [ClientState.poweredOn, ClientState.poweredOff],
     );
-    expect(scanResults.single.peripheral.rssi, -55);
+    final scanResult = scanResults.single;
+    expect(scanResult.peripheral.rssi, -55);
+    expect(scanResult.rssi, -55);
+    expect(
+      scanResult.timestampMillis,
+      inInclusiveRange(timestampBeforeRssiChange, timestampAfterReceipt),
+    );
+    expect(scanResult.advertisementData.solicitedServiceUuids, isNull);
+    expect(scanResult.advertisementData.overflowServiceUuids, isNull);
     expect(
       connectionStates,
       [ConnectionState.disconnected, ConnectionState.connected],

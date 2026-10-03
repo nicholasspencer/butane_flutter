@@ -65,6 +65,69 @@ void main() {
     expect(hostApi.requestMtuCall?.session, _expectedSession);
     expect(hostApi.requestMtuCall?.mtu, 247);
   });
+
+  test('preserves populated scan metadata through channel converters', () {
+    final channelResult = api.ScanResult(
+      peripheral: api.Peripheral(
+        session: api.PeripheralSession(peripheralIdentifier: 'peripheral'),
+        name: 'name',
+        rssi: -60,
+        state: api.ConnectionState.disconnected,
+      ),
+      advertisementData: api.AdvertisementData(
+        solicitedServiceUuids: ['180f', '12345678'],
+        overflowServiceUuids: ['abcdefab-cdef-abcd-efab-cdefabcdefab'],
+      ),
+      rssi: -42,
+      timestampMillis: 1720000000123,
+    );
+
+    final dartResult = channelResult.toScanResult();
+    final roundTrip = dartResult.toScanResult();
+
+    expect(
+      dartResult.advertisementData.solicitedServiceUuids,
+      ['180f', '12345678'],
+    );
+    expect(
+      dartResult.advertisementData.overflowServiceUuids,
+      ['abcdefab-cdef-abcd-efab-cdefabcdefab'],
+    );
+    expect(dartResult.rssi, -42);
+    expect(dartResult.timestampMillis, 1720000000123);
+    expect(
+      roundTrip.advertisementData.solicitedServiceUuids,
+      ['180f', '12345678'],
+    );
+    expect(
+      roundTrip.advertisementData.overflowServiceUuids,
+      ['abcdefab-cdef-abcd-efab-cdefabcdefab'],
+    );
+    expect(roundTrip.rssi, -42);
+    expect(roundTrip.timestampMillis, 1720000000123);
+  });
+
+  test('preserves absent scan metadata through channel converters', () {
+    final channelResult = api.ScanResult(
+      peripheral: api.Peripheral(
+        session: api.PeripheralSession(peripheralIdentifier: 'peripheral'),
+        state: api.ConnectionState.disconnected,
+      ),
+      advertisementData: api.AdvertisementData(),
+    );
+
+    final dartResult = channelResult.toScanResult();
+    final roundTrip = dartResult.toScanResult();
+
+    expect(dartResult.advertisementData.solicitedServiceUuids, isNull);
+    expect(dartResult.advertisementData.overflowServiceUuids, isNull);
+    expect(dartResult.rssi, isNull);
+    expect(dartResult.timestampMillis, isNull);
+    expect(roundTrip.advertisementData.solicitedServiceUuids, isNull);
+    expect(roundTrip.advertisementData.overflowServiceUuids, isNull);
+    expect(roundTrip.rssi, isNull);
+    expect(roundTrip.timestampMillis, isNull);
+  });
 }
 
 final _expectedSession = api.PeripheralSession(

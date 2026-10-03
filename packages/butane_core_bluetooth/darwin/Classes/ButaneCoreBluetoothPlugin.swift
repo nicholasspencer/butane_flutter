@@ -461,6 +461,14 @@ extension AdvertisementData {
     if let services = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
       serviceUuids = services.map { $0.uuidString }
     }
+
+    if let services = advertisementData[CBAdvertisementDataSolicitedServiceUUIDsKey] as? [CBUUID] {
+      solicitedServiceUuids = services.map { $0.uuidString }
+    }
+
+    if let services = advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] {
+      overflowServiceUuids = services.map { $0.uuidString }
+    }
     
     if let isConnectable = advertisementData[CBAdvertisementDataIsConnectable] as? Bool {
       self.isConnectable = isConnectable

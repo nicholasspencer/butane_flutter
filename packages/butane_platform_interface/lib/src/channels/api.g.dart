@@ -385,6 +385,8 @@ class AdvertisementData {
     this.serviceData,
     this.txPowerLevel,
     this.isConnectable,
+    this.solicitedServiceUuids,
+    this.overflowServiceUuids,
   });
 
   String? localName;
@@ -399,6 +401,10 @@ class AdvertisementData {
 
   bool? isConnectable;
 
+  List<String?>? solicitedServiceUuids;
+
+  List<String?>? overflowServiceUuids;
+
   List<Object?> _toList() {
     return <Object?>[
       localName,
@@ -407,6 +413,8 @@ class AdvertisementData {
       serviceData,
       txPowerLevel,
       isConnectable,
+      solicitedServiceUuids,
+      overflowServiceUuids,
     ];
   }
 
@@ -424,6 +432,8 @@ class AdvertisementData {
           (result[3] as Map<Object?, Object?>?)?.cast<String?, Uint8List?>(),
       txPowerLevel: result[4] as int?,
       isConnectable: result[5] as bool?,
+      solicitedServiceUuids: (result[6] as List<Object?>?)?.cast<String?>(),
+      overflowServiceUuids: (result[7] as List<Object?>?)?.cast<String?>(),
     );
   }
 
@@ -441,7 +451,9 @@ class AdvertisementData {
         _deepEquals(serviceUuids, other.serviceUuids) &&
         _deepEquals(serviceData, other.serviceData) &&
         _deepEquals(txPowerLevel, other.txPowerLevel) &&
-        _deepEquals(isConnectable, other.isConnectable);
+        _deepEquals(isConnectable, other.isConnectable) &&
+        _deepEquals(solicitedServiceUuids, other.solicitedServiceUuids) &&
+        _deepEquals(overflowServiceUuids, other.overflowServiceUuids);
   }
 
   @override
@@ -453,16 +465,24 @@ class ScanResult {
   ScanResult({
     required this.peripheral,
     required this.advertisementData,
+    this.rssi,
+    this.timestampMillis,
   });
 
   Peripheral peripheral;
 
   AdvertisementData advertisementData;
 
+  int? rssi;
+
+  int? timestampMillis;
+
   List<Object?> _toList() {
     return <Object?>[
       peripheral,
       advertisementData,
+      rssi,
+      timestampMillis,
     ];
   }
 
@@ -475,6 +495,8 @@ class ScanResult {
     return ScanResult(
       peripheral: result[0]! as Peripheral,
       advertisementData: result[1]! as AdvertisementData,
+      rssi: result[2] as int?,
+      timestampMillis: result[3] as int?,
     );
   }
 
@@ -488,7 +510,9 @@ class ScanResult {
       return true;
     }
     return _deepEquals(peripheral, other.peripheral) &&
-        _deepEquals(advertisementData, other.advertisementData);
+        _deepEquals(advertisementData, other.advertisementData) &&
+        _deepEquals(rssi, other.rssi) &&
+        _deepEquals(timestampMillis, other.timestampMillis);
   }
 
   @override

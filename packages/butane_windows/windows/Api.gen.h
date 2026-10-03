@@ -293,7 +293,9 @@ class AdvertisementData {
     const ::flutter::EncodableList* service_uuids,
     const ::flutter::EncodableMap* service_data,
     const int64_t* tx_power_level,
-    const bool* is_connectable);
+    const bool* is_connectable,
+    const ::flutter::EncodableList* solicited_service_uuids,
+    const ::flutter::EncodableList* overflow_service_uuids);
 
   const std::string* local_name() const;
   void set_local_name(const std::string_view* value_arg);
@@ -319,6 +321,14 @@ class AdvertisementData {
   void set_is_connectable(const bool* value_arg);
   void set_is_connectable(bool value_arg);
 
+  const ::flutter::EncodableList* solicited_service_uuids() const;
+  void set_solicited_service_uuids(const ::flutter::EncodableList* value_arg);
+  void set_solicited_service_uuids(const ::flutter::EncodableList& value_arg);
+
+  const ::flutter::EncodableList* overflow_service_uuids() const;
+  void set_overflow_service_uuids(const ::flutter::EncodableList* value_arg);
+  void set_overflow_service_uuids(const ::flutter::EncodableList& value_arg);
+
   bool operator==(const AdvertisementData& other) const;
   bool operator!=(const AdvertisementData& other) const;
   /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
@@ -336,16 +346,25 @@ class AdvertisementData {
   std::optional<::flutter::EncodableMap> service_data_;
   std::optional<int64_t> tx_power_level_;
   std::optional<bool> is_connectable_;
+  std::optional<::flutter::EncodableList> solicited_service_uuids_;
+  std::optional<::flutter::EncodableList> overflow_service_uuids_;
 };
 
 
 // Generated class from Pigeon that represents data sent in messages.
 class ScanResult {
  public:
-  // Constructs an object setting all fields.
+  // Constructs an object setting all non-nullable fields.
   explicit ScanResult(
     const Peripheral& peripheral,
     const AdvertisementData& advertisement_data);
+
+  // Constructs an object setting all fields.
+  explicit ScanResult(
+    const Peripheral& peripheral,
+    const AdvertisementData& advertisement_data,
+    const int64_t* rssi,
+    const int64_t* timestamp_millis);
 
   ~ScanResult() = default;
   ScanResult(const ScanResult& other);
@@ -357,6 +376,14 @@ class ScanResult {
 
   const AdvertisementData& advertisement_data() const;
   void set_advertisement_data(const AdvertisementData& value_arg);
+
+  const int64_t* rssi() const;
+  void set_rssi(const int64_t* value_arg);
+  void set_rssi(int64_t value_arg);
+
+  const int64_t* timestamp_millis() const;
+  void set_timestamp_millis(const int64_t* value_arg);
+  void set_timestamp_millis(int64_t value_arg);
 
   bool operator==(const ScanResult& other) const;
   bool operator!=(const ScanResult& other) const;
@@ -370,6 +397,8 @@ class ScanResult {
   friend class PigeonInternalCodecSerializer;
   std::unique_ptr<Peripheral> peripheral_;
   std::unique_ptr<AdvertisementData> advertisement_data_;
+  std::optional<int64_t> rssi_;
+  std::optional<int64_t> timestamp_millis_;
 };
 
 

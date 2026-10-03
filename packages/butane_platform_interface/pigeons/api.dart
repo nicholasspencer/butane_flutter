@@ -109,6 +109,8 @@ class AdvertisementData {
     required this.serviceUuids,
     required this.txPowerLevel,
     required this.isConnectable,
+    this.solicitedServiceUuids,
+    this.overflowServiceUuids,
   });
 
   final String? localName;
@@ -122,14 +124,27 @@ class AdvertisementData {
   final int? txPowerLevel;
 
   final bool? isConnectable;
+
+  final List<String?>? solicitedServiceUuids;
+
+  final List<String?>? overflowServiceUuids;
 }
 
 class ScanResult {
-  ScanResult({required this.peripheral, required this.advertisementData});
+  ScanResult({
+    required this.peripheral,
+    required this.advertisementData,
+    this.rssi,
+    this.timestampMillis,
+  });
 
   final Peripheral peripheral;
 
   final AdvertisementData advertisementData;
+
+  final int? rssi;
+
+  final int? timestampMillis;
 }
 
 sealed class AttributeData {}
