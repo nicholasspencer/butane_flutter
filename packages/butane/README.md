@@ -19,6 +19,13 @@ routes the actual BLE work to the platform implementation for the running OS.
 All implementations are endorsed (`default_package`), so depending on `butane`
 alone gives you working BLE on every supported platform.
 
+### Android
+
+Android apps inherit the BLE feature and scan-permission declarations from
+`butane_android`. See [Android manifest merging](https://pub.dev/packages/butane_android#android-manifest-merging)
+for the default Play Store device filter and `neverForLocation` assertion,
+including app-level overrides when BLE is optional or scan results are used to derive physical location.
+
 ## The API in one glance
 
 - **`CentralManager`** — scan for peripherals, connect, discover services and
