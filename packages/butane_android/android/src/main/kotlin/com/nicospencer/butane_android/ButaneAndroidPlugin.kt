@@ -9,6 +9,7 @@ import Characteristic
 import CharacteristicProperty
 import ClientSession
 import ClientState
+import ConnectOptions
 import ConnectionState
 import Descriptor
 import MutableService
@@ -350,7 +351,11 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         callback(Result.success(result))
     }
 
-    override fun connect(session: PeripheralSession, callback: (Result<Unit>) -> Unit) {
+    override fun connect(
+        session: PeripheralSession,
+        options: ConnectOptions?,
+        callback: (Result<Unit>) -> Unit,
+    ) {
         val context = applicationContext
         if (context == null) {
             callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Context not available")))
@@ -358,6 +363,8 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         }
 
         val address = session.peripheralIdentifier
+        val autoConnect = options?.autoConnect ?: false
+        val refreshGattCache = options?.refreshGattCache ?: false
         val device = discoveredPeripherals[address]
             ?: bluetoothAdapter?.getRemoteDevice(address)
         if (device == null) {
@@ -375,7 +382,11 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
 
         scope?.launch {
             try {
-                connection.connectDevice(device)
+                connection.connectDevice(
+                    device,
+                    autoConnect = autoConnect,
+                    refreshGattCache = refreshGattCache,
+                )
                 callback(Result.success(Unit))
             } catch (e: Exception) {
                 callback(Result.failure(butaneFlutterError(ButaneErrorCode.CONNECT_FAILED, "Failed to connect to $address", e)))

@@ -455,6 +455,103 @@ size_t PigeonInternalDeepHash(const PeripheralSession& v) {
   return v.Hash();
 }
 
+// ConnectOptions
+
+ConnectOptions::ConnectOptions() {}
+
+ConnectOptions::ConnectOptions(
+  const bool* auto_connect,
+  const int64_t* timeout_millis,
+  const bool* refresh_gatt_cache)
+ : auto_connect_(auto_connect ? std::optional<bool>(*auto_connect) : std::nullopt),
+    timeout_millis_(timeout_millis ? std::optional<int64_t>(*timeout_millis) : std::nullopt),
+    refresh_gatt_cache_(refresh_gatt_cache ? std::optional<bool>(*refresh_gatt_cache) : std::nullopt) {}
+
+const bool* ConnectOptions::auto_connect() const {
+  return auto_connect_ ? &(*auto_connect_) : nullptr;
+}
+
+void ConnectOptions::set_auto_connect(const bool* value_arg) {
+  auto_connect_ = value_arg ? std::optional<bool>(*value_arg) : std::nullopt;
+}
+
+void ConnectOptions::set_auto_connect(bool value_arg) {
+  auto_connect_ = value_arg;
+}
+
+
+const int64_t* ConnectOptions::timeout_millis() const {
+  return timeout_millis_ ? &(*timeout_millis_) : nullptr;
+}
+
+void ConnectOptions::set_timeout_millis(const int64_t* value_arg) {
+  timeout_millis_ = value_arg ? std::optional<int64_t>(*value_arg) : std::nullopt;
+}
+
+void ConnectOptions::set_timeout_millis(int64_t value_arg) {
+  timeout_millis_ = value_arg;
+}
+
+
+const bool* ConnectOptions::refresh_gatt_cache() const {
+  return refresh_gatt_cache_ ? &(*refresh_gatt_cache_) : nullptr;
+}
+
+void ConnectOptions::set_refresh_gatt_cache(const bool* value_arg) {
+  refresh_gatt_cache_ = value_arg ? std::optional<bool>(*value_arg) : std::nullopt;
+}
+
+void ConnectOptions::set_refresh_gatt_cache(bool value_arg) {
+  refresh_gatt_cache_ = value_arg;
+}
+
+
+EncodableList ConnectOptions::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(3);
+  list.push_back(auto_connect_ ? EncodableValue(*auto_connect_) : EncodableValue());
+  list.push_back(timeout_millis_ ? EncodableValue(*timeout_millis_) : EncodableValue());
+  list.push_back(refresh_gatt_cache_ ? EncodableValue(*refresh_gatt_cache_) : EncodableValue());
+  return list;
+}
+
+ConnectOptions ConnectOptions::FromEncodableList(const EncodableList& list) {
+  ConnectOptions decoded;
+  auto& encodable_auto_connect = list[0];
+  if (!encodable_auto_connect.IsNull()) {
+    decoded.set_auto_connect(std::get<bool>(encodable_auto_connect));
+  }
+  auto& encodable_timeout_millis = list[1];
+  if (!encodable_timeout_millis.IsNull()) {
+    decoded.set_timeout_millis(std::get<int64_t>(encodable_timeout_millis));
+  }
+  auto& encodable_refresh_gatt_cache = list[2];
+  if (!encodable_refresh_gatt_cache.IsNull()) {
+    decoded.set_refresh_gatt_cache(std::get<bool>(encodable_refresh_gatt_cache));
+  }
+  return decoded;
+}
+
+bool ConnectOptions::operator==(const ConnectOptions& other) const {
+  return PigeonInternalDeepEquals(auto_connect_, other.auto_connect_) && PigeonInternalDeepEquals(timeout_millis_, other.timeout_millis_) && PigeonInternalDeepEquals(refresh_gatt_cache_, other.refresh_gatt_cache_);
+}
+
+bool ConnectOptions::operator!=(const ConnectOptions& other) const {
+  return !(*this == other);
+}
+
+size_t ConnectOptions::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(auto_connect_);
+  result = result * 31 + PigeonInternalDeepHash(timeout_millis_);
+  result = result * 31 + PigeonInternalDeepHash(refresh_gatt_cache_);
+  return result;
+}
+
+size_t PigeonInternalDeepHash(const ConnectOptions& v) {
+  return v.Hash();
+}
+
 // PeripheralManagerSession
 
 PeripheralManagerSession::PeripheralManagerSession() {}
@@ -1882,42 +1979,45 @@ EncodableValue PigeonInternalCodecSerializer::ReadValueOfType(
         return CustomEncodableValue(PeripheralSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 135: {
-        return CustomEncodableValue(PeripheralManagerSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(ConnectOptions::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 136: {
-        return CustomEncodableValue(Peripheral::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(PeripheralManagerSession::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 137: {
-        return CustomEncodableValue(AdvertisementData::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Peripheral::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 138: {
-        return CustomEncodableValue(ScanResult::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(AdvertisementData::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 139: {
-        return CustomEncodableValue(Service::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(ScanResult::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 140: {
-        return CustomEncodableValue(Characteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Service::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 141: {
-        return CustomEncodableValue(Descriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Characteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 142: {
-        return CustomEncodableValue(CharacteristicProperty::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(Descriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 143: {
-        return CustomEncodableValue(CharacteristicPermission::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(CharacteristicProperty::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 144: {
-        return CustomEncodableValue(AttRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(CharacteristicPermission::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 145: {
-        return CustomEncodableValue(MutableDescriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(AttRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 146: {
-        return CustomEncodableValue(MutableCharacteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(MutableDescriptor::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 147: {
+        return CustomEncodableValue(MutableCharacteristic::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 148: {
         return CustomEncodableValue(MutableService::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     default:
@@ -1959,68 +2059,73 @@ void PigeonInternalCodecSerializer::WriteValue(
       WriteValue(EncodableValue(std::any_cast<PeripheralSession>(*custom_value).ToEncodableList()), stream);
       return;
     }
-    if (custom_value->type() == typeid(PeripheralManagerSession)) {
+    if (custom_value->type() == typeid(ConnectOptions)) {
       stream->WriteByte(135);
+      WriteValue(EncodableValue(std::any_cast<ConnectOptions>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(PeripheralManagerSession)) {
+      stream->WriteByte(136);
       WriteValue(EncodableValue(std::any_cast<PeripheralManagerSession>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Peripheral)) {
-      stream->WriteByte(136);
+      stream->WriteByte(137);
       WriteValue(EncodableValue(std::any_cast<Peripheral>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(AdvertisementData)) {
-      stream->WriteByte(137);
+      stream->WriteByte(138);
       WriteValue(EncodableValue(std::any_cast<AdvertisementData>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(ScanResult)) {
-      stream->WriteByte(138);
+      stream->WriteByte(139);
       WriteValue(EncodableValue(std::any_cast<ScanResult>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Service)) {
-      stream->WriteByte(139);
+      stream->WriteByte(140);
       WriteValue(EncodableValue(std::any_cast<Service>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Characteristic)) {
-      stream->WriteByte(140);
+      stream->WriteByte(141);
       WriteValue(EncodableValue(std::any_cast<Characteristic>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(Descriptor)) {
-      stream->WriteByte(141);
+      stream->WriteByte(142);
       WriteValue(EncodableValue(std::any_cast<Descriptor>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(CharacteristicProperty)) {
-      stream->WriteByte(142);
+      stream->WriteByte(143);
       WriteValue(EncodableValue(std::any_cast<CharacteristicProperty>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(CharacteristicPermission)) {
-      stream->WriteByte(143);
+      stream->WriteByte(144);
       WriteValue(EncodableValue(std::any_cast<CharacteristicPermission>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(AttRequest)) {
-      stream->WriteByte(144);
+      stream->WriteByte(145);
       WriteValue(EncodableValue(std::any_cast<AttRequest>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(MutableDescriptor)) {
-      stream->WriteByte(145);
+      stream->WriteByte(146);
       WriteValue(EncodableValue(std::any_cast<MutableDescriptor>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(MutableCharacteristic)) {
-      stream->WriteByte(146);
+      stream->WriteByte(147);
       WriteValue(EncodableValue(std::any_cast<MutableCharacteristic>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(MutableService)) {
-      stream->WriteByte(147);
+      stream->WriteByte(148);
       WriteValue(EncodableValue(std::any_cast<MutableService>(*custom_value).ToEncodableList()), stream);
       return;
     }
@@ -2196,7 +2301,9 @@ void ButaneHostApi::SetUp(
             return;
           }
           const auto& session_arg = std::any_cast<const PeripheralSession&>(std::get<CustomEncodableValue>(encodable_session_arg));
-          api->Connect(session_arg, [reply](std::optional<FlutterError>&& output) {
+          const auto& encodable_options_arg = args.at(1);
+          const auto* options_arg = encodable_options_arg.IsNull() ? nullptr : &(std::any_cast<const ConnectOptions&>(std::get<CustomEncodableValue>(encodable_options_arg)));
+          api->Connect(session_arg, options_arg, [reply](std::optional<FlutterError>&& output) {
             if (output.has_value()) {
               reply(WrapError(output.value()));
               return;

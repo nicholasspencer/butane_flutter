@@ -284,6 +284,73 @@ class PeripheralSession extends Session {
   int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
 }
 
+/// Options controlling how a peripheral connection is established.
+///
+/// When [autoConnect] is null, the backend default is preserved. Android
+/// supports both values. Darwin and Windows support true but report
+/// [ButaneErrorCode.unsupported] for false. BlueZ supports false but reports
+/// [ButaneErrorCode.unsupported] for true.
+///
+/// A positive [timeoutMillis] is enforced once by the Dart porcelain and is
+/// passed to backends only as an optional hint. Null requests no porcelain
+/// deadline.
+///
+/// [refreshGattCache] true is supported only on Android. BlueZ, Darwin, and
+/// Windows report [ButaneErrorCode.unsupported]. False and null request no
+/// refresh.
+class ConnectOptions {
+  ConnectOptions({
+    this.autoConnect,
+    this.timeoutMillis,
+    this.refreshGattCache,
+  });
+
+  bool? autoConnect;
+
+  int? timeoutMillis;
+
+  bool? refreshGattCache;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      autoConnect,
+      timeoutMillis,
+      refreshGattCache,
+    ];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static ConnectOptions decode(Object result) {
+    result as List<Object?>;
+    return ConnectOptions(
+      autoConnect: result[0] as bool?,
+      timeoutMillis: result[1] as int?,
+      refreshGattCache: result[2] as bool?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ConnectOptions || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(autoConnect, other.autoConnect) &&
+        _deepEquals(timeoutMillis, other.timeoutMillis) &&
+        _deepEquals(refreshGattCache, other.refreshGattCache);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+}
+
 class PeripheralManagerSession extends Session {
   PeripheralManagerSession({
     this.clientIdentifier,
@@ -1088,44 +1155,47 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is PeripheralSession) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is PeripheralManagerSession) {
+    } else if (value is ConnectOptions) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is Peripheral) {
+    } else if (value is PeripheralManagerSession) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is AdvertisementData) {
+    } else if (value is Peripheral) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    } else if (value is ScanResult) {
+    } else if (value is AdvertisementData) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    } else if (value is Service) {
+    } else if (value is ScanResult) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    } else if (value is Characteristic) {
+    } else if (value is Service) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    } else if (value is Descriptor) {
+    } else if (value is Characteristic) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    } else if (value is CharacteristicProperty) {
+    } else if (value is Descriptor) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    } else if (value is CharacteristicPermission) {
+    } else if (value is CharacteristicProperty) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    } else if (value is AttRequest) {
+    } else if (value is CharacteristicPermission) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    } else if (value is MutableDescriptor) {
+    } else if (value is AttRequest) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    } else if (value is MutableCharacteristic) {
+    } else if (value is MutableDescriptor) {
       buffer.putUint8(146);
       writeValue(buffer, value.encode());
-    } else if (value is MutableService) {
+    } else if (value is MutableCharacteristic) {
       buffer.putUint8(147);
+      writeValue(buffer, value.encode());
+    } else if (value is MutableService) {
+      buffer.putUint8(148);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1152,30 +1222,32 @@ class _PigeonCodec extends StandardMessageCodec {
       case 134:
         return PeripheralSession.decode(readValue(buffer)!);
       case 135:
-        return PeripheralManagerSession.decode(readValue(buffer)!);
+        return ConnectOptions.decode(readValue(buffer)!);
       case 136:
-        return Peripheral.decode(readValue(buffer)!);
+        return PeripheralManagerSession.decode(readValue(buffer)!);
       case 137:
-        return AdvertisementData.decode(readValue(buffer)!);
+        return Peripheral.decode(readValue(buffer)!);
       case 138:
-        return ScanResult.decode(readValue(buffer)!);
+        return AdvertisementData.decode(readValue(buffer)!);
       case 139:
-        return Service.decode(readValue(buffer)!);
+        return ScanResult.decode(readValue(buffer)!);
       case 140:
-        return Characteristic.decode(readValue(buffer)!);
+        return Service.decode(readValue(buffer)!);
       case 141:
-        return Descriptor.decode(readValue(buffer)!);
+        return Characteristic.decode(readValue(buffer)!);
       case 142:
-        return CharacteristicProperty.decode(readValue(buffer)!);
+        return Descriptor.decode(readValue(buffer)!);
       case 143:
-        return CharacteristicPermission.decode(readValue(buffer)!);
+        return CharacteristicProperty.decode(readValue(buffer)!);
       case 144:
-        return AttRequest.decode(readValue(buffer)!);
+        return CharacteristicPermission.decode(readValue(buffer)!);
       case 145:
-        return MutableDescriptor.decode(readValue(buffer)!);
+        return AttRequest.decode(readValue(buffer)!);
       case 146:
-        return MutableCharacteristic.decode(readValue(buffer)!);
+        return MutableDescriptor.decode(readValue(buffer)!);
       case 147:
+        return MutableCharacteristic.decode(readValue(buffer)!);
+      case 148:
         return MutableService.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1306,7 +1378,8 @@ class ButaneHostApi {
   }
 
   /// Establishes a connection to the peripheral.
-  Future<void> connect({required PeripheralSession session}) async {
+  Future<void> connect(
+      {required PeripheralSession session, ConnectOptions? options}) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.connect$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1315,7 +1388,7 @@ class ButaneHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture =
-        pigeonVar_channel.send(<Object?>[session]);
+        pigeonVar_channel.send(<Object?>[session, options]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
