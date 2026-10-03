@@ -51,6 +51,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
 
     private var applicationContext: Context? = null
     private var bluetoothAdapter: BluetoothAdapter? = null
+    private var activityBinding: ActivityPluginBinding? = null
     private val stateReceivers = mutableMapOf<String?, BroadcastReceiver>()
 
     private var scanCallback: ScanCallback? = null
@@ -103,16 +104,30 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         // Close GATT server
         gattServer?.close()
         gattServer = null
+        activityBinding = null
         applicationContext = null
         bluetoothAdapter = null
     }
 
-    override fun onAttachedToActivity(binding: ActivityPluginBinding) {}
-    override fun onDetachedFromActivityForConfigChanges() {}
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
-    override fun onDetachedFromActivity() {}
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activityBinding = binding
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activityBinding = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activityBinding = binding
+    }
+
+    override fun onDetachedFromActivity() {
+        activityBinding = null
+    }
 
     companion object {
+        private const val REQUEST_ENABLE_BLUETOOTH = 1
+
         fun mapAdapterState(adapterState: Int): ClientState {
             return when (adapterState) {
                 BluetoothAdapter.STATE_OFF -> ClientState.POWERED_OFF
@@ -210,6 +225,39 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         }
 
         callback(Result.success(mapAdapterState(adapter.state)))
+    }
+
+    override fun requestEnable(session: ClientSession?, callback: (Result<Unit>) -> Unit) {
+        val binding = activityBinding
+        if (binding == null) {
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.UNAVAILABLE,
+                        "No Android activity is attached",
+                    ),
+                ),
+            )
+            return
+        }
+
+        try {
+            binding.activity.startActivityForResult(
+                Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),
+                REQUEST_ENABLE_BLUETOOTH,
+            )
+            callback(Result.success(Unit))
+        } catch (error: Exception) {
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.OPERATION_FAILED,
+                        "Failed to launch the Bluetooth enable request",
+                        error,
+                    ),
+                ),
+            )
+        }
     }
 
     override fun scan(

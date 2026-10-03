@@ -11,10 +11,12 @@ namespace butane_windows {
 class RssiCache;
 class CentralBackend {
  public:
+  using Completion = std::function<void(std::optional<FlutterError>)>;
   using StateCallback = std::function<void(ClientState)>;
   using AdvertisementCallback = std::function<void(AdvertisementEvent)>;
   virtual ~CentralBackend() = default;
   virtual void QueryState(StateCallback callback) = 0;
+  virtual void RequestEnable(Completion completion) = 0;
   virtual std::optional<FlutterError> StartScan(
       const std::vector<std::string>& service_uuids,
       AdvertisementCallback callback) = 0;
@@ -25,12 +27,14 @@ class WindowsCentralBackend final : public CentralBackend {
   explicit WindowsCentralBackend(RssiCache& rssi_cache);
   ~WindowsCentralBackend() override;
   void QueryState(StateCallback callback) override;
+  void RequestEnable(Completion completion) override;
   std::optional<FlutterError> StartScan(
       const std::vector<std::string>& service_uuids,
       AdvertisementCallback callback) override;
   void StopScan() override;
  private:
   winrt::fire_and_forget QueryStateAsync(StateCallback callback);
+  winrt::fire_and_forget RequestEnableAsync(Completion completion);
   static NativeRadioState ToNativeRadioState(
       winrt::Windows::Devices::Radios::RadioState state);
   static AdvertisementEvent CopyAdvertisement(

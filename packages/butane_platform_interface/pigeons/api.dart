@@ -323,6 +323,9 @@ abstract class ButaneHostApi {
   @async
   ClientState state({ClientSession? session});
 
+  @async
+  void requestEnable({ClientSession? session});
+
   /// Scans for peripherals that are advertising services.
   @async
   void scan({ClientSession? session, List<String>? forServices});

@@ -85,6 +85,13 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
+  Future<void> requestEnable({Session? session}) async {
+    await _invokeHostApi(
+      () => hostApi.requestEnable(session: session?.toSession()),
+    );
+  }
+
+  @override
   Stream<ClientState> clientStateStream([Session? session]) => flutterApi
       .clientStateStream
       .where((e) => e.session?.clientIdentifier == session?.clientIdentifier)

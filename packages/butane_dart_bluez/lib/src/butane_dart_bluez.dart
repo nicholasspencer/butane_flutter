@@ -153,6 +153,27 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   }
 
   @override
+  Future<void> requestEnable({Session? session}) async {
+    await _ensureConnected();
+    final adapter = _defaultAdapter;
+    if (adapter == null) {
+      throw _bluezException(
+        ButaneErrorCode.unavailable,
+        'No BlueZ adapter available',
+      );
+    }
+    try {
+      await adapter.setPowered(true);
+    } on DBusMethodResponseException catch (error) {
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
+        'Failed to enable the BlueZ adapter',
+        cause: error,
+      );
+    }
+  }
+
+  @override
   Stream<ClientState> clientStateStream([Session? session]) {
     late StreamController<ClientState> controller;
     StreamSubscription<List<String>>? sub;

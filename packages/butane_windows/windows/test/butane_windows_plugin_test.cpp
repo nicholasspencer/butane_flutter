@@ -111,6 +111,10 @@ class FakeCentral final : public CentralBackend {
     state = std::move(callback);
     state(ClientState::kPoweredOn);
   }
+  void RequestEnable(Completion completion) override {
+    ++request_enable_count;
+    completion(request_enable_error);
+  }
   std::optional<FlutterError> StartScan(const std::vector<std::string>& uuids,
       AdvertisementCallback callback) override {
     if (scanning) return FlutterError("invalidArgument", "A Windows BLE scan is already active.");
@@ -126,6 +130,8 @@ class FakeCentral final : public CentralBackend {
   RssiCache* cache;
   bool scanning = false;
   int stops = 0;
+  int request_enable_count = 0;
+  std::optional<FlutterError> request_enable_error;
   std::vector<std::string> filters;
   StateCallback state;
   AdvertisementCallback receipt;
@@ -359,6 +365,25 @@ TEST(ButaneWindowsPlugin, StateRepliesAndPostsStateChanges) {
   f.runner->RunAll();
   EXPECT_EQ(f.sink->states[0], ClientState::kPoweredOff);
   EXPECT_EQ(f.sink->client_id, id);
+}
+TEST(ButaneWindowsPlugin, RequestEnableForwardsCompletion) {
+  Fixture f;
+  bool replied = false;
+  f.plugin->RequestEnable(nullptr, [&](std::optional<FlutterError> error) {
+    replied = true;
+    EXPECT_FALSE(error);
+  });
+  EXPECT_TRUE(replied);
+  EXPECT_EQ(f.central->request_enable_count, 1);
+
+  f.central->request_enable_error =
+      FlutterError("operationFailed", "Unable to enable radio.");
+  f.plugin->RequestEnable(nullptr, [&](std::optional<FlutterError> error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "operationFailed");
+    EXPECT_EQ(error->message(), "Unable to enable radio.");
+  });
+  EXPECT_EQ(f.central->request_enable_count, 2);
 }
 TEST(ButaneWindowsPlugin, ScanPostsReceiptBeforeFlutterApi) {
   Fixture f;
