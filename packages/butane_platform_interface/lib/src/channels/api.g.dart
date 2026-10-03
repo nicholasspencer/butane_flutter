@@ -1221,6 +1221,25 @@ class ButaneHostApi {
     return pigeonVar_replyValue! as ClientState;
   }
 
+  Future<void> requestEnable({ClientSession? session}) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestEnable$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture =
+        pigeonVar_channel.send(<Object?>[session]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
   /// Scans for peripherals that are advertising services.
   Future<void> scan({ClientSession? session, List<String>? forServices}) async {
     final pigeonVar_channelName =

@@ -63,6 +63,9 @@ NativeRadioState WindowsCentralBackend::ToNativeRadioState(RadioState state) {
 void WindowsCentralBackend::QueryState(StateCallback callback) {
   QueryStateAsync(std::move(callback));
 }
+void WindowsCentralBackend::RequestEnable(Completion completion) {
+  RequestEnableAsync(std::move(completion));
+}
 winrt::fire_and_forget WindowsCentralBackend::QueryStateAsync(
     StateCallback callback) {
   state_callback_ = std::move(callback);
@@ -91,6 +94,44 @@ winrt::fire_and_forget WindowsCentralBackend::QueryStateAsync(
   } catch (const winrt::hresult_error&) {
     state_callback_(MapClientState(true, false, NativeRadioState::kUnknown));
   }
+}
+winrt::fire_and_forget WindowsCentralBackend::RequestEnableAsync(
+    Completion completion) {
+  std::optional<FlutterError> result;
+  try {
+    adapter_ = co_await BluetoothAdapter::GetDefaultAsync();
+    if (!adapter_) {
+      result = MakeButaneError(
+          ButaneErrorCode::kUnavailable,
+          "No Windows Bluetooth adapter is available.",
+          "adapterUnavailable");
+    } else if (co_await Radio::RequestAccessAsync() !=
+               RadioAccessStatus::Allowed) {
+      result = MakeButaneError(
+          ButaneErrorCode::kOperationFailed,
+          "Access to the Windows Bluetooth radio was denied.",
+          "radioAccessDenied");
+    } else {
+      radio_ = co_await adapter_.GetRadioAsync();
+      if (!radio_) {
+        result = MakeButaneError(
+            ButaneErrorCode::kUnavailable,
+            "No Windows Bluetooth radio is available.",
+            "radioUnavailable");
+      } else if (co_await radio_.SetStateAsync(RadioState::On) !=
+                 RadioAccessStatus::Allowed) {
+        result = MakeButaneError(
+            ButaneErrorCode::kOperationFailed,
+            "The Windows Bluetooth radio could not be enabled.",
+            "radioEnableDenied");
+      }
+    }
+  } catch (const winrt::hresult_error& error) {
+    result = MakeButaneError(
+        ButaneErrorCode::kOperationFailed,
+        winrt::to_string(error.message()), error.code().value);
+  }
+  completion(std::move(result));
 }
 std::optional<FlutterError> WindowsCentralBackend::StartScan(
     const std::vector<std::string>& service_uuids,

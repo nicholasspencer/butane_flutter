@@ -829,6 +829,9 @@ class ButaneHostApi {
   virtual void State(
     const ClientSession* session,
     std::function<void(ErrorOr<ClientState> reply)> result) = 0;
+  virtual void RequestEnable(
+    const ClientSession* session,
+    std::function<void(std::optional<FlutterError> reply)> result) = 0;
   // Scans for peripherals that are advertising services.
   virtual void Scan(
     const ClientSession* session,
