@@ -456,6 +456,14 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
     Task { await actor.didDiscoverCharacteristicsFor(service: service, error: error) }
   }
+
+  func peripheral(_ peripheral: CBPeripheral, didDiscoverDescriptorsFor characteristic: CBCharacteristic, error: Error?) {
+    guard let actor = actors[peripheral.identifier] else {
+      return
+    }
+
+    Task { await actor.didDiscoverDescriptorsFor(characteristic: characteristic, error: error) }
+  }
   
   func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
     flutterApi.onCharacteristicValue(
@@ -513,12 +521,44 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
 }
 
+// MARK: Descriptor Discovery Continuations
+
+final class DescriptorDiscoveryContinuationStore {
+  private var descriptorDiscoveryContinuations: [CBCharacteristic: [CheckedContinuation<Void, Never>]] = [:]
+  private let lock = NSLock()
+
+  func wait(for characteristic: CBCharacteristic, starting discovery: () -> Void) async {
+    return await withCheckedContinuation { continuation in
+      lock.lock()
+      descriptorDiscoveryContinuations[characteristic, default: []].append(continuation)
+      lock.unlock()
+
+      discovery()
+    }
+  }
+
+  func didDiscoverDescriptorsFor(characteristic: CBCharacteristic, error: Error?) {
+    lock.lock()
+    let continuations = descriptorDiscoveryContinuations.removeValue(forKey: characteristic)
+    lock.unlock()
+
+    if let error = error {
+      NSLog("\(characteristic.uuid.uuidString): didDiscoverDescriptors failed: \(error)")
+    }
+
+    for continuation in continuations ?? [] {
+      continuation.resume()
+    }
+  }
+}
+
 // MARK: Peripheral Actor
 
 actor PeripheralActor: Equatable {
   nonisolated let peripheral: CBPeripheral
   
   let flutterApi: ButaneFlutterApi
+  let descriptorDiscoveryContinuationStore = DescriptorDiscoveryContinuationStore()
   
   init(peripheral: CBPeripheral, flutterApi: ButaneFlutterApi) {
     self.peripheral = peripheral
@@ -549,6 +589,7 @@ actor PeripheralActor: Equatable {
     guard
       let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: serviceUuid) })
     else {
+      print("\(serviceUuid): discoverCharacteristics guard failed")
       throw butaneFlutterError(
         nativeError: nil,
         fallback: .notFound,
@@ -566,6 +607,12 @@ actor PeripheralActor: Equatable {
       print("\(service.uuid.uuidString): discoverCharacteristics continuation")
       characteristicDiscoveryContinuations[service]?.append(continuation)
       peripheral.discoverCharacteristics(uuids, for: service)
+    }
+  }
+
+  func discoverDescriptors(for characteristic: CBCharacteristic) async {
+    return await descriptorDiscoveryContinuationStore.wait(for: characteristic) {
+      peripheral.discoverDescriptors(for: characteristic)
     }
   }
   
@@ -750,7 +797,7 @@ actor PeripheralActor: Equatable {
   var serviceDiscoveryContinuations: [CheckedContinuation<Void, Error>] = []
   
   var characteristicDiscoveryContinuations: [CBService:[CheckedContinuation<Void, Error>]] = [:]
-  
+
   var rssiContinuations: [CheckedContinuation<Int64, Error>] = []
   
   var characteristicReadContinuations: [CBCharacteristic: [CheckedContinuation<Data, Error>]] = [:]
@@ -803,30 +850,40 @@ actor PeripheralActor: Equatable {
     serviceDiscoveryContinuations.removeAll()
   }
   
-  func didDiscoverCharacteristicsFor(service: CBService, error: Error?) {
-    guard let continuations = characteristicDiscoveryContinuations[service] else {
+  func didDiscoverCharacteristicsFor(service: CBService, error: Error?) async {
+    guard let continuations = characteristicDiscoveryContinuations.removeValue(forKey: service) else {
       return
     }
     
-    print("didDiscoverCharacteristicsFor(\(service.uuid.uuidString)) has \(characteristicDiscoveryContinuations.count) continuations")
-    
-    for continuation in continuations {
-      if let error = error {
+    if let error = error {
+      for continuation in continuations {
         print("\(service.uuid.uuidString): didDiscoverCharacteristics failed")
         continuation.resume(throwing: butaneFlutterError(
           nativeError: error,
           fallback: .operationFailed,
           message: error.localizedDescription
         ))
-      } else {
-        print("\(service.uuid.uuidString): didDiscoverCharacteristics")
-        continuation.resume()
+      }
+
+      return
+    }
+
+    await withTaskGroup(of: Void.self) { group in
+      for characteristic in service.characteristics ?? [] {
+        group.addTask {
+          await self.discoverDescriptors(for: characteristic)
+        }
       }
     }
-    
-    print("didDiscoverCharacteristicsFor(\(service.uuid.uuidString)) purging \(characteristicDiscoveryContinuations.count) continuations")
-    
-    characteristicDiscoveryContinuations[service]?.removeAll()
+
+    for continuation in continuations {
+      print("\(service.uuid.uuidString): didDiscoverCharacteristics")
+      continuation.resume()
+    }
+  }
+
+  func didDiscoverDescriptorsFor(characteristic: CBCharacteristic, error: Error?) {
+    descriptorDiscoveryContinuationStore.didDiscoverDescriptorsFor(characteristic: characteristic, error: error)
   }
   
   func didUpdateValueFor(characteristic: CBCharacteristic, error: Error?) {
