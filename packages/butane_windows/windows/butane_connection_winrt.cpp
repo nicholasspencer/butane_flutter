@@ -1,4 +1,5 @@
 #include "butane_connection_winrt.h"
+#include "butane_error.h"
 
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 #include <winrt/Windows.Foundation.h>
@@ -260,7 +261,8 @@ void WindowsConnectionBackend::Ready(
   entry->state = ConnectionState::kDisconnected;
   entry->on_state(
       ConnectionSnapshot{entry->session, ConnectionState::kDisconnected});
-  on_complete(FlutterError("connection_failed", std::move(*error)));
+  on_complete(MakeButaneError(ButaneErrorCode::kConnectFailed,
+                              std::move(*error), "connectionFailed"));
 }
 
 void WindowsConnectionBackend::Publish(

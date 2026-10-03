@@ -229,6 +229,24 @@ abstract base class ButanePlatformInterface {
 
 /// Models
 
+/// The shared error vocabulary emitted by every Butane backend.
+enum ButaneErrorCode {
+  unsupported,
+  unavailable,
+  poweredOff,
+
+  /// A requested target is missing. On Darwin,
+  /// an unregistered peripheral state query returns [ConnectionState.disconnected],
+  /// while connect and cancel report [ButaneErrorCode.notFound].
+  notFound,
+  notConnected,
+  connectFailed,
+  disconnected,
+  timeout,
+  invalidArgument,
+  operationFailed,
+}
+
 enum ClientState {
   unknown,
   resetting,

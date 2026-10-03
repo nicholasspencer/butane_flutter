@@ -187,6 +187,26 @@ enum ClientState: Int {
   case poweredOn = 5
 }
 
+/// The shared error vocabulary emitted by every Butane backend.
+///
+/// On the platform channel, `FlutterError.code` is the lowerCamelCase enum
+/// member name and `FlutterError.message` is human-readable text. Its details
+/// are a map whose optional `platform` value is `darwin`, `android`, `windows`,
+/// or `linux`, and whose optional `nativeCode` value is the operating-system
+/// code or D-Bus error name.
+enum ButaneErrorCode: Int {
+  case unsupported = 0
+  case unavailable = 1
+  case poweredOff = 2
+  case notFound = 3
+  case notConnected = 4
+  case connectFailed = 5
+  case disconnected = 6
+  case timeout = 7
+  case invalidArgument = 8
+  case operationFailed = 9
+}
+
 enum ConnectionState: Int {
   case disconnected = 0
   case connecting = 1
@@ -935,44 +955,50 @@ private class ApiPigeonCodecReader: FlutterStandardReader {
     case 130:
       let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
       if let enumResultAsInt = enumResultAsInt {
-        return ConnectionState(rawValue: enumResultAsInt)
+        return ButaneErrorCode(rawValue: enumResultAsInt)
       }
       return nil
     case 131:
       let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
       if let enumResultAsInt = enumResultAsInt {
-        return AttResult(rawValue: enumResultAsInt)
+        return ConnectionState(rawValue: enumResultAsInt)
       }
       return nil
     case 132:
-      return ClientSession.fromList(self.readValue() as! [Any?])
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return AttResult(rawValue: enumResultAsInt)
+      }
+      return nil
     case 133:
-      return PeripheralSession.fromList(self.readValue() as! [Any?])
+      return ClientSession.fromList(self.readValue() as! [Any?])
     case 134:
-      return PeripheralManagerSession.fromList(self.readValue() as! [Any?])
+      return PeripheralSession.fromList(self.readValue() as! [Any?])
     case 135:
-      return Peripheral.fromList(self.readValue() as! [Any?])
+      return PeripheralManagerSession.fromList(self.readValue() as! [Any?])
     case 136:
-      return AdvertisementData.fromList(self.readValue() as! [Any?])
+      return Peripheral.fromList(self.readValue() as! [Any?])
     case 137:
-      return ScanResult.fromList(self.readValue() as! [Any?])
+      return AdvertisementData.fromList(self.readValue() as! [Any?])
     case 138:
-      return Service.fromList(self.readValue() as! [Any?])
+      return ScanResult.fromList(self.readValue() as! [Any?])
     case 139:
-      return Characteristic.fromList(self.readValue() as! [Any?])
+      return Service.fromList(self.readValue() as! [Any?])
     case 140:
-      return Descriptor.fromList(self.readValue() as! [Any?])
+      return Characteristic.fromList(self.readValue() as! [Any?])
     case 141:
-      return CharacteristicProperty.fromList(self.readValue() as! [Any?])
+      return Descriptor.fromList(self.readValue() as! [Any?])
     case 142:
-      return CharacteristicPermission.fromList(self.readValue() as! [Any?])
+      return CharacteristicProperty.fromList(self.readValue() as! [Any?])
     case 143:
-      return AttRequest.fromList(self.readValue() as! [Any?])
+      return CharacteristicPermission.fromList(self.readValue() as! [Any?])
     case 144:
-      return MutableDescriptor.fromList(self.readValue() as! [Any?])
+      return AttRequest.fromList(self.readValue() as! [Any?])
     case 145:
-      return MutableCharacteristic.fromList(self.readValue() as! [Any?])
+      return MutableDescriptor.fromList(self.readValue() as! [Any?])
     case 146:
+      return MutableCharacteristic.fromList(self.readValue() as! [Any?])
+    case 147:
       return MutableService.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -985,56 +1011,59 @@ private class ApiPigeonCodecWriter: FlutterStandardWriter {
     if let value = value as? ClientState {
       super.writeByte(129)
       super.writeValue(value.rawValue)
-    } else if let value = value as? ConnectionState {
+    } else if let value = value as? ButaneErrorCode {
       super.writeByte(130)
       super.writeValue(value.rawValue)
-    } else if let value = value as? AttResult {
+    } else if let value = value as? ConnectionState {
       super.writeByte(131)
       super.writeValue(value.rawValue)
-    } else if let value = value as? ClientSession {
+    } else if let value = value as? AttResult {
       super.writeByte(132)
-      super.writeValue(value.toList())
-    } else if let value = value as? PeripheralSession {
+      super.writeValue(value.rawValue)
+    } else if let value = value as? ClientSession {
       super.writeByte(133)
       super.writeValue(value.toList())
-    } else if let value = value as? PeripheralManagerSession {
+    } else if let value = value as? PeripheralSession {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? Peripheral {
+    } else if let value = value as? PeripheralManagerSession {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? AdvertisementData {
+    } else if let value = value as? Peripheral {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? ScanResult {
+    } else if let value = value as? AdvertisementData {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? Service {
+    } else if let value = value as? ScanResult {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? Characteristic {
+    } else if let value = value as? Service {
       super.writeByte(139)
       super.writeValue(value.toList())
-    } else if let value = value as? Descriptor {
+    } else if let value = value as? Characteristic {
       super.writeByte(140)
       super.writeValue(value.toList())
-    } else if let value = value as? CharacteristicProperty {
+    } else if let value = value as? Descriptor {
       super.writeByte(141)
       super.writeValue(value.toList())
-    } else if let value = value as? CharacteristicPermission {
+    } else if let value = value as? CharacteristicProperty {
       super.writeByte(142)
       super.writeValue(value.toList())
-    } else if let value = value as? AttRequest {
+    } else if let value = value as? CharacteristicPermission {
       super.writeByte(143)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableDescriptor {
+    } else if let value = value as? AttRequest {
       super.writeByte(144)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableCharacteristic {
+    } else if let value = value as? MutableDescriptor {
       super.writeByte(145)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableService {
+    } else if let value = value as? MutableCharacteristic {
       super.writeByte(146)
+      super.writeValue(value.toList())
+    } else if let value = value as? MutableService {
+      super.writeByte(147)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)

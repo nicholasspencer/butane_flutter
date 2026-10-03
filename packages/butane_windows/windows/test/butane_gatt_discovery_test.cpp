@@ -15,16 +15,16 @@ TEST(GattFilter, NormalizesAndRejectsInvalid) {
   EXPECT_EQ(NormalizeGattFilter(&values).value()[0],
             "0000180d-0000-1000-8000-00805f9b34fb");
   values.emplace_back(int32_t{1});
-  EXPECT_EQ(NormalizeGattFilter(&values).error().code(), "invalid_argument");
+  EXPECT_EQ(NormalizeGattFilter(&values).error().code(), "invalidArgument");
 }
 TEST(GattDiscoveryError, MapsEveryFailureStatus) {
   EXPECT_EQ(GattDiscoveryError(GattDiscoveryStatus::kUnreachable, {}).code(),
-            "not-connected");
+            "notConnected");
   EXPECT_EQ(GattDiscoveryError(GattDiscoveryStatus::kProtocolError,
                                uint8_t{5}).code(),
-            "discovery-failed");
+            "operationFailed");
   EXPECT_EQ(GattDiscoveryError(GattDiscoveryStatus::kAccessDenied, {}).code(),
-            "unauthorized");
+            "operationFailed");
   EXPECT_THROW(GattDiscoveryError(GattDiscoveryStatus::kSuccess, {}),
                std::logic_error);
 }
@@ -50,8 +50,8 @@ TEST(GattDiscoveryCache, IsolatesAddresses) {
 }
 TEST(GattDiscoveryCache, MissingDataReturnsNotFound) {
   GattDiscoveryCache cache;
-  EXPECT_EQ(cache.Services(1).error().code(), "not-found");
+  EXPECT_EQ(cache.Services(1).error().code(), "notFound");
   cache.ReplaceServices(1, {{"a", true}});
-  EXPECT_EQ(cache.Characteristics(1, "a").error().code(), "not-found");
+  EXPECT_EQ(cache.Characteristics(1, "a").error().code(), "notFound");
 }
 }  // namespace butane_windows::test

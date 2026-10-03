@@ -1,6 +1,7 @@
 #include "butane_gatt_discovery.h"
 
 #include "butane_conversions.h"
+#include "butane_error.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -8,7 +9,9 @@
 namespace butane_windows {
 namespace {
 FlutterError NotFound() {
-  return FlutterError("not-found", "GATT discovery data was not found.");
+  return MakeButaneError(ButaneErrorCode::kNotFound,
+                         "GATT discovery data was not found.",
+                         "gattDataNotFound");
 }
 }
 
@@ -16,17 +19,22 @@ FlutterError GattDiscoveryError(GattDiscoveryStatus status,
                                 std::optional<uint8_t> protocol_error) {
   switch (status) {
     case GattDiscoveryStatus::kUnreachable:
-      return FlutterError("not-connected",
-                          "Peripheral is unreachable during GATT discovery.");
+      return MakeButaneError(
+          ButaneErrorCode::kNotConnected,
+          "Peripheral is unreachable during GATT discovery.",
+          "gattUnreachable");
     case GattDiscoveryStatus::kProtocolError:
-      return FlutterError(
-          "discovery-failed",
+      return MakeButaneError(
+          ButaneErrorCode::kOperationFailed,
           "GATT protocol error " +
               std::to_string(static_cast<unsigned>(
                   protocol_error.value_or(uint8_t{0}))) +
-              ".");
+              ".",
+          protocol_error.value_or(uint8_t{0}));
     case GattDiscoveryStatus::kAccessDenied:
-      return FlutterError("unauthorized", "Bluetooth GATT access was denied.");
+      return MakeButaneError(ButaneErrorCode::kOperationFailed,
+                             "Bluetooth GATT access was denied.",
+                             "gattAccessDenied");
     case GattDiscoveryStatus::kSuccess:
       throw std::logic_error("success is not a discovery error");
   }
@@ -41,8 +49,10 @@ ErrorOr<std::vector<std::string>> NormalizeGattFilter(
     const auto* text = std::get_if<std::string>(&value);
     const auto normalized = text ? NormalizeUuid(*text) : std::nullopt;
     if (!normalized) {
-      return FlutterError(
-          "invalid_argument", "GATT filters must contain valid UUID strings.");
+      return MakeButaneError(
+          ButaneErrorCode::kInvalidArgument,
+          "GATT filters must contain valid UUID strings.",
+          "invalidGattFilterUuid");
     }
     result.push_back(*normalized);
   }

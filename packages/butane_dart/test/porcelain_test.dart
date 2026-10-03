@@ -147,6 +147,36 @@ void main() {
       manager.dispose();
     });
 
+    test('preserves typed backend failures unchanged', () async {
+      final cause = StateError('native backend failure');
+      final expected = ButaneException(
+        code: ButaneErrorCode.notConnected,
+        message: 'The peripheral is not connected',
+        platform: 'test-platform',
+        nativeCode: 'native-code',
+        cause: cause,
+      );
+      final manager = CentralManager(
+        platform: _FakePlatform(clientStateError: expected),
+      );
+      addTearDown(manager.dispose);
+
+      Object? caught;
+      try {
+        await manager.state;
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught, same(expected));
+      final exception = caught as ButaneException;
+      expect(exception.code, ButaneErrorCode.notConnected);
+      expect(exception.message, 'The peripheral is not connected');
+      expect(exception.platform, 'test-platform');
+      expect(exception.nativeCode, 'native-code');
+      expect(exception.cause, same(cause));
+    });
+
     test('stateStream maps platform events via PlatformStreamController',
         () async {
       final source = StreamController<api.ClientState>();
@@ -324,6 +354,7 @@ void main() {
 final class _FakePlatform extends api.ButanePlatformInterface {
   _FakePlatform({
     this.clientStateValue = api.ClientState.poweredOn,
+    this.clientStateError,
     this.characteristicsValue = const [],
     Stream<api.ClientState>? clientStates,
     Stream<api.ScanResult>? scanResults,
@@ -336,6 +367,7 @@ final class _FakePlatform extends api.ButanePlatformInterface {
         descriptorReadValue = descriptorReadValue ?? Uint8List(0);
 
   final api.ClientState clientStateValue;
+  final ButaneException? clientStateError;
   final Iterable<api.Characteristic> characteristicsValue;
   final Stream<api.ClientState>? _clientStates;
   final Stream<api.ScanResult>? _scanResults;
@@ -362,8 +394,12 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   ({api.PeripheralSession session, int mtu})? requestMtuInvocation;
 
   @override
-  Future<api.ClientState> clientState([api.Session? session]) async =>
-      clientStateValue;
+  Future<api.ClientState> clientState([api.Session? session]) async {
+    if (clientStateError case final error?) {
+      throw error;
+    }
+    return clientStateValue;
+  }
 
   @override
   Stream<api.ClientState> clientStateStream([api.Session? session]) =>

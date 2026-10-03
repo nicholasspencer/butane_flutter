@@ -16,6 +16,26 @@ enum ClientState {
   poweredOn,
 }
 
+/// The shared error vocabulary emitted by every Butane backend.
+///
+/// On the platform channel, `FlutterError.code` is the lowerCamelCase enum
+/// member name and `FlutterError.message` is human-readable text. Its details
+/// are a map whose optional `platform` value is `darwin`, `android`, `windows`,
+/// or `linux`, and whose optional `nativeCode` value is the operating-system
+/// code or D-Bus error name.
+enum ButaneErrorCode {
+  unsupported,
+  unavailable,
+  poweredOff,
+  notFound,
+  notConnected,
+  connectFailed,
+  disconnected,
+  timeout,
+  invalidArgument,
+  operationFailed,
+}
+
 enum ConnectionState {
   disconnected,
   connecting,

@@ -209,6 +209,34 @@ enum class ClientState(val raw: Int) {
   }
 }
 
+/**
+ * The shared error vocabulary emitted by every Butane backend.
+ *
+ * On the platform channel, `FlutterError.code` is the lowerCamelCase enum
+ * member name and `FlutterError.message` is human-readable text. Its details
+ * are a map whose optional `platform` value is `darwin`, `android`, `windows`,
+ * or `linux`, and whose optional `nativeCode` value is the operating-system
+ * code or D-Bus error name.
+ */
+enum class ButaneErrorCode(val raw: Int) {
+  UNSUPPORTED(0),
+  UNAVAILABLE(1),
+  POWERED_OFF(2),
+  NOT_FOUND(3),
+  NOT_CONNECTED(4),
+  CONNECT_FAILED(5),
+  DISCONNECTED(6),
+  TIMEOUT(7),
+  INVALID_ARGUMENT(8),
+  OPERATION_FAILED(9);
+
+  companion object {
+    fun ofRaw(raw: Int): ButaneErrorCode? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 enum class ConnectionState(val raw: Int) {
   DISCONNECTED(0),
   CONNECTING(1),
@@ -965,85 +993,90 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
       }
       130.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          ConnectionState.ofRaw(it.toInt())
+          ButaneErrorCode.ofRaw(it.toInt())
         }
       }
       131.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          AttResult.ofRaw(it.toInt())
+          ConnectionState.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ClientSession.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          AttResult.ofRaw(it.toInt())
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PeripheralSession.fromList(it)
+          ClientSession.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PeripheralManagerSession.fromList(it)
+          PeripheralSession.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Peripheral.fromList(it)
+          PeripheralManagerSession.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AdvertisementData.fromList(it)
+          Peripheral.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ScanResult.fromList(it)
+          AdvertisementData.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Service.fromList(it)
+          ScanResult.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Characteristic.fromList(it)
+          Service.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          Descriptor.fromList(it)
+          Characteristic.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CharacteristicProperty.fromList(it)
+          Descriptor.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CharacteristicPermission.fromList(it)
+          CharacteristicProperty.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          AttRequest.fromList(it)
+          CharacteristicPermission.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MutableDescriptor.fromList(it)
+          AttRequest.fromList(it)
         }
       }
       145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MutableCharacteristic.fromList(it)
+          MutableDescriptor.fromList(it)
         }
       }
       146.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MutableCharacteristic.fromList(it)
+        }
+      }
+      147.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           MutableService.fromList(it)
         }
@@ -1057,72 +1090,76 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
         stream.write(129)
         writeValue(stream, value.raw.toLong())
       }
-      is ConnectionState -> {
+      is ButaneErrorCode -> {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is AttResult -> {
+      is ConnectionState -> {
         stream.write(131)
         writeValue(stream, value.raw.toLong())
       }
-      is ClientSession -> {
+      is AttResult -> {
         stream.write(132)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is PeripheralSession -> {
+      is ClientSession -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is PeripheralManagerSession -> {
+      is PeripheralSession -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is Peripheral -> {
+      is PeripheralManagerSession -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is AdvertisementData -> {
+      is Peripheral -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is ScanResult -> {
+      is AdvertisementData -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is Service -> {
+      is ScanResult -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is Characteristic -> {
+      is Service -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is Descriptor -> {
+      is Characteristic -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is CharacteristicProperty -> {
+      is Descriptor -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is CharacteristicPermission -> {
+      is CharacteristicProperty -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is AttRequest -> {
+      is CharacteristicPermission -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is MutableDescriptor -> {
+      is AttRequest -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is MutableCharacteristic -> {
+      is MutableDescriptor -> {
         stream.write(145)
         writeValue(stream, value.toList())
       }
-      is MutableService -> {
+      is MutableCharacteristic -> {
         stream.write(146)
+        writeValue(stream, value.toList())
+      }
+      is MutableService -> {
+        stream.write(147)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)

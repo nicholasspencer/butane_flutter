@@ -1,4 +1,5 @@
 #include "butane_central_winrt.h"
+#include "butane_error.h"
 #include <windows.h>
 #define CharacteristicProperty ButaneConversionCharacteristicProperty
 #include "butane_conversions.h"
@@ -94,8 +95,11 @@ winrt::fire_and_forget WindowsCentralBackend::QueryStateAsync(
 std::optional<FlutterError> WindowsCentralBackend::StartScan(
     const std::vector<std::string>& service_uuids,
     AdvertisementCallback callback) {
-  if (watcher_) return FlutterError(
-      "scan_in_progress", "A Windows BLE scan is already active.");
+  if (watcher_) {
+    return MakeButaneError(ButaneErrorCode::kInvalidArgument,
+                           "A Windows BLE scan is already active.",
+                           "scanInProgress");
+  }
   try {
     watcher_ = BluetoothLEAdvertisementWatcher();
     // TODO(butane_flutter-4um): map ScanOptions ScanningMode Active/Passive when the Pigeon field lands.
@@ -106,8 +110,9 @@ std::optional<FlutterError> WindowsCentralBackend::StartScan(
       const auto text = winrt::to_hstring(uuid);
       if (FAILED(::CLSIDFromString(text.c_str(), &value))) {
         StopScan();
-        return FlutterError("invalid_argument",
-                            "Service filter contains an invalid UUID.");
+        return MakeButaneError(ButaneErrorCode::kInvalidArgument,
+                               "Service filter contains an invalid UUID.",
+                               "invalidServiceFilterUuid");
       }
       filters.Append(winrt::guid(
           value.Data1, value.Data2, value.Data3,
@@ -127,7 +132,9 @@ std::optional<FlutterError> WindowsCentralBackend::StartScan(
     return std::nullopt;
   } catch (const winrt::hresult_error& error) {
     StopScan();
-    return FlutterError("scan_failed", winrt::to_string(error.message()));
+    return MakeButaneError(ButaneErrorCode::kOperationFailed,
+                           winrt::to_string(error.message()),
+                           error.code().value);
   }
 }
 void WindowsCentralBackend::StopScan() {

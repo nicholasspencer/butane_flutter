@@ -8,6 +8,7 @@ import 'dart:mirrors';
 import 'dart:typed_data';
 
 import 'package:bluez/bluez.dart';
+import 'package:butane_dart/butane_dart.dart' show ButaneException;
 import 'package:butane_dart/interface.dart';
 import 'package:butane_dart_bluez/butane_dart_bluez.dart';
 import 'package:dbus/dbus.dart';
@@ -151,31 +152,50 @@ void main() {
     expect(properties.indicateEncryptionRequired, isFalse);
   });
 
-  test('writeCharacteristic reports the WriteValue D-Bus error', () async {
+  test('writeCharacteristic maps named BlueZ D-Bus errors', () async {
     final fixture = await _BlueZFixture.start(
       withDevice: true,
       withGatt: true,
     );
     addTearDown(fixture.close);
-    fixture.characteristic.methodErrors['WriteValue'] = _forcedMethodError();
+    const mappings = {
+      'org.bluez.Error.NotSupported': ButaneErrorCode.unsupported,
+      'org.bluez.Error.NotReady': ButaneErrorCode.poweredOff,
+      'org.bluez.Error.NotAvailable': ButaneErrorCode.unavailable,
+      'org.bluez.Error.DoesNotExist': ButaneErrorCode.notFound,
+      'org.bluez.Error.NotConnected': ButaneErrorCode.notConnected,
+      'org.bluez.Error.InvalidArguments': ButaneErrorCode.invalidArgument,
+      'org.bluez.Error.Failed': ButaneErrorCode.operationFailed,
+    };
 
-    await expectLater(
-      fixture.backend.writeCharacteristic(
-        session: const PeripheralSession(peripheralIdentifier: _address),
-        serviceUuid: _serviceUuid,
-        characteristicUuid: _characteristicUuid,
-        value: Uint8List.fromList([1, 2, 3]),
-      ),
-      throwsA(
-        _stateErrorContaining([
-          'WriteValue',
-          _characteristicPath.value,
-          _forcedErrorName,
-          _forcedErrorMessage,
-        ]),
-      ),
+    for (final entry in mappings.entries) {
+      fixture.characteristic.methodErrors['WriteValue'] =
+          _forcedMethodError(entry.key);
+      await expectLater(
+        fixture.backend.writeCharacteristic(
+          session: const PeripheralSession(peripheralIdentifier: _address),
+          serviceUuid: _serviceUuid,
+          characteristicUuid: _characteristicUuid,
+          value: Uint8List.fromList([1, 2, 3]),
+        ),
+        throwsA(
+          _butaneExceptionContaining(
+            entry.value,
+            [
+              'WriteValue',
+              _characteristicPath.value,
+              entry.key,
+              _forcedErrorMessage,
+            ],
+            nativeCode: entry.key,
+          ),
+        ),
+      );
+    }
+    expect(
+      fixture.characteristic.methodNames,
+      List.filled(mappings.length, 'WriteValue'),
     );
-    expect(fixture.characteristic.methodNames, ['WriteValue']);
   });
 
   test('observeCharacteristic reports the StartNotify D-Bus error', () async {
@@ -193,12 +213,15 @@ void main() {
         characteristicUuid: _characteristicUuid,
       ),
       throwsA(
-        _stateErrorContaining([
-          'StartNotify',
-          _characteristicPath.value,
-          _forcedErrorName,
-          _forcedErrorMessage,
-        ]),
+        _butaneExceptionContaining(
+          ButaneErrorCode.operationFailed,
+          [
+            'StartNotify',
+            _characteristicPath.value,
+            _forcedErrorName,
+            _forcedErrorMessage,
+          ],
+        ),
       ),
     );
     expect(fixture.characteristic.methodNames, ['StartNotify']);
@@ -220,12 +243,15 @@ void main() {
         observe: false,
       ),
       throwsA(
-        _stateErrorContaining([
-          'StopNotify',
-          _characteristicPath.value,
-          _forcedErrorName,
-          _forcedErrorMessage,
-        ]),
+        _butaneExceptionContaining(
+          ButaneErrorCode.operationFailed,
+          [
+            'StopNotify',
+            _characteristicPath.value,
+            _forcedErrorName,
+            _forcedErrorMessage,
+          ],
+        ),
       ),
     );
     expect(fixture.characteristic.methodNames, ['StopNotify']);
@@ -239,11 +265,14 @@ void main() {
     await expectLater(
       fixture.backend.addService(service: _mutableService),
       throwsA(
-        _stateErrorContaining([
-          'RegisterApplication',
-          _forcedErrorName,
-          _forcedErrorMessage,
-        ]),
+        _butaneExceptionContaining(
+          ButaneErrorCode.operationFailed,
+          [
+            'RegisterApplication',
+            _forcedErrorName,
+            _forcedErrorMessage,
+          ],
+        ),
       ),
     );
     expect(
@@ -266,11 +295,14 @@ void main() {
     await expectLater(
       fixture.backend.startAdvertising(serviceUuids: const [_serviceUuid]),
       throwsA(
-        _stateErrorContaining([
-          'RegisterAdvertisement',
-          _forcedErrorName,
-          _forcedErrorMessage,
-        ]),
+        _butaneExceptionContaining(
+          ButaneErrorCode.operationFailed,
+          [
+            'RegisterAdvertisement',
+            _forcedErrorName,
+            _forcedErrorMessage,
+          ],
+        ),
       ),
     );
     await fixture.backend.stopAdvertising();
@@ -377,10 +409,9 @@ void main() {
     await expectLater(
       fixture.backend.startAdvertising(serviceUuids: const [_serviceUuid]),
       throwsA(
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          'BlueZ GetManagedObjects returned no data',
+        _butaneExceptionContaining(
+          ButaneErrorCode.operationFailed,
+          ['BlueZ GetManagedObjects returned no data'],
         ),
       ),
     );
@@ -431,17 +462,33 @@ void main() {
   });
 }
 
-DBusMethodErrorResponse _forcedMethodError() => DBusMethodErrorResponse(
-      _forcedErrorName,
+DBusMethodErrorResponse _forcedMethodError([
+  String errorName = _forcedErrorName,
+]) =>
+    DBusMethodErrorResponse(
+      errorName,
       [const DBusString(_forcedErrorMessage)],
     );
 
-Matcher _stateErrorContaining(List<String> fragments) =>
-    isA<StateError>().having(
-      (error) => error.message,
-      'message',
-      allOf(fragments.map(contains).toList()),
-    );
+Matcher _butaneExceptionContaining(
+  ButaneErrorCode code,
+  List<String> fragments, {
+  String nativeCode = _forcedErrorName,
+}) =>
+    isA<ButaneException>()
+        .having((error) => error.code, 'code', code)
+        .having((error) => error.platform, 'platform', 'linux')
+        .having((error) => error.nativeCode, 'nativeCode', nativeCode)
+        .having(
+          (error) => error.message,
+          'message',
+          allOf(fragments.map(contains).toList()),
+        )
+        .having(
+          (error) => error.cause,
+          'cause',
+          isA<DBusMethodResponseException>(),
+        );
 
 void _injectPeripheralBus(ButaneDartBluez backend, DBusClient bus) {
   final instance = reflect(backend);

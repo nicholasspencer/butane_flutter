@@ -119,10 +119,10 @@ TEST(WindowsGattOperationsBackend, MapsEveryErrorRow) {
   auto native = std::make_shared<FakeNativeGattOperations>();
   WindowsGattOperationsBackend backend(native);
   const std::vector<std::pair<GattOperationStatus, std::string>> rows = {
-      {GattOperationStatus::kUnreachable, "not-connected"},
-      {GattOperationStatus::kProtocolError, "gatt-operation-failed"},
-      {GattOperationStatus::kAccessDenied, "unauthorized"},
-      {GattOperationStatus::kNotFound, "not-found"},
+      {GattOperationStatus::kUnreachable, "notConnected"},
+      {GattOperationStatus::kProtocolError, "operationFailed"},
+      {GattOperationStatus::kAccessDenied, "operationFailed"},
+      {GattOperationStatus::kNotFound, "notFound"},
       {GattOperationStatus::kUnsupported, "unsupported"}};
   for (const auto& [status, code] : rows) {
     native->status = status;

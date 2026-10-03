@@ -1,6 +1,7 @@
 #include "butane_gatt_discovery_winrt.h"
 
 #include "butane_conversions.h"
+#include "butane_error.h"
 
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
@@ -483,8 +484,9 @@ void WindowsGattDiscoveryBackend::DiscoverCharacteristics(
     std::vector<std::string> uuids, bool explicit_empty,
     Completion completion) {
   if (!state_->cache.HasService(address, service_uuid)) {
-    completion(FlutterError("not-found",
-                            "GATT discovery data was not found."));
+    completion(MakeButaneError(ButaneErrorCode::kNotFound,
+                               "GATT discovery data was not found.",
+                               "gattDataNotFound"));
     return;
   }
   if (explicit_empty) {
