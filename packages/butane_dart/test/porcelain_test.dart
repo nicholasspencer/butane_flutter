@@ -174,6 +174,43 @@ void main() {
       expect(emitted, contains(PeerManagerState.poweredOn));
       expect(emitted, contains(PeerManagerState.unauthorized));
     });
+
+    test('scan maps isConnectable true and null to porcelain values', () async {
+      final source = StreamController<api.ScanResult>();
+      final manager = CentralManager(
+        platform: _FakePlatform(scanResults: source.stream),
+      );
+      const peripheral = api.Peripheral(
+        session: api.PeripheralSession(
+          peripheralIdentifier: 'peripheral-id',
+        ),
+        state: api.ConnectionState.disconnected,
+      );
+      final connectability = manager
+          .scan()
+          .take(2)
+          .map((result) => result.advertisementData.isConnectable)
+          .toList();
+
+      source
+        ..add(
+          const api.ScanResult(
+            peripheral: peripheral,
+            advertisementData: api.AdvertisementData(isConnectable: true),
+          ),
+        )
+        ..add(
+          const api.ScanResult(
+            peripheral: peripheral,
+            advertisementData: api.AdvertisementData(isConnectable: null),
+          ),
+        );
+
+      expect(await connectability, [true, false]);
+
+      await source.close();
+      manager.dispose();
+    });
   });
 
   group('Peripheral descriptor and MTU operations', () {
@@ -289,16 +326,19 @@ final class _FakePlatform extends api.ButanePlatformInterface {
     this.clientStateValue = api.ClientState.poweredOn,
     this.characteristicsValue = const [],
     Stream<api.ClientState>? clientStates,
+    Stream<api.ScanResult>? scanResults,
     this.peripheralsValue = const [],
     this.servicesValue = const [],
     Uint8List? descriptorReadValue,
     this.effectiveMtu = 23,
   })  : _clientStates = clientStates,
+        _scanResults = scanResults,
         descriptorReadValue = descriptorReadValue ?? Uint8List(0);
 
   final api.ClientState clientStateValue;
   final Iterable<api.Characteristic> characteristicsValue;
   final Stream<api.ClientState>? _clientStates;
+  final Stream<api.ScanResult>? _scanResults;
   final Iterable<api.Peripheral> peripheralsValue;
   final Iterable<api.Service> servicesValue;
   final Uint8List descriptorReadValue;
@@ -332,15 +372,17 @@ final class _FakePlatform extends api.ButanePlatformInterface {
   // --- Unused by these tests ------------------------------------------------
 
   @override
-  Future<void> scan({Iterable<String>? forServices, api.Session? session}) =>
-      throw UnimplementedError();
+  Future<void> scan({
+    Iterable<String>? forServices,
+    api.Session? session,
+  }) async {}
 
   @override
   Stream<api.ScanResult> scanStream([api.Session? session]) =>
-      throw UnimplementedError();
+      _scanResults ?? const Stream<api.ScanResult>.empty();
 
   @override
-  Future<void> cancelScan({api.Session? session}) => throw UnimplementedError();
+  Future<void> cancelScan({api.Session? session}) async {}
 
   @override
   Future<Iterable<api.Peripheral>> peripherals({
