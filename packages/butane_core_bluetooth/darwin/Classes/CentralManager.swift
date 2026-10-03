@@ -454,12 +454,44 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
 }
 
+// MARK: Descriptor Discovery Continuations
+
+final class DescriptorDiscoveryContinuationStore {
+  private var descriptorDiscoveryContinuations: [CBCharacteristic: [CheckedContinuation<Void, Never>]] = [:]
+  private let lock = NSLock()
+
+  func wait(for characteristic: CBCharacteristic, starting discovery: () -> Void) async {
+    return await withCheckedContinuation { continuation in
+      lock.lock()
+      descriptorDiscoveryContinuations[characteristic, default: []].append(continuation)
+      lock.unlock()
+
+      discovery()
+    }
+  }
+
+  func didDiscoverDescriptorsFor(characteristic: CBCharacteristic, error: Error?) {
+    lock.lock()
+    let continuations = descriptorDiscoveryContinuations.removeValue(forKey: characteristic)
+    lock.unlock()
+
+    if let error = error {
+      NSLog("\(characteristic.uuid.uuidString): didDiscoverDescriptors failed: \(error)")
+    }
+
+    for continuation in continuations ?? [] {
+      continuation.resume()
+    }
+  }
+}
+
 // MARK: Peripheral Actor
 
 actor PeripheralActor: Equatable {
   nonisolated let peripheral: CBPeripheral
   
   let flutterApi: ButaneFlutterApi
+  let descriptorDiscoveryContinuationStore = DescriptorDiscoveryContinuationStore()
   
   init(peripheral: CBPeripheral, flutterApi: ButaneFlutterApi) {
     self.peripheral = peripheral
@@ -508,10 +540,7 @@ actor PeripheralActor: Equatable {
   }
 
   func discoverDescriptors(for characteristic: CBCharacteristic) async {
-    descriptorDiscoveryContinuations[characteristic] = descriptorDiscoveryContinuations[characteristic] ?? [];
-
-    return await withCheckedContinuation { continuation in
-      descriptorDiscoveryContinuations[characteristic]?.append(continuation)
+    return await descriptorDiscoveryContinuationStore.wait(for: characteristic) {
       peripheral.discoverDescriptors(for: characteristic)
     }
   }
@@ -623,8 +652,6 @@ actor PeripheralActor: Equatable {
   
   var characteristicDiscoveryContinuations: [CBService:[CheckedContinuation<Void, Error>]] = [:]
 
-  var descriptorDiscoveryContinuations: [CBCharacteristic: [CheckedContinuation<Void, Never>]] = [:]
-  
   var rssiContinuations: [CheckedContinuation<Int64, Error>] = []
   
   var characteristicReadContinuations: [CBCharacteristic: [CheckedContinuation<Data, Error>]] = [:]
@@ -674,8 +701,6 @@ actor PeripheralActor: Equatable {
       return
     }
     
-    print("didDiscoverCharacteristicsFor(\(service.uuid.uuidString)) has \(characteristicDiscoveryContinuations.count) continuations")
-
     if let error = error {
       for continuation in continuations {
         print("\(service.uuid.uuidString): didDiscoverCharacteristics failed")
@@ -697,22 +722,10 @@ actor PeripheralActor: Equatable {
       print("\(service.uuid.uuidString): didDiscoverCharacteristics")
       continuation.resume()
     }
-    
-    print("didDiscoverCharacteristicsFor(\(service.uuid.uuidString)) purging \(characteristicDiscoveryContinuations.count) continuations")
   }
 
   func didDiscoverDescriptorsFor(characteristic: CBCharacteristic, error: Error?) {
-    guard let continuations = descriptorDiscoveryContinuations.removeValue(forKey: characteristic) else {
-      return
-    }
-
-    if let error = error {
-      NSLog("\(characteristic.uuid.uuidString): didDiscoverDescriptors failed: \(error)")
-    }
-
-    for continuation in continuations {
-      continuation.resume()
-    }
+    descriptorDiscoveryContinuationStore.didDiscoverDescriptorsFor(characteristic: characteristic, error: error)
   }
   
   func didUpdateValueFor(characteristic: CBCharacteristic, error: Error?) {
