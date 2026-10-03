@@ -54,6 +54,7 @@ base class AdvertisementData {
 
   final List<String>? serviceUuids;
 
+  /// This is `false` when the backend cannot determine connectability.
   final bool isConnectable;
 
   @protected
@@ -226,6 +227,7 @@ extension ApiAdvertisementData on api.AdvertisementData {
       serviceUuids: serviceUuids?.nonNulls.toList(),
       txPowerLevel: txPowerLevel,
       localName: localName,
+      isConnectable: isConnectable ?? false,
     );
   }
 }
