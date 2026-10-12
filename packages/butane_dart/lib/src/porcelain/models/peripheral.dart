@@ -102,7 +102,10 @@ base class Peripheral extends Peer {
     return manager.platform.cancelConnection(session: session);
   }
 
-  /// Initiates bonding with this peripheral.
+  /// Bonds with this peripheral.
+  ///
+  /// Completes once the peripheral is bonded, immediately when it already is,
+  /// and throws a [ButaneException] when bonding fails or is rejected.
   ///
   /// Darwin does not expose an explicit bonding API. On Darwin this throws a
   /// [ButaneException] whose code is [ButaneErrorCode.unsupported].

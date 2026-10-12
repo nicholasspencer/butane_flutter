@@ -53,7 +53,10 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     private var applicationContext: Context? = null
     private var bluetoothAdapter: BluetoothAdapter? = null
     private val stateReceivers = mutableMapOf<String?, BroadcastReceiver>()
-    private val bondReceivers = mutableMapOf<PeripheralSession, BroadcastReceiver>()
+    // One ACTION_BOND_STATE_CHANGED receiver serves every observed peripheral.
+    private var bondReceiver: BroadcastReceiver? = null
+    private val bondSessions = mutableMapOf<String, PeripheralSession>()
+    private val pendingBonds = mutableMapOf<String, MutableList<(Result<Unit>) -> Unit>>()
 
     private var scanCallback: ScanCallback? = null
     private val discoveredPeripherals = mutableMapOf<String, BluetoothDevice>()
@@ -88,14 +91,21 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             }
         }
         stateReceivers.clear()
-        bondReceivers.values.forEach { receiver ->
+        bondReceiver?.let { receiver ->
             try {
                 applicationContext?.unregisterReceiver(receiver)
             } catch (_: IllegalArgumentException) {
                 // Already unregistered
             }
         }
-        bondReceivers.clear()
+        bondReceiver = null
+        bondSessions.clear()
+        completePendingBonds(
+            pendingBonds.keys.toList(),
+            Result.failure(
+                butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Plugin detached while bonding"),
+            ),
+        )
         // Close all connections
         connections.values.forEach { it.close() }
         connections.clear()
@@ -176,8 +186,15 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         }
     }
 
-    private fun registerBondReceiver(session: PeripheralSession): Result<Unit> {
-        if (bondReceivers.containsKey(session)) return Result.success(Unit)
+    private fun completePendingBonds(addresses: List<String>, result: Result<Unit>) {
+        for (address in addresses) {
+            pendingBonds.remove(address)?.forEach { it(result) }
+        }
+    }
+
+    private fun observeBondState(session: PeripheralSession): Result<Unit> {
+        bondSessions[session.peripheralIdentifier] = session
+        if (bondReceiver != null) return Result.success(Unit)
         val context = applicationContext
             ?: return Result.failure(
                 butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Plugin not attached"),
@@ -194,12 +211,27 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 } catch (_: SecurityException) {
                     return
                 }
-                if (address != session.peripheralIdentifier) return
+                val session = bondSessions[address] ?: return
                 val state = intent.getIntExtra(
                     BluetoothDevice.EXTRA_BOND_STATE,
                     BluetoothDevice.BOND_NONE,
                 )
                 flutterApi?.onBondState(session, mapBondState(state)) {}
+                // bond() completes on the outcome, matching BlueZ Pair() and
+                // Windows PairAsync rather than the createBond() launch.
+                when (state) {
+                    BluetoothDevice.BOND_BONDED ->
+                        completePendingBonds(listOf(address), Result.success(Unit))
+                    BluetoothDevice.BOND_NONE -> completePendingBonds(
+                        listOf(address),
+                        Result.failure(
+                            butaneFlutterError(
+                                ButaneErrorCode.OPERATION_FAILED,
+                                "Bonding with $address failed or was rejected",
+                            ),
+                        ),
+                    )
+                }
             }
         }
         return try {
@@ -207,7 +239,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 receiver,
                 IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED),
             )
-            bondReceivers[session] = receiver
+            bondReceiver = receiver
             Result.success(Unit)
         } catch (error: SecurityException) {
             Result.failure(
@@ -524,19 +556,20 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             callback(Result.failure(error))
             return
         }
-        registerBondReceiver(session).exceptionOrNull()?.let { error ->
+        observeBondState(session).exceptionOrNull()?.let { error ->
             callback(Result.failure(error))
             return
         }
+        val address = session.peripheralIdentifier
         try {
             when (device.bondState) {
-                BluetoothDevice.BOND_BONDING,
-                BluetoothDevice.BOND_BONDED,
-                -> callback(Result.success(Unit))
+                BluetoothDevice.BOND_BONDED -> callback(Result.success(Unit))
+                BluetoothDevice.BOND_BONDING ->
+                    pendingBonds.getOrPut(address) { mutableListOf() }.add(callback)
                 BluetoothDevice.BOND_NONE -> {
-                    if (device.createBond()) {
-                        callback(Result.success(Unit))
-                    } else {
+                    pendingBonds.getOrPut(address) { mutableListOf() }.add(callback)
+                    if (!device.createBond()) {
+                        pendingBonds[address]?.remove(callback)
                         callback(
                             Result.failure(
                                 butaneFlutterError(
@@ -557,6 +590,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 )
             }
         } catch (error: SecurityException) {
+            pendingBonds[address]?.remove(callback)
             callback(
                 Result.failure(
                     butaneFlutterError(
@@ -567,6 +601,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 ),
             )
         } catch (error: Exception) {
+            pendingBonds[address]?.remove(callback)
             callback(
                 Result.failure(
                     butaneFlutterError(
@@ -587,7 +622,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             callback(Result.failure(error))
             return
         }
-        registerBondReceiver(session).exceptionOrNull()?.let { error ->
+        observeBondState(session).exceptionOrNull()?.let { error ->
             callback(Result.failure(error))
             return
         }

@@ -82,7 +82,8 @@ abstract base class ButanePlatformInterface {
     required PeripheralSession session,
   });
 
-  /// Initiates bonding with the peripheral.
+  /// Bonds with the peripheral, completing once bonded and failing when
+  /// bonding fails or is rejected.
   Future<void> bond({
     required PeripheralSession session,
   });
