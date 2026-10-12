@@ -1177,6 +1177,7 @@ private open class ApiPigeonCodec : StandardMessageCodec() {
 interface ButaneHostApi {
   /** "Central" APIs. */
   fun state(session: ClientSession?, callback: (Result<ClientState>) -> Unit)
+  fun requestEnable(session: ClientSession?, callback: (Result<Unit>) -> Unit)
   /** Scans for peripherals that are advertising services. */
   fun scan(session: ClientSession?, forServices: List<String>?, callback: (Result<Unit>) -> Unit)
   fun cancelScan(session: ClientSession?, callback: (Result<Unit>) -> Unit)
@@ -1245,6 +1246,25 @@ interface ButaneHostApi {
               } else {
                 val data = result.getOrNull()
                 reply.reply(ApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestEnable$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sessionArg = args[0] as ClientSession?
+            api.requestEnable(sessionArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(ApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(ApiPigeonUtils.wrapResult(null))
               }
             }
           }

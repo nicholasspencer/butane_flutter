@@ -56,6 +56,9 @@ class ButaneWindowsPlugin : public flutter::Plugin, public ButaneHostApi {
 
   void State(const ClientSession* session,
              std::function<void(ErrorOr<ClientState> reply)> result) override;
+  void RequestEnable(
+      const ClientSession* session,
+      std::function<void(std::optional<FlutterError> reply)> result) override;
   void Scan(const ClientSession* session,
             const flutter::EncodableList* for_services,
             std::function<void(std::optional<FlutterError> reply)> result)

@@ -1093,6 +1093,7 @@ class ApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 protocol ButaneHostApi {
   /// "Central" APIs.
   func state(session: ClientSession?, completion: @escaping (Result<ClientState, Error>) -> Void)
+  func requestEnable(session: ClientSession?, completion: @escaping (Result<Void, Error>) -> Void)
   /// Scans for peripherals that are advertising services.
   func scan(session: ClientSession?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
   func cancelScan(session: ClientSession?, completion: @escaping (Result<Void, Error>) -> Void)
@@ -1161,6 +1162,23 @@ class ButaneHostApiSetup {
       }
     } else {
       stateChannel.setMessageHandler(nil)
+    }
+    let requestEnableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestEnable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      requestEnableChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let sessionArg: ClientSession? = nilOrValue(args[0])
+        api.requestEnable(session: sessionArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      requestEnableChannel.setMessageHandler(nil)
     }
     /// Scans for peripherals that are advertising services.
     let scanChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.scan\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)

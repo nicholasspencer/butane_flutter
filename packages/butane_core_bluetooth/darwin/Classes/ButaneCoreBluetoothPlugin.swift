@@ -72,6 +72,14 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     
     completion(.success(central.state))
   }
+
+  func requestEnable(session: ClientSession?, completion: @escaping (Result<Void, Error>) -> Void) {
+    completion(.failure(butaneFlutterError(
+      nativeError: nil,
+      fallback: .unsupported,
+      message: "CoreBluetooth does not allow apps to enable Bluetooth."
+    )))
+  }
   
   func scan(session: ClientSession?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     let central = centralManager(session)

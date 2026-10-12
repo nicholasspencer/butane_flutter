@@ -147,6 +147,24 @@ void main() {
       manager.dispose();
     });
 
+    test('requestEnable forwards the manager session', () async {
+      final platform = _FakePlatform();
+      final manager = CentralManager(
+        clientIdentifier: 'client-id',
+        restorationIdentifier: 'restoration-id',
+        platform: platform,
+      );
+      addTearDown(manager.dispose);
+
+      await manager.requestEnable();
+
+      expect(platform.requestEnableSession?.clientIdentifier, 'client-id');
+      expect(
+        platform.requestEnableSession?.restorationIdentifier,
+        'restoration-id',
+      );
+    });
+
     test('preserves typed backend failures unchanged', () async {
       final cause = StateError('native backend failure');
       final expected = ButaneException(
@@ -393,12 +411,19 @@ final class _FakePlatform extends api.ButanePlatformInterface {
 
   ({api.PeripheralSession session, int mtu})? requestMtuInvocation;
 
+  api.Session? requestEnableSession;
+
   @override
   Future<api.ClientState> clientState([api.Session? session]) async {
     if (clientStateError case final error?) {
       throw error;
     }
     return clientStateValue;
+  }
+
+  @override
+  Future<void> requestEnable({api.Session? session}) async {
+    requestEnableSession = session;
   }
 
   @override
