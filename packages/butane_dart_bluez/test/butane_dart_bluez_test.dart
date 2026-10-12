@@ -113,6 +113,25 @@ void main() {
     expect(fixture.device!.methodNames, ['Connect', 'Disconnect']);
   });
 
+  test('connect times out when Connect() never resolves', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+    const session = PeripheralSession(peripheralIdentifier: _address);
+
+    await expectLater(
+      fixture.backend.connect(
+        session: session,
+        options: const ConnectOptions(timeoutMillis: 300),
+      ),
+      throwsA(
+        isA<ButaneException>()
+            .having((error) => error.code, 'code', ButaneErrorCode.timeout)
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+    expect(fixture.device!.methodNames, ['Connect']);
+  });
+
   test('property changes drive client, scan, and connection streams', () async {
     final fixture = await _BlueZFixture.start(withDevice: true);
     addTearDown(fixture.close);

@@ -65,6 +65,10 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   /// cancelConnection must signal the polling loop independently.
   final Map<String, Completer<void>> _pendingConnectionCancellations = {};
 
+  /// Upper bound on a Device1.Connect poll when the caller supplies no
+  /// [ConnectOptions.timeoutMillis].
+  static const _defaultConnectTimeout = Duration(seconds: 30);
+
   /// Separate system-bus client used for the peripheral role (advertising
   /// and local GATT objects). We keep this distinct from the `bluez`
   /// package's internal bus because we need to register our own objects
@@ -676,6 +680,12 @@ base class ButaneDartBluez extends ButanePlatformInterface {
       }());
 
       const pollInterval = Duration(milliseconds: 250);
+      // The porcelain enforces a caller-supplied timeout; this backend
+      // deadline only guarantees the poll terminates when none was given.
+      final timeout = options?.timeoutMillis != null
+          ? Duration(milliseconds: options!.timeoutMillis!)
+          : _defaultConnectTimeout;
+      final deadline = DateTime.now().add(timeout);
       while (!device.connected) {
         if (cancellation.isCompleted) {
           throw _bluezException(
@@ -688,6 +698,13 @@ base class ButaneDartBluez extends ButanePlatformInterface {
             ButaneErrorCode.connectFailed,
             'BlueZ Connect() failed for $identifier: $connectError',
             cause: connectError,
+          );
+        }
+        if (DateTime.now().isAfter(deadline)) {
+          throw _bluezException(
+            ButaneErrorCode.timeout,
+            'BlueZ connect timed out for $identifier: device never became '
+            'connected within ${timeout.inMilliseconds} ms',
           );
         }
         await Future.any<void>([
