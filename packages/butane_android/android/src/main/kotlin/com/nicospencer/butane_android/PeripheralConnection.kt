@@ -7,13 +7,18 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.StateFlow
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.ktx.asFlow
 import no.nordicsemi.android.ble.ktx.suspend
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.util.UUID
+
+/** How long connect waits for the stack to rediscover services after a refresh. */
+private const val REDISCOVERY_TIMEOUT_MS = 10_000L
 
 class PeripheralConnection(
     context: Context,
@@ -25,6 +30,9 @@ class PeripheralConnection(
 
     /** The underlying BluetoothGatt, available after connection. */
     private var gatt: BluetoothGatt? = null
+
+    /** Completes when service discovery finishes; reset when it is invalidated. */
+    private var servicesDiscovered = CompletableDeferred<Unit>()
 
     init {
         setConnectionObserver(object : ConnectionObserver {
@@ -47,12 +55,14 @@ class PeripheralConnection(
 
     override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
         this.gatt = gatt
+        servicesDiscovered.complete(Unit)
         // Accept any peripheral — service validation is done at the Dart layer.
         return true
     }
 
     override fun onServicesInvalidated() {
         gatt = null
+        if (servicesDiscovered.isCompleted) servicesDiscovered = CompletableDeferred()
     }
 
     override fun onDeviceReady() {
@@ -81,11 +91,22 @@ class PeripheralConnection(
             .useAutoConnect(autoConnect)
             .suspend()
         if (refreshGattCache) {
+            // The refresh invalidates the services discovered on connect and
+            // the stack rediscovers them asynchronously; connect completes only
+            // once they are back, so services() never reads an empty cache.
+            servicesDiscovered = CompletableDeferred()
             refreshDeviceCache().suspend()
+            withTimeout(REDISCOVERY_TIMEOUT_MS) { servicesDiscovered.await() }
         }
     }
 
     suspend fun disconnectDevice() {
+        // CoreBluetooth and BlueZ treat cancelling a dropped link as a no-op;
+        // the Nordic disconnect request rejects it as invalid.
+        if (!isConnected) {
+            _connectionState.value = ConnectionState.DISCONNECTED
+            return
+        }
         bluetoothDevice?.let { device ->
             _connectionState.value = ConnectionState.DISCONNECTING
             onConnectionStateChanged(device, ConnectionState.DISCONNECTING)
