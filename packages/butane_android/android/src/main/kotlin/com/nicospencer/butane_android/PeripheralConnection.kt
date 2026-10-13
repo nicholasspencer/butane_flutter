@@ -99,8 +99,8 @@ class PeripheralConnection(
     }
 
     fun findCharacteristic(serviceUuid: String, characteristicUuid: String): BluetoothGattCharacteristic? {
-        return gatt?.getService(UUID.fromString(serviceUuid))
-            ?.getCharacteristic(UUID.fromString(characteristicUuid))
+        return gatt?.getService(bluetoothUuid(serviceUuid))
+            ?.getCharacteristic(bluetoothUuid(characteristicUuid))
     }
 
     fun findDescriptor(
@@ -109,7 +109,7 @@ class PeripheralConnection(
         descriptorUuid: String,
     ): BluetoothGattDescriptor? {
         return findCharacteristic(serviceUuid, characteristicUuid)
-            ?.getDescriptor(UUID.fromString(descriptorUuid))
+            ?.getDescriptor(bluetoothUuid(descriptorUuid))
     }
 
     suspend fun readCharacteristicValue(

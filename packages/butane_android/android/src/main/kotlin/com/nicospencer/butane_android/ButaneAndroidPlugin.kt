@@ -475,7 +475,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
 
         val filters = forServices?.map { uuid ->
             ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid(UUID.fromString(uuid)))
+                .setServiceUuid(ParcelUuid(bluetoothUuid(uuid)))
                 .build()
         }
 
@@ -795,7 +795,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             return
         }
         val gattService = connection.getDiscoveredServices()
-            .firstOrNull { it.uuid.toString().equals(serviceUuid, ignoreCase = true) }
+            .firstOrNull { it.uuid == bluetoothUuid(serviceUuid) }
         if (gattService == null) {
             callback(Result.failure(butaneFlutterError(ButaneErrorCode.NOT_FOUND, "Service $serviceUuid not found")))
             return
@@ -1070,7 +1070,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         val dataBuilder = AdvertiseData.Builder()
             .setIncludeDeviceName(localName != null)
         serviceUuids?.forEach { uuid ->
-            dataBuilder.addServiceUuid(ParcelUuid(UUID.fromString(uuid)))
+            dataBuilder.addServiceUuid(ParcelUuid(bluetoothUuid(uuid)))
         }
         val data = dataBuilder.build()
 

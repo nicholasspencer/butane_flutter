@@ -32,7 +32,7 @@ class GattServerManager(
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var gattServer: BluetoothGattServer? = null
-    private val services = mutableMapOf<String, BluetoothGattService>()
+    private val services = mutableMapOf<UUID, BluetoothGattService>()
     private val pendingRequests = mutableMapOf<Long, PendingRequest>()
     private var nextRequestId: Long = 1
 
@@ -147,7 +147,7 @@ class GattServerManager(
     @Suppress("DEPRECATION")
     fun addService(service: MutableService) {
         val gattService = BluetoothGattService(
-            UUID.fromString(service.uuid),
+            bluetoothUuid(service.uuid),
             if (service.isPrimary) BluetoothGattService.SERVICE_TYPE_PRIMARY
             else BluetoothGattService.SERVICE_TYPE_SECONDARY,
         )
@@ -174,7 +174,7 @@ class GattServerManager(
                 p
             } ?: 0
             val gattChar = BluetoothGattCharacteristic(
-                UUID.fromString(mutableChar.uuid),
+                bluetoothUuid(mutableChar.uuid),
                 properties,
                 permissions,
             )
@@ -193,7 +193,7 @@ class GattServerManager(
             mutableChar.descriptors?.forEach { mutableDesc ->
                 if (mutableDesc == null) return@forEach
                 val desc = BluetoothGattDescriptor(
-                    UUID.fromString(mutableDesc.uuid),
+                    bluetoothUuid(mutableDesc.uuid),
                     BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE,
                 )
                 mutableDesc.value?.let { desc.value = it }
@@ -201,12 +201,12 @@ class GattServerManager(
             }
             gattService.addCharacteristic(gattChar)
         }
-        services[service.uuid] = gattService
+        services[bluetoothUuid(service.uuid)] = gattService
         gattServer?.addService(gattService)
     }
 
     fun removeService(serviceUuid: String): Boolean {
-        val service = services.remove(serviceUuid) ?: return false
+        val service = services.remove(bluetoothUuid(serviceUuid)) ?: return false
         gattServer?.removeService(service)
         return true
     }
@@ -236,8 +236,8 @@ class GattServerManager(
         characteristicUuid: String,
         value: ByteArray,
     ): Boolean {
-        val service = services[serviceUuid] ?: return false
-        val characteristic = service.getCharacteristic(UUID.fromString(characteristicUuid)) ?: return false
+        val service = services[bluetoothUuid(serviceUuid)] ?: return false
+        val characteristic = service.getCharacteristic(bluetoothUuid(characteristicUuid)) ?: return false
         characteristic.value = value
 
         // Send notification to all connected devices
