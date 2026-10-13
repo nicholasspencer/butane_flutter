@@ -44,6 +44,56 @@ const _mutableService = MutableService(
 );
 
 void main() {
+  test('requestEnable writes Adapter1.Powered', () async {
+    final fixture = await _BlueZFixture.start();
+    addTearDown(fixture.close);
+    await fixture.adapter.change('Powered', const DBusBoolean(false));
+
+    await fixture.backend.requestEnable();
+
+    expect(fixture.adapter.properties['Powered'], const DBusBoolean(true));
+  });
+
+  test('requestEnable without an adapter throws unavailable', () async {
+    final fixture = await _BlueZFixture.start(withAdapter: false);
+    addTearDown(fixture.close);
+
+    expect(
+      fixture.backend.requestEnable(),
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.unavailable,
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              'No BlueZ adapter available',
+            ),
+      ),
+    );
+  });
+
+  test('requestEnable maps Adapter1.Powered errors', () async {
+    final fixture = await _BlueZFixture.start();
+    addTearDown(fixture.close);
+    fixture.adapter.propertyError =
+        _forcedMethodError('org.bluez.Error.NotSupported');
+
+    expect(
+      fixture.backend.requestEnable(),
+      throwsA(
+        _butaneExceptionContaining(
+          ButaneErrorCode.unsupported,
+          ['Failed to enable the BlueZ adapter'],
+          nativeCode: 'org.bluez.Error.NotSupported',
+        ),
+      ),
+    );
+  });
+
   test('connect rejects autoConnect true as unsupported', () async {
     final fixture = await _BlueZFixture.start(withDevice: true);
     addTearDown(fixture.close);
@@ -624,6 +674,7 @@ final class _BlueZFixture {
   final List<Future<void> Function()> _cancelers = [];
 
   static Future<_BlueZFixture> start({
+    bool withAdapter = true,
     bool withDevice = false,
     bool withGatt = false,
   }) async {
@@ -647,7 +698,9 @@ final class _BlueZFixture {
     final root = _FakeBlueZRoot();
     await serviceBus.registerObject(root);
     final adapter = _FakeAdapter();
-    await serviceBus.registerObject(adapter);
+    if (withAdapter) {
+      await serviceBus.registerObject(adapter);
+    }
 
     _FakeDevice? device;
     if (withDevice) {
@@ -729,6 +782,7 @@ abstract base class _FakePropertiesObject extends DBusObject {
 
   final String interfaceName;
   final Map<String, DBusValue> properties;
+  DBusMethodErrorResponse? propertyError;
 
   @override
   Map<String, Map<String, DBusValue>> get interfacesAndProperties => {
@@ -741,6 +795,24 @@ abstract base class _FakePropertiesObject extends DBusObject {
       interfaceName,
       changedProperties: {name: value},
     );
+  }
+
+  @override
+  Future<DBusMethodResponse> setProperty(
+    String interfaceName,
+    String name,
+    DBusValue value,
+  ) async {
+    if (interfaceName != this.interfaceName) {
+      return DBusMethodErrorResponse.unknownInterface();
+    }
+    if (!properties.containsKey(name)) {
+      return DBusMethodErrorResponse.unknownProperty();
+    }
+    final error = propertyError;
+    if (error != null) return error;
+    properties[name] = value;
+    return DBusMethodSuccessResponse();
   }
 }
 

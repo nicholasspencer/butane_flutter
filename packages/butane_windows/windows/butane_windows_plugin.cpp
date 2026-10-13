@@ -234,6 +234,13 @@ void ButaneWindowsPlugin::State(
       });
 }
 
+void ButaneWindowsPlugin::RequestEnable(
+    const ClientSession* session,
+    std::function<void(std::optional<FlutterError> reply)> result) {
+  if (!central_) { result(Unavailable("requestEnable")); return; }
+  central_->RequestEnable(std::move(result));
+}
+
 void ButaneWindowsPlugin::Scan(
     const ClientSession* session,
     const flutter::EncodableList* for_services,

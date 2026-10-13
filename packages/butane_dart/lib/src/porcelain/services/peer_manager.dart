@@ -32,6 +32,16 @@ abstract base class PeerManager<T extends Peer> {
     return PeerManagerState.fromApi(state);
   }
 
+  /// Requests that the platform enable its Bluetooth adapter.
+  ///
+  /// Android opens the system confirmation dialog. Windows and BlueZ directly
+  /// request radio power-on; Windows consumers must declare the `radios`
+  /// capability. Darwin throws [ButaneException] with
+  /// [ButaneErrorCode.unsupported]. Completion means that the request was
+  /// accepted or launched, not that the adapter is on. Observe [stateStream]
+  /// for [PeerManagerState.poweredOn].
+  Future<void> requestEnable() => platform.requestEnable(session: session);
+
   Stream<PeerManagerState> get stateStream {
     // Subscribe to the api state stream if we aren't already.
     stateController ??= PlatformStreamController(

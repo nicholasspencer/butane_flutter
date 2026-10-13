@@ -10,6 +10,9 @@ abstract base class ButanePlatformInterface {
     Session? session,
   ]);
 
+  /// Requests that the platform enable its Bluetooth adapter.
+  Future<void> requestEnable({Session? session});
+
   /// A stream of client state changes optionally filtered by the client
   /// identifier.
   Stream<ClientState> clientStateStream([
