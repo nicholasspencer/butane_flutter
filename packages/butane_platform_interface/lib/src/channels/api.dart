@@ -1095,6 +1095,10 @@ extension AdvertisementDataConverter on AdvertisementData {
       serviceData: advertisementData.serviceData?.nonNulls.cast(),
       txPowerLevel: advertisementData.txPowerLevel,
       isConnectable: advertisementData.isConnectable,
+      solicitedServiceUuids:
+          advertisementData.solicitedServiceUuids?.nonNulls.toList(),
+      overflowServiceUuids:
+          advertisementData.overflowServiceUuids?.nonNulls.toList(),
     );
   }
 
@@ -1106,6 +1110,8 @@ extension AdvertisementDataConverter on AdvertisementData {
       serviceData: serviceData,
       txPowerLevel: txPowerLevel,
       isConnectable: isConnectable,
+      solicitedServiceUuids: solicitedServiceUuids,
+      overflowServiceUuids: overflowServiceUuids,
     );
   }
 }
@@ -1121,6 +1127,8 @@ extension AdvertisementDataChannelConverter on api.AdvertisementData {
       serviceData: advertisementData.serviceData,
       txPowerLevel: advertisementData.txPowerLevel,
       isConnectable: advertisementData.isConnectable,
+      solicitedServiceUuids: advertisementData.solicitedServiceUuids,
+      overflowServiceUuids: advertisementData.overflowServiceUuids,
     );
   }
 
@@ -1132,6 +1140,8 @@ extension AdvertisementDataChannelConverter on api.AdvertisementData {
       serviceData: serviceData?.nonNulls.cast(),
       txPowerLevel: txPowerLevel,
       isConnectable: isConnectable,
+      solicitedServiceUuids: solicitedServiceUuids?.nonNulls.toList(),
+      overflowServiceUuids: overflowServiceUuids?.nonNulls.toList(),
     );
   }
 }
@@ -1143,6 +1153,8 @@ extension ScanResultConverter on ScanResult {
       advertisementData: AdvertisementDataConverter.fromAdvertisementData(
         scanResult.advertisementData,
       ),
+      rssi: scanResult.rssi,
+      timestampMillis: scanResult.timestampMillis,
     );
   }
 
@@ -1150,6 +1162,8 @@ extension ScanResultConverter on ScanResult {
     return api.ScanResult(
       peripheral: peripheral.toPeripheral(),
       advertisementData: advertisementData.toAdvertisementData(),
+      rssi: rssi,
+      timestampMillis: timestampMillis,
     );
   }
 }
@@ -1164,6 +1178,8 @@ extension ScanResultChannelConverter on api.ScanResult {
           AdvertisementDataChannelConverter.fromAdvertisementData(
         scanResult.advertisementData,
       ),
+      rssi: scanResult.rssi,
+      timestampMillis: scanResult.timestampMillis,
     );
   }
 
@@ -1171,6 +1187,8 @@ extension ScanResultChannelConverter on api.ScanResult {
     return ScanResult(
       peripheral: peripheral.toPeripheral(),
       advertisementData: advertisementData.toAdvertisementData(),
+      rssi: rssi,
+      timestampMillis: timestampMillis,
     );
   }
 }

@@ -223,6 +223,62 @@ void main() {
       expect(emitted, contains(PeerManagerState.unauthorized));
     });
 
+    test('scan preserves populated and absent advertisement metadata',
+        () async {
+      final platform = _FakePlatform(
+        scanResults: Stream.fromIterable([
+          api.ScanResult(
+            peripheral: const api.Peripheral(
+              session: api.PeripheralSession(
+                peripheralIdentifier: 'populated',
+              ),
+              name: 'populated',
+              rssi: -60,
+              state: api.ConnectionState.disconnected,
+            ),
+            advertisementData: const api.AdvertisementData(
+              solicitedServiceUuids: ['180f', '12345678'],
+              overflowServiceUuids: [
+                'abcdefab-cdef-abcd-efab-cdefabcdefab',
+              ],
+            ),
+            rssi: -42,
+            timestampMillis: 1720000000123,
+          ),
+          const api.ScanResult(
+            peripheral: api.Peripheral(
+              session: api.PeripheralSession(
+                peripheralIdentifier: 'absent',
+              ),
+              state: api.ConnectionState.disconnected,
+            ),
+            advertisementData: api.AdvertisementData(),
+          ),
+        ]),
+      );
+      final manager = CentralManager(platform: platform);
+      addTearDown(manager.dispose);
+
+      final results = await manager.scan().take(2).toList();
+      final populated = results.first;
+      final absent = results.last;
+
+      expect(
+        populated.advertisementData.solicitedServiceUuids,
+        ['180f', '12345678'],
+      );
+      expect(
+        populated.advertisementData.overflowServiceUuids,
+        ['abcdefab-cdef-abcd-efab-cdefabcdefab'],
+      );
+      expect(populated.rssi, -42);
+      expect(populated.timestampMillis, 1720000000123);
+      expect(absent.advertisementData.solicitedServiceUuids, isNull);
+      expect(absent.advertisementData.overflowServiceUuids, isNull);
+      expect(absent.rssi, isNull);
+      expect(absent.timestampMillis, isNull);
+    });
+
     test('scan maps isConnectable true and null to porcelain values', () async {
       final source = StreamController<api.ScanResult>();
       final manager = CentralManager(
