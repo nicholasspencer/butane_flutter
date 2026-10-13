@@ -152,8 +152,16 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
-  Future<void> connect({required PeripheralSession session}) async {
-    return _invokeHostApi(() => hostApi.connect(session: session.toSession()));
+  Future<void> connect({
+    required PeripheralSession session,
+    ConnectOptions? options,
+  }) async {
+    return _invokeHostApi(
+      () => hostApi.connect(
+        session: session.toSession(),
+        options: options?.toConnectOptions(),
+      ),
+    );
   }
 
   @override
@@ -806,6 +814,16 @@ extension PeripheralChannelSessionConverter on api.PeripheralSession {
       clientIdentifier: clientIdentifier,
       adapterIdentifier: adapterIdentifier,
       restorationIdentifier: restorationIdentifier,
+    );
+  }
+}
+
+extension ConnectOptionsConverter on ConnectOptions {
+  api.ConnectOptions toConnectOptions() {
+    return api.ConnectOptions(
+      autoConnect: autoConnect,
+      timeoutMillis: timeoutMillis,
+      refreshGattCache: refreshGattCache,
     );
   }
 }

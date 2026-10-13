@@ -90,10 +90,85 @@ base class Peripheral extends Peer {
   PeerManager<Peripheral> get manager =>
       super.manager as PeerManager<Peripheral>;
 
-  Future<void> connect() async {
-    return manager.platform.connect(
-      session: session,
+  Future<void> connect({api.ConnectOptions? options}) async {
+    final timeoutMillis = options?.timeoutMillis;
+    if (timeoutMillis != null && timeoutMillis <= 0) {
+      throw ButaneException(
+        code: ButaneErrorCode.invalidArgument,
+        message: 'Connection timeout must be positive for $identifier: '
+            '$timeoutMillis ms',
+      );
+    }
+
+    if (timeoutMillis == null) {
+      return manager.platform.connect(
+        session: session,
+        options: options,
+      );
+    }
+
+    final connected = Completer<void>();
+    final subscription = stateStream.listen(
+      (state) {
+        if (state == ConnectionState.connected && !connected.isCompleted) {
+          connected.complete();
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!connected.isCompleted) {
+          connected.completeError(error, stackTrace);
+        }
+      },
     );
+    final timeout = Completer<void>();
+    var timedOut = false;
+    final timer = Timer(Duration(milliseconds: timeoutMillis), () async {
+      timedOut = true;
+      try {
+        await cancelConnection();
+      } catch (_) {
+        // The connection deadline remains the governing failure even when the
+        // backend cannot confirm cancellation.
+      }
+      if (!timeout.isCompleted) {
+        timeout.completeError(
+          ButaneException(
+            code: ButaneErrorCode.timeout,
+            message: 'Connection to $identifier timed out after '
+                '$timeoutMillis ms',
+          ),
+        );
+      }
+    });
+
+    Future<void> preserveDeadline(Future<void> operation) async {
+      try {
+        await operation;
+      } catch (_) {
+        if (!timedOut) rethrow;
+      }
+      if (timedOut) {
+        await timeout.future;
+      }
+    }
+
+    try {
+      await Future.any<void>([
+        preserveDeadline(
+          Future.wait<void>(
+            [
+              manager.platform.connect(session: session, options: options),
+              connected.future,
+            ],
+            eagerError: true,
+          ),
+        ),
+        timeout.future,
+      ]);
+    } finally {
+      timer.cancel();
+      await subscription.cancel();
+    }
   }
 
   Future<void> cancelConnection() async {

@@ -82,6 +82,22 @@ void main() {
     expect(exception.cause, same(cause));
   });
 
+  test('connect forwards all options to host', () async {
+    await platform.connect(
+      session: session,
+      options: const ConnectOptions(
+        autoConnect: true,
+        timeoutMillis: 1250,
+        refreshGattCache: true,
+      ),
+    );
+
+    expect(hostApi.connectCall?.session, _expectedSession);
+    expect(hostApi.connectCall?.options?.autoConnect, isTrue);
+    expect(hostApi.connectCall?.options?.timeoutMillis, 1250);
+    expect(hostApi.connectCall?.options?.refreshGattCache, isTrue);
+  });
+
   test('scan awaits unavailable platform failures', () async {
     final cause = PlatformException(
       code: 'unavailable',
@@ -228,6 +244,8 @@ final class _FakeHostApi extends api.ButaneHostApi {
 
   ({api.PeripheralSession session, int mtu})? requestMtuCall;
 
+  ({api.PeripheralSession session, api.ConnectOptions? options})? connectCall;
+
   void _throwConfiguredError() {
     if (thrownError case final error?) {
       throw error;
@@ -243,7 +261,11 @@ final class _FakeHostApi extends api.ButaneHostApi {
   }
 
   @override
-  Future<void> connect({required api.PeripheralSession session}) async {
+  Future<void> connect({
+    required api.PeripheralSession session,
+    api.ConnectOptions? options,
+  }) async {
+    connectCall = (session: session, options: options);
     _throwConfiguredError();
   }
 
