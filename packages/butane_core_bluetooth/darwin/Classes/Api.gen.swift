@@ -340,6 +340,62 @@ struct PeripheralSession: Session {
   }
 }
 
+/// Options controlling how a peripheral connection is established.
+///
+/// When [autoConnect] is null, the backend default is preserved. Android
+/// supports both values. Darwin and Windows support true but report
+/// [ButaneErrorCode.unsupported] for false. BlueZ supports false but reports
+/// [ButaneErrorCode.unsupported] for true.
+///
+/// A positive [timeoutMillis] is enforced once by the Dart porcelain and is
+/// passed to backends only as an optional hint. Null requests no porcelain
+/// deadline.
+///
+/// [refreshGattCache] true is supported only on Android. BlueZ, Darwin, and
+/// Windows report [ButaneErrorCode.unsupported]. False and null request no
+/// refresh.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct ConnectOptions: Hashable {
+  var autoConnect: Bool? = nil
+  var timeoutMillis: Int64? = nil
+  var refreshGattCache: Bool? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> ConnectOptions? {
+    let autoConnect: Bool? = nilOrValue(pigeonVar_list[0])
+    let timeoutMillis: Int64? = nilOrValue(pigeonVar_list[1])
+    let refreshGattCache: Bool? = nilOrValue(pigeonVar_list[2])
+
+    return ConnectOptions(
+      autoConnect: autoConnect,
+      timeoutMillis: timeoutMillis,
+      refreshGattCache: refreshGattCache
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      autoConnect,
+      timeoutMillis,
+      refreshGattCache,
+    ]
+  }
+  static func == (lhs: ConnectOptions, rhs: ConnectOptions) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return deepEqualsApi(lhs.autoConnect, rhs.autoConnect) && deepEqualsApi(lhs.timeoutMillis, rhs.timeoutMillis) && deepEqualsApi(lhs.refreshGattCache, rhs.refreshGattCache)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("ConnectOptions")
+    deepHashApi(value: autoConnect, hasher: &hasher)
+    deepHashApi(value: timeoutMillis, hasher: &hasher)
+    deepHashApi(value: refreshGattCache, hasher: &hasher)
+  }
+}
+
 /// Generated class from Pigeon that represents data sent in messages.
 struct PeripheralManagerSession: Session {
   var clientIdentifier: String? = nil
@@ -987,30 +1043,32 @@ private class ApiPigeonCodecReader: FlutterStandardReader {
     case 135:
       return PeripheralSession.fromList(self.readValue() as! [Any?])
     case 136:
-      return PeripheralManagerSession.fromList(self.readValue() as! [Any?])
+      return ConnectOptions.fromList(self.readValue() as! [Any?])
     case 137:
-      return Peripheral.fromList(self.readValue() as! [Any?])
+      return PeripheralManagerSession.fromList(self.readValue() as! [Any?])
     case 138:
-      return AdvertisementData.fromList(self.readValue() as! [Any?])
+      return Peripheral.fromList(self.readValue() as! [Any?])
     case 139:
-      return ScanResult.fromList(self.readValue() as! [Any?])
+      return AdvertisementData.fromList(self.readValue() as! [Any?])
     case 140:
-      return Service.fromList(self.readValue() as! [Any?])
+      return ScanResult.fromList(self.readValue() as! [Any?])
     case 141:
-      return Characteristic.fromList(self.readValue() as! [Any?])
+      return Service.fromList(self.readValue() as! [Any?])
     case 142:
-      return Descriptor.fromList(self.readValue() as! [Any?])
+      return Characteristic.fromList(self.readValue() as! [Any?])
     case 143:
-      return CharacteristicProperty.fromList(self.readValue() as! [Any?])
+      return Descriptor.fromList(self.readValue() as! [Any?])
     case 144:
-      return CharacteristicPermission.fromList(self.readValue() as! [Any?])
+      return CharacteristicProperty.fromList(self.readValue() as! [Any?])
     case 145:
-      return AttRequest.fromList(self.readValue() as! [Any?])
+      return CharacteristicPermission.fromList(self.readValue() as! [Any?])
     case 146:
-      return MutableDescriptor.fromList(self.readValue() as! [Any?])
+      return AttRequest.fromList(self.readValue() as! [Any?])
     case 147:
-      return MutableCharacteristic.fromList(self.readValue() as! [Any?])
+      return MutableDescriptor.fromList(self.readValue() as! [Any?])
     case 148:
+      return MutableCharacteristic.fromList(self.readValue() as! [Any?])
+    case 149:
       return MutableService.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -1041,44 +1099,47 @@ private class ApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? PeripheralSession {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? PeripheralManagerSession {
+    } else if let value = value as? ConnectOptions {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? Peripheral {
+    } else if let value = value as? PeripheralManagerSession {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? AdvertisementData {
+    } else if let value = value as? Peripheral {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? ScanResult {
+    } else if let value = value as? AdvertisementData {
       super.writeByte(139)
       super.writeValue(value.toList())
-    } else if let value = value as? Service {
+    } else if let value = value as? ScanResult {
       super.writeByte(140)
       super.writeValue(value.toList())
-    } else if let value = value as? Characteristic {
+    } else if let value = value as? Service {
       super.writeByte(141)
       super.writeValue(value.toList())
-    } else if let value = value as? Descriptor {
+    } else if let value = value as? Characteristic {
       super.writeByte(142)
       super.writeValue(value.toList())
-    } else if let value = value as? CharacteristicProperty {
+    } else if let value = value as? Descriptor {
       super.writeByte(143)
       super.writeValue(value.toList())
-    } else if let value = value as? CharacteristicPermission {
+    } else if let value = value as? CharacteristicProperty {
       super.writeByte(144)
       super.writeValue(value.toList())
-    } else if let value = value as? AttRequest {
+    } else if let value = value as? CharacteristicPermission {
       super.writeByte(145)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableDescriptor {
+    } else if let value = value as? AttRequest {
       super.writeByte(146)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableCharacteristic {
+    } else if let value = value as? MutableDescriptor {
       super.writeByte(147)
       super.writeValue(value.toList())
-    } else if let value = value as? MutableService {
+    } else if let value = value as? MutableCharacteristic {
       super.writeByte(148)
+      super.writeValue(value.toList())
+    } else if let value = value as? MutableService {
+      super.writeByte(149)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -1108,6 +1169,7 @@ class ApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 protocol ButaneHostApi {
   /// "Central" APIs.
   func state(session: ClientSession?, completion: @escaping (Result<ClientState, Error>) -> Void)
+  func requestEnable(session: ClientSession?, completion: @escaping (Result<Void, Error>) -> Void)
   /// Scans for peripherals that are advertising services.
   func scan(session: ClientSession?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void)
   func cancelScan(session: ClientSession?, completion: @escaping (Result<Void, Error>) -> Void)
@@ -1116,7 +1178,7 @@ protocol ButaneHostApi {
   /// A list of connected peripherals identified by an offered service.
   func connectedPeripherals(session: ClientSession?, serviceUuids: [String], completion: @escaping (Result<[Peripheral], Error>) -> Void)
   /// Establishes a connection to the peripheral.
-  func connect(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void)
+  func connect(session: PeripheralSession, options: ConnectOptions?, completion: @escaping (Result<Void, Error>) -> Void)
   /// Cancels an active or pending connection to the peripheral.
   func cancelConnection(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void)
   func connectionState(session: PeripheralSession, completion: @escaping (Result<ConnectionState, Error>) -> Void)
@@ -1179,6 +1241,23 @@ class ButaneHostApiSetup {
       }
     } else {
       stateChannel.setMessageHandler(nil)
+    }
+    let requestEnableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.requestEnable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      requestEnableChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let sessionArg: ClientSession? = nilOrValue(args[0])
+        api.requestEnable(session: sessionArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      requestEnableChannel.setMessageHandler(nil)
     }
     /// Scans for peripherals that are advertising services.
     let scanChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.butane_platform_interface.ButaneHostApi.scan\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
@@ -1260,7 +1339,8 @@ class ButaneHostApiSetup {
       connectChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
         let sessionArg = args[0] as! PeripheralSession
-        api.connect(session: sessionArg) { result in
+        let optionsArg: ConnectOptions? = nilOrValue(args[1])
+        api.connect(session: sessionArg, options: optionsArg) { result in
           switch result {
           case .success:
             reply(wrapResult(nil))

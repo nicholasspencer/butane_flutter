@@ -72,6 +72,14 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     
     completion(.success(central.state))
   }
+
+  func requestEnable(session: ClientSession?, completion: @escaping (Result<Void, Error>) -> Void) {
+    completion(.failure(butaneFlutterError(
+      nativeError: nil,
+      fallback: .unsupported,
+      message: "CoreBluetooth does not allow apps to enable Bluetooth."
+    )))
+  }
   
   func scan(session: ClientSession?, forServices: [String]?, completion: @escaping (Result<Void, Error>) -> Void) {
     let central = centralManager(session)
@@ -105,7 +113,23 @@ public class ButaneCoreBluetoothPlugin: NSObject, FlutterPlugin, ButaneHostApi {
     completion(.success(peripherals))
   }
   
-  func connect(session: PeripheralSession, completion: @escaping (Result<Void, Error>) -> Void) {
+  func connect(session: PeripheralSession, options: ConnectOptions?, completion: @escaping (Result<Void, Error>) -> Void) {
+    if options?.autoConnect == false {
+      completion(.failure(butaneFlutterError(
+        nativeError: nil,
+        fallback: .unsupported,
+        message: "CoreBluetooth connections are always pending until the peripheral is available"
+      )))
+      return
+    }
+    if options?.refreshGattCache == true {
+      completion(.failure(butaneFlutterError(
+        nativeError: nil,
+        fallback: .unsupported,
+        message: "CoreBluetooth does not support refreshing the GATT cache"
+      )))
+      return
+    }
     do {
       try centralManager(session.session).connect(identifier: session.peripheralIdentifier)
       completion(.success)

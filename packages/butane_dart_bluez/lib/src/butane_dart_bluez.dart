@@ -60,6 +60,15 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   /// safe to cache for the lifetime of the client.
   final Map<String, BlueZDevice> _deviceCache = {};
 
+  /// Cancellation signals for in-flight Device1.Connect calls. BlueZ's
+  /// Connected property can remain false while a connection is pending, so
+  /// cancelConnection must signal the polling loop independently.
+  final Map<String, Completer<void>> _pendingConnectionCancellations = {};
+
+  /// Upper bound on a Device1.Connect poll when the caller supplies no
+  /// [ConnectOptions.timeoutMillis].
+  static const _defaultConnectTimeout = Duration(seconds: 30);
+
   /// Separate system-bus client used for the peripheral role (advertising
   /// and local GATT objects). We keep this distinct from the `bluez`
   /// package's internal bus because we need to register our own objects
@@ -150,6 +159,27 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     final adapter = _defaultAdapter;
     if (adapter == null) return ClientState.unsupported;
     return adapter.powered ? ClientState.poweredOn : ClientState.poweredOff;
+  }
+
+  @override
+  Future<void> requestEnable({Session? session}) async {
+    await _ensureConnected();
+    final adapter = _defaultAdapter;
+    if (adapter == null) {
+      throw _bluezException(
+        ButaneErrorCode.unavailable,
+        'No BlueZ adapter available',
+      );
+    }
+    try {
+      await adapter.setPowered(true);
+    } on DBusMethodResponseException catch (error) {
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
+        'Failed to enable the BlueZ adapter',
+        cause: error,
+      );
+    }
   }
 
   @override
@@ -618,10 +648,34 @@ base class ButaneDartBluez extends ButanePlatformInterface {
   }
 
   @override
-  Future<void> connect({required PeripheralSession session}) async {
+  Future<void> connect({
+    required PeripheralSession session,
+    ConnectOptions? options,
+  }) async {
+    if (options?.autoConnect == true) {
+      throw _bluezException(
+        ButaneErrorCode.unsupported,
+        'BlueZ does not support automatic connection for '
+        '${session.peripheralIdentifier}',
+      );
+    }
+    if (options?.refreshGattCache == true) {
+      throw _bluezException(
+        ButaneErrorCode.unsupported,
+        'BlueZ does not support refreshing the GATT cache for '
+        '${session.peripheralIdentifier}',
+      );
+    }
     await _ensureConnected();
     final device = _requireDevice(session);
     if (device.connected) return;
+    final identifier = session.peripheralIdentifier;
+    final cancellation = Completer<void>();
+    final previousCancellation = _pendingConnectionCancellations[identifier];
+    if (previousCancellation != null && !previousCancellation.isCompleted) {
+      previousCancellation.complete();
+    }
+    _pendingConnectionCancellations[identifier] = cancellation;
 
     // Use `Device1.Connect()` for all peers. For dual-mode public-address
     // peripherals (e.g. a Mac advertising over LE with the same address it
@@ -637,33 +691,55 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     // because the D-Bus reply can be delayed past the default timeout on
     // some peers, while the `Connected` property still flips promptly.
     Object? connectError;
-    unawaited(() async {
-      try {
-        await device.connect();
-      } catch (err) {
-        connectError = err;
-      }
-    }());
+    try {
+      unawaited(() async {
+        try {
+          await device.connect();
+        } catch (err) {
+          connectError = err;
+        }
+      }());
 
-    const pollInterval = Duration(milliseconds: 250);
-    final deadline = DateTime.now().add(const Duration(seconds: 30));
-    while (!device.connected) {
-      if (connectError != null) {
-        throw _bluezException(
-          ButaneErrorCode.connectFailed,
-          'BlueZ Connect() failed for ${session.peripheralIdentifier}: '
-          '$connectError',
-          cause: connectError,
-        );
+      const pollInterval = Duration(milliseconds: 250);
+      // The porcelain enforces a caller-supplied timeout; this backend
+      // deadline only guarantees the poll terminates when none was given.
+      final timeout = options?.timeoutMillis != null
+          ? Duration(milliseconds: options!.timeoutMillis!)
+          : _defaultConnectTimeout;
+      final deadline = DateTime.now().add(timeout);
+      while (!device.connected) {
+        if (cancellation.isCompleted) {
+          throw _bluezException(
+            ButaneErrorCode.disconnected,
+            'BlueZ connection cancelled for $identifier',
+          );
+        }
+        if (connectError != null) {
+          throw _bluezException(
+            ButaneErrorCode.connectFailed,
+            'BlueZ Connect() failed for $identifier: $connectError',
+            cause: connectError,
+          );
+        }
+        if (DateTime.now().isAfter(deadline)) {
+          throw _bluezException(
+            ButaneErrorCode.timeout,
+            'BlueZ connect timed out for $identifier: device never became '
+            'connected within ${timeout.inMilliseconds} ms',
+          );
+        }
+        await Future.any<void>([
+          Future<void>.delayed(pollInterval),
+          cancellation.future,
+        ]);
       }
-      if (DateTime.now().isAfter(deadline)) {
-        throw _bluezException(
-          ButaneErrorCode.timeout,
-          'BlueZ connect timed out for ${session.peripheralIdentifier}: '
-          'device never became connected within 30s',
-        );
+    } finally {
+      if (identical(
+        _pendingConnectionCancellations[identifier],
+        cancellation,
+      )) {
+        _pendingConnectionCancellations.remove(identifier);
       }
-      await Future<void>.delayed(pollInterval);
     }
   }
 
@@ -672,9 +748,23 @@ base class ButaneDartBluez extends ButanePlatformInterface {
     await _ensureConnected();
     // Soft-fail if BlueZ no longer knows the device — CoreBluetooth's
     // cancelPeripheralConnection is a no-op on unknown peripherals.
-    final device = _findDevice(session.peripheralIdentifier);
-    if (device == null || !device.connected) return;
-    await device.disconnect();
+    final identifier = session.peripheralIdentifier;
+    final cancellation = _pendingConnectionCancellations[identifier];
+    if (cancellation != null && !cancellation.isCompleted) {
+      cancellation.complete();
+    }
+    final device = _findDevice(identifier);
+    if (device == null) return;
+    try {
+      await device.disconnect();
+    } on DBusMethodResponseException catch (error) {
+      if (error.errorName == 'org.bluez.Error.NotConnected') return;
+      throw _bluezException(
+        ButaneErrorCode.operationFailed,
+        'BlueZ Disconnect() failed for $identifier: $error',
+        cause: error,
+      );
+    }
   }
 
   @override

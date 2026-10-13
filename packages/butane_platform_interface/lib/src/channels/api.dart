@@ -90,6 +90,13 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
+  Future<void> requestEnable({Session? session}) async {
+    await _invokeHostApi(
+      () => hostApi.requestEnable(session: session?.toSession()),
+    );
+  }
+
+  @override
   Stream<ClientState> clientStateStream([Session? session]) => flutterApi
       .clientStateStream
       .where((e) => e.session?.clientIdentifier == session?.clientIdentifier)
@@ -150,8 +157,16 @@ base class ButanePlatform extends ButanePlatformInterface {
   }
 
   @override
-  Future<void> connect({required PeripheralSession session}) async {
-    return _invokeHostApi(() => hostApi.connect(session: session.toSession()));
+  Future<void> connect({
+    required PeripheralSession session,
+    ConnectOptions? options,
+  }) async {
+    return _invokeHostApi(
+      () => hostApi.connect(
+        session: session.toSession(),
+        options: options?.toConnectOptions(),
+      ),
+    );
   }
 
   @override
@@ -839,6 +854,16 @@ extension PeripheralChannelSessionConverter on api.PeripheralSession {
       clientIdentifier: clientIdentifier,
       adapterIdentifier: adapterIdentifier,
       restorationIdentifier: restorationIdentifier,
+    );
+  }
+}
+
+extension ConnectOptionsConverter on ConnectOptions {
+  api.ConnectOptions toConnectOptions() {
+    return api.ConnectOptions(
+      autoConnect: autoConnect,
+      timeoutMillis: timeoutMillis,
+      refreshGattCache: refreshGattCache,
     );
   }
 }

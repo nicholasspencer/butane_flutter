@@ -112,6 +112,10 @@ class FakeCentral final : public CentralBackend {
     state = std::move(callback);
     state(ClientState::kPoweredOn);
   }
+  void RequestEnable(Completion completion) override {
+    ++request_enable_count;
+    completion(request_enable_error);
+  }
   std::optional<FlutterError> StartScan(const std::vector<std::string>& uuids,
       AdvertisementCallback callback) override {
     if (scanning) return FlutterError("invalidArgument", "A Windows BLE scan is already active.");
@@ -127,6 +131,8 @@ class FakeCentral final : public CentralBackend {
   RssiCache* cache;
   bool scanning = false;
   int stops = 0;
+  int request_enable_count = 0;
+  std::optional<FlutterError> request_enable_error;
   std::vector<std::string> filters;
   StateCallback state;
   AdvertisementCallback receipt;
@@ -418,6 +424,25 @@ TEST(ButaneWindowsPlugin, StateRepliesAndPostsStateChanges) {
   EXPECT_EQ(f.sink->states[0], ClientState::kPoweredOff);
   EXPECT_EQ(f.sink->client_id, id);
 }
+TEST(ButaneWindowsPlugin, RequestEnableForwardsCompletion) {
+  Fixture f;
+  bool replied = false;
+  f.plugin->RequestEnable(nullptr, [&](std::optional<FlutterError> error) {
+    replied = true;
+    EXPECT_FALSE(error);
+  });
+  EXPECT_TRUE(replied);
+  EXPECT_EQ(f.central->request_enable_count, 1);
+
+  f.central->request_enable_error =
+      FlutterError("operationFailed", "Unable to enable radio.");
+  f.plugin->RequestEnable(nullptr, [&](std::optional<FlutterError> error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "operationFailed");
+    EXPECT_EQ(error->message(), "Unable to enable radio.");
+  });
+  EXPECT_EQ(f.central->request_enable_count, 2);
+}
 TEST(ButaneWindowsPlugin, ScanPostsReceiptBeforeFlutterApi) {
   Fixture f;
   f.plugin->Scan(nullptr, nullptr, [](auto error) { EXPECT_FALSE(error); });
@@ -450,24 +475,46 @@ TEST(ButaneWindowsPlugin, ReceiptUpdatesRssiBeforeDelivery) {
 }
 TEST(ButaneWindowsPlugin, ConnectRejectsMalformedAddress) {
   Fixture f;
-  f.plugin->Connect(PeripheralSession("bad"), [](auto error) {
+  f.plugin->Connect(PeripheralSession("bad"), nullptr, [](auto error) {
     ASSERT_TRUE(error);
     EXPECT_EQ(error->code(), "invalidArgument");
   });
   EXPECT_EQ(f.connection->connects, 0);
 }
+TEST(ButaneWindowsPlugin, ConnectRejectsUnsupportedOptionsBeforeBackend) {
+  Fixture f;
+  const PeripheralSession session("00:A1:B2:C3:D4:E5");
+  ConnectOptions direct_connect;
+  direct_connect.set_auto_connect(false);
+  f.plugin->Connect(session, &direct_connect, [](auto error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "unsupported");
+  });
+  ConnectOptions refresh_cache;
+  refresh_cache.set_refresh_gatt_cache(true);
+  f.plugin->Connect(session, &refresh_cache, [](auto error) {
+    ASSERT_TRUE(error);
+    EXPECT_EQ(error->code(), "unsupported");
+  });
+  EXPECT_EQ(f.connection->connects, 0);
+
+  ConnectOptions automatic_connect;
+  automatic_connect.set_auto_connect(true);
+  f.plugin->Connect(session, &automatic_connect, [](auto) {});
+  EXPECT_EQ(f.connection->connects, 1);
+}
 TEST(ButaneWindowsPlugin, ConnectStartsAndDuplicateReusesEntry) {
   Fixture f;
   const PeripheralSession session("00:A1:B2:C3:D4:E5");
-  f.plugin->Connect(session, [](auto) {});
-  f.plugin->Connect(session, [](auto) {});
+  f.plugin->Connect(session, nullptr, [](auto) {});
+  f.plugin->Connect(session, nullptr, [](auto) {});
   EXPECT_EQ(f.connection->connects, 2);
   EXPECT_EQ(f.connection->addresses[0], 0x00A1B2C3D4E5ULL);
 }
 TEST(ButaneWindowsPlugin, ConnectionStateTracksPendingConnectedAndMissing) {
   Fixture f;
   const PeripheralSession session("00:A1:B2:C3:D4:E5");
-  f.plugin->Connect(session, [](auto) {});
+  f.plugin->Connect(session, nullptr, [](auto) {});
   f.plugin->ConnectionState(session, [](auto state) {
     EXPECT_EQ(state.value(), ConnectionState::kConnecting);
   });
@@ -483,7 +530,7 @@ TEST(ButaneWindowsPlugin, ConnectionStateTracksPendingConnectedAndMissing) {
 TEST(ButaneWindowsPlugin, ConnectFailureErasesPendingState) {
   Fixture f;
   const PeripheralSession session("00:A1:B2:C3:D4:E5");
-  f.plugin->Connect(session, [](auto) {});
+  f.plugin->Connect(session, nullptr, [](auto) {});
   f.connection->Complete(
       0x00A1B2C3D4E5ULL,
       FlutterError("connectFailed", "failed"));
@@ -494,7 +541,7 @@ TEST(ButaneWindowsPlugin, ConnectFailureErasesPendingState) {
 TEST(ButaneWindowsPlugin, CancelConnectionIsIdempotentAndCloses) {
   Fixture f;
   const PeripheralSession session("00:A1:B2:C3:D4:E5");
-  f.plugin->Connect(session, [](auto) {});
+  f.plugin->Connect(session, nullptr, [](auto) {});
   f.plugin->CancelConnection(session,
                              [](auto error) { EXPECT_FALSE(error); });
   f.plugin->CancelConnection(session,
@@ -517,7 +564,7 @@ TEST(ButaneWindowsPlugin, ConnectionChangePostsBeforeFlutterApi) {
   Fixture f;
   const PeripheralSession session(
       "00:A1:B2:C3:D4:E5", nullptr, nullptr, nullptr);
-  f.plugin->Connect(session, [](auto) {});
+  f.plugin->Connect(session, nullptr, [](auto) {});
   f.connection->Emit(0x00A1B2C3D4E5ULL, ConnectionState::kConnected);
   EXPECT_TRUE(f.sink->connection_states.empty());
   f.runner->RunAll();

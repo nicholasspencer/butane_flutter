@@ -69,13 +69,20 @@ class PeripheralConnection(
      * sporadically on many devices. Retrying 3 times with a 100ms delay
      * is the standard workaround.
      */
-    suspend fun connectDevice(device: BluetoothDevice) {
+    suspend fun connectDevice(
+        device: BluetoothDevice,
+        autoConnect: Boolean,
+        refreshGattCache: Boolean,
+    ) {
         _connectionState.value = ConnectionState.CONNECTING
         onConnectionStateChanged(device, ConnectionState.CONNECTING)
         connect(device)
             .retry(3, 100)
-            .useAutoConnect(false)
+            .useAutoConnect(autoConnect)
             .suspend()
+        if (refreshGattCache) {
+            refreshDeviceCache().suspend()
+        }
     }
 
     suspend fun disconnectDevice() {

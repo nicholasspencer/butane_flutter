@@ -44,6 +44,144 @@ const _mutableService = MutableService(
 );
 
 void main() {
+  test('requestEnable writes Adapter1.Powered', () async {
+    final fixture = await _BlueZFixture.start();
+    addTearDown(fixture.close);
+    await fixture.adapter.change('Powered', const DBusBoolean(false));
+
+    await fixture.backend.requestEnable();
+
+    expect(fixture.adapter.properties['Powered'], const DBusBoolean(true));
+  });
+
+  test('requestEnable without an adapter throws unavailable', () async {
+    final fixture = await _BlueZFixture.start(withAdapter: false);
+    addTearDown(fixture.close);
+
+    expect(
+      fixture.backend.requestEnable(),
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.unavailable,
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              'No BlueZ adapter available',
+            ),
+      ),
+    );
+  });
+
+  test('requestEnable maps Adapter1.Powered errors', () async {
+    final fixture = await _BlueZFixture.start();
+    addTearDown(fixture.close);
+    fixture.adapter.propertyError =
+        _forcedMethodError('org.bluez.Error.NotSupported');
+
+    expect(
+      fixture.backend.requestEnable(),
+      throwsA(
+        _butaneExceptionContaining(
+          ButaneErrorCode.unsupported,
+          ['Failed to enable the BlueZ adapter'],
+          nativeCode: 'org.bluez.Error.NotSupported',
+        ),
+      ),
+    );
+  });
+
+  test('connect rejects autoConnect true as unsupported', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+
+    await expectLater(
+      fixture.backend.connect(
+        session: const PeripheralSession(peripheralIdentifier: _address),
+        options: const ConnectOptions(autoConnect: true),
+      ),
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.unsupported,
+            )
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+  });
+
+  test('connect rejects refreshGattCache true as unsupported', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+
+    await expectLater(
+      fixture.backend.connect(
+        session: const PeripheralSession(peripheralIdentifier: _address),
+        options: const ConnectOptions(refreshGattCache: true),
+      ),
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.unsupported,
+            )
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+  });
+
+  test('cancelConnection terminates a pending connect', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+    const session = PeripheralSession(peripheralIdentifier: _address);
+
+    final pendingConnect = fixture.backend.connect(session: session);
+    final pendingExpectation = expectLater(
+      pendingConnect,
+      throwsA(
+        isA<ButaneException>()
+            .having(
+              (error) => error.code,
+              'code',
+              ButaneErrorCode.disconnected,
+            )
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+    await _waitUntil(
+      () => fixture.device!.methodNames.contains('Connect'),
+    );
+    await fixture.backend.cancelConnection(session: session);
+
+    await pendingExpectation;
+    expect(fixture.device!.methodNames, ['Connect', 'Disconnect']);
+  });
+
+  test('connect times out when Connect() never resolves', () async {
+    final fixture = await _BlueZFixture.start(withDevice: true);
+    addTearDown(fixture.close);
+    const session = PeripheralSession(peripheralIdentifier: _address);
+
+    await expectLater(
+      fixture.backend.connect(
+        session: session,
+        options: const ConnectOptions(timeoutMillis: 300),
+      ),
+      throwsA(
+        isA<ButaneException>()
+            .having((error) => error.code, 'code', ButaneErrorCode.timeout)
+            .having((error) => error.platform, 'platform', 'linux'),
+      ),
+    );
+    expect(fixture.device!.methodNames, ['Connect']);
+  });
+
   test('property changes drive client, scan, and connection streams', () async {
     final fixture = await _BlueZFixture.start(withDevice: true);
     addTearDown(fixture.close);
@@ -564,6 +702,7 @@ final class _BlueZFixture {
   final List<Future<void> Function()> _cancelers = [];
 
   static Future<_BlueZFixture> start({
+    bool withAdapter = true,
     bool withDevice = false,
     bool withGatt = false,
   }) async {
@@ -587,7 +726,9 @@ final class _BlueZFixture {
     final root = _FakeBlueZRoot();
     await serviceBus.registerObject(root);
     final adapter = _FakeAdapter();
-    await serviceBus.registerObject(adapter);
+    if (withAdapter) {
+      await serviceBus.registerObject(adapter);
+    }
 
     _FakeDevice? device;
     if (withDevice) {
@@ -669,6 +810,7 @@ abstract base class _FakePropertiesObject extends DBusObject {
 
   final String interfaceName;
   final Map<String, DBusValue> properties;
+  DBusMethodErrorResponse? propertyError;
 
   @override
   Map<String, Map<String, DBusValue>> get interfacesAndProperties => {
@@ -681,6 +823,24 @@ abstract base class _FakePropertiesObject extends DBusObject {
       interfaceName,
       changedProperties: {name: value},
     );
+  }
+
+  @override
+  Future<DBusMethodResponse> setProperty(
+    String interfaceName,
+    String name,
+    DBusValue value,
+  ) async {
+    if (interfaceName != this.interfaceName) {
+      return DBusMethodErrorResponse.unknownInterface();
+    }
+    if (!properties.containsKey(name)) {
+      return DBusMethodErrorResponse.unknownProperty();
+    }
+    final error = propertyError;
+    if (error != null) return error;
+    properties[name] = value;
+    return DBusMethodSuccessResponse();
   }
 }
 
@@ -769,6 +929,7 @@ final class _FakeDevice extends _FakePropertiesObject {
         );
 
   final List<String> methodNames = [];
+  Completer<DBusMethodResponse>? _connectReply;
 
   @override
   Future<DBusMethodResponse> handleMethodCall(DBusMethodCall methodCall) async {
@@ -776,9 +937,24 @@ final class _FakeDevice extends _FakePropertiesObject {
       return DBusMethodErrorResponse.unknownInterface();
     }
     methodNames.add(methodCall.name);
-    if (methodCall.name == 'Pair') {
-      await change('Paired', const DBusBoolean(true));
-      return DBusMethodSuccessResponse();
+    switch (methodCall.name) {
+      case 'Connect':
+        _connectReply = Completer<DBusMethodResponse>();
+        return _connectReply!.future;
+      case 'Disconnect':
+        final connectReply = _connectReply;
+        if (connectReply != null && !connectReply.isCompleted) {
+          connectReply.complete(
+            DBusMethodErrorResponse(
+              'org.bluez.Error.Failed',
+              const [DBusString('Connection cancelled')],
+            ),
+          );
+        }
+        return DBusMethodSuccessResponse();
+      case 'Pair':
+        await change('Paired', const DBusBoolean(true));
+        return DBusMethodSuccessResponse();
     }
     return DBusMethodErrorResponse.unknownMethod();
   }

@@ -10,6 +10,7 @@ import Characteristic
 import CharacteristicProperty
 import ClientSession
 import ClientState
+import ConnectOptions
 import ConnectionState
 import Descriptor
 import MutableService
@@ -52,6 +53,7 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
 
     private var applicationContext: Context? = null
     private var bluetoothAdapter: BluetoothAdapter? = null
+    private var activityBinding: ActivityPluginBinding? = null
     private val stateReceivers = mutableMapOf<String?, BroadcastReceiver>()
     // One ACTION_BOND_STATE_CHANGED receiver serves every observed peripheral.
     private var bondReceiver: BroadcastReceiver? = null
@@ -123,16 +125,30 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         // Close GATT server
         gattServer?.close()
         gattServer = null
+        activityBinding = null
         applicationContext = null
         bluetoothAdapter = null
     }
 
-    override fun onAttachedToActivity(binding: ActivityPluginBinding) {}
-    override fun onDetachedFromActivityForConfigChanges() {}
-    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {}
-    override fun onDetachedFromActivity() {}
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activityBinding = binding
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activityBinding = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activityBinding = binding
+    }
+
+    override fun onDetachedFromActivity() {
+        activityBinding = null
+    }
 
     companion object {
+        private const val REQUEST_ENABLE_BLUETOOTH = 1
+
         fun mapAdapterState(adapterState: Int): ClientState {
             return when (adapterState) {
                 BluetoothAdapter.STATE_OFF -> ClientState.POWERED_OFF
@@ -348,6 +364,39 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         callback(Result.success(mapAdapterState(adapter.state)))
     }
 
+    override fun requestEnable(session: ClientSession?, callback: (Result<Unit>) -> Unit) {
+        val binding = activityBinding
+        if (binding == null) {
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.UNAVAILABLE,
+                        "No Android activity is attached",
+                    ),
+                ),
+            )
+            return
+        }
+
+        try {
+            binding.activity.startActivityForResult(
+                Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE),
+                REQUEST_ENABLE_BLUETOOTH,
+            )
+            callback(Result.success(Unit))
+        } catch (error: Exception) {
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.OPERATION_FAILED,
+                        "Failed to launch the Bluetooth enable request",
+                        error,
+                    ),
+                ),
+            )
+        }
+    }
+
     override fun scan(
         session: ClientSession?,
         forServices: List<String>?,
@@ -486,7 +535,11 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         callback(Result.success(result))
     }
 
-    override fun connect(session: PeripheralSession, callback: (Result<Unit>) -> Unit) {
+    override fun connect(
+        session: PeripheralSession,
+        options: ConnectOptions?,
+        callback: (Result<Unit>) -> Unit,
+    ) {
         val context = applicationContext
         if (context == null) {
             callback(Result.failure(butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Context not available")))
@@ -494,6 +547,8 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         }
 
         val address = session.peripheralIdentifier
+        val autoConnect = options?.autoConnect ?: false
+        val refreshGattCache = options?.refreshGattCache ?: false
         val device = discoveredPeripherals[address]
             ?: bluetoothAdapter?.getRemoteDevice(address)
         if (device == null) {
@@ -511,7 +566,11 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
 
         scope?.launch {
             try {
-                connection.connectDevice(device)
+                connection.connectDevice(
+                    device,
+                    autoConnect = autoConnect,
+                    refreshGattCache = refreshGattCache,
+                )
                 callback(Result.success(Unit))
             } catch (e: Exception) {
                 callback(Result.failure(butaneFlutterError(ButaneErrorCode.CONNECT_FAILED, "Failed to connect to $address", e)))
