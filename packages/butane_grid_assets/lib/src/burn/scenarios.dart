@@ -193,6 +193,11 @@ const DriveScenario kNusRoundTripScenario = DriveScenario(
 /// publishes on TX, so the central can prove descriptor discovery.
 const String kUserDescriptionUuid = '2901';
 
+/// An encryption-required characteristic the features scenario publishes so a
+/// peripheral accepts the central's bond request.
+const String kSecureCharacteristicUuid =
+    '6e400004-b5a3-f393-e0a9-e50e24dcca9e';
+
 /// The literal every backend reports when it cannot honour an option.
 const String kUnsupportedError = 'ButaneException.unsupported';
 
@@ -232,6 +237,13 @@ DriveScenario centralFeaturesScenario({required String centralTarget}) {
                   'value': 'YnVybiB0eA==', // base64('burn tx')
                 },
               ],
+            },
+            // CoreBluetooth peripherals reject a pairing request unless an
+            // attribute requires encryption, so `bond` needs this one.
+            {
+              'uuid': kSecureCharacteristicUuid,
+              'properties': {'read': true},
+              'permissions': {'readEncryptionRequired': true},
             },
           ],
         },
