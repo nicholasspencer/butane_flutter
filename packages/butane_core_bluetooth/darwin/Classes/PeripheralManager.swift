@@ -71,7 +71,7 @@ class PeripheralManager: NSObject, CBPeripheralManagerDelegate {
   }
 
   func addService(service: MutableService) async throws {
-    let cbService = service.toCBMutableService()
+    let cbService = try service.toCBMutableService()
     services[service.uuid] = cbService
 
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -213,20 +213,20 @@ class PeripheralManager: NSObject, CBPeripheralManagerDelegate {
 // MARK: - Conversion Helpers
 
 extension MutableService {
-  func toCBMutableService() -> CBMutableService {
+  func toCBMutableService() throws -> CBMutableService {
     let cbService = CBMutableService(
       type: CBUUID(string: uuid),
       primary: isPrimary
     )
 
-    cbService.characteristics = characteristics.compactMap { $0?.toCBMutableCharacteristic() }
+    cbService.characteristics = try characteristics.compactMap { try $0?.toCBMutableCharacteristic() }
 
     return cbService
   }
 }
 
 extension MutableCharacteristic {
-  func toCBMutableCharacteristic() -> CBMutableCharacteristic {
+  func toCBMutableCharacteristic() throws -> CBMutableCharacteristic {
     let cbProperties = properties?.toCBCharacteristicProperties() ?? []
     let cbPermissions = permissions?.toCBAttributePermissions() ?? []
 
@@ -237,18 +237,32 @@ extension MutableCharacteristic {
       permissions: cbPermissions
     )
 
-    cbCharacteristic.descriptors = descriptors?.compactMap { $0?.toCBMutableDescriptor() }
+    cbCharacteristic.descriptors = try descriptors?.compactMap { try $0?.toCBMutableDescriptor() }
 
     return cbCharacteristic
   }
 }
 
 extension MutableDescriptor {
-  func toCBMutableDescriptor() -> CBMutableDescriptor {
-    return CBMutableDescriptor(
-      type: CBUUID(string: uuid),
-      value: value?.data
-    )
+  /// CBMutableDescriptor publishes only the user description, whose value
+  /// must be a string, and the presentation format, whose value is bytes. It
+  /// raises an Objective-C exception for anything else, so other types are
+  /// rejected as unsupported before reaching it.
+  func toCBMutableDescriptor() throws -> CBMutableDescriptor {
+    let type = CBUUID(string: uuid)
+    let bytes = value?.data ?? Data()
+    switch type {
+    case CBUUID(string: CBUUIDCharacteristicUserDescriptionString):
+      return CBMutableDescriptor(type: type, value: String(decoding: bytes, as: UTF8.self))
+    case CBUUID(string: CBUUIDCharacteristicFormatString):
+      return CBMutableDescriptor(type: type, value: bytes)
+    default:
+      throw butaneFlutterError(
+        nativeError: nil,
+        fallback: .unsupported,
+        message: "CoreBluetooth peripherals publish only the 2901 user description and 2904 presentation format descriptors, not \(uuid)"
+      )
+    }
   }
 }
 

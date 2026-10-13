@@ -226,7 +226,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         descriptors: $0.descriptors?.map {
           Descriptor(
             uuid: $0.uuid.uuidString,
-            value: FlutterStandardTypedData(bytes: ($0.value as? Data? ?? Data())!)
+            value: FlutterStandardTypedData(bytes: $0.valueData)
           )
         },
         properties: CharacteristicProperty(
@@ -522,6 +522,28 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
     
     Task { await actor.didModifyServices(invalidatedServices: invalidatedServices) }
+  }
+}
+
+// MARK: Descriptor Values
+
+extension CBDescriptor {
+  /// The descriptor value as wire bytes. CoreBluetooth types it by UUID:
+  /// NSNumber for the configuration and extended-properties descriptors,
+  /// NSString for the user description, and Data otherwise. An unread value
+  /// is nil.
+  var valueData: Data {
+    switch value {
+    case let data as Data:
+      return data
+    case let string as String:
+      return Data(string.utf8)
+    case let number as NSNumber:
+      var littleEndian = number.uint16Value.littleEndian
+      return Data(bytes: &littleEndian, count: MemoryLayout<UInt16>.size)
+    default:
+      return Data()
+    }
   }
 }
 
@@ -946,7 +968,7 @@ actor PeripheralActor: Equatable {
           message: error.localizedDescription
         ))
       } else {
-        continuation.resume(returning: descriptor.value as? Data ?? Data())
+        continuation.resume(returning: descriptor.valueData)
       }
     }
 
