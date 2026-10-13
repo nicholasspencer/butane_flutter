@@ -319,13 +319,13 @@ class _ScanResultStateListItem extends State<ScanResultListItem> {
     final peripheral = widget.scanResult.peripheral;
     await peripheral.discoverServices();
     final services = await peripheral.services;
-    print('Discovered services: ${services.map((e) => e.uuid.toString())}');
+    debugPrint('Discovered services: ${services.map((e) => e.uuid.toString())}');
     for (final service in services) {
-      print('Discovering characteristics for ${service.uuid.toString()}');
+      debugPrint('Discovering characteristics for ${service.uuid.toString()}');
       await service.discoverCharacteristics();
-      print('Discovered characteristics for ${service.uuid.toString()}');
+      debugPrint('Discovered characteristics for ${service.uuid.toString()}');
       final char = await service.characteristics;
-      print(
+      debugPrint(
         'Discovered characteristics for ${service.uuid.toString()}: ${char.map((e) => e.uuid.toString())}',
       );
       characteristics[service] = char;

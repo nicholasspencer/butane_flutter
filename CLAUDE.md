@@ -41,6 +41,11 @@ Run the pure-Dart burn asset checks with the Dart runner:
     dart analyze
     dart test
 
+Run every package's CI gate from the workspace root (`flutter pub get` first); the `Validate` workflow runs the same script:
+
+    tool/ci.sh analyze
+    tool/ci.sh test
+
 Regenerate Pigeon channels after changing `packages/butane_platform_interface/pigeons/api.dart`:
 
     ./tool/gen_api.sh
