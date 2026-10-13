@@ -86,6 +86,22 @@ abstract base class ButanePlatformInterface {
     required PeripheralSession session,
   });
 
+  /// Bonds with the peripheral, completing once bonded and failing when
+  /// bonding fails or is rejected.
+  Future<void> bond({
+    required PeripheralSession session,
+  });
+
+  /// The current bond state of the peripheral.
+  Future<BondState> bondState({
+    required PeripheralSession session,
+  });
+
+  /// A stream of bond state changes for the peripheral.
+  Stream<BondState> bondStateStream({
+    required PeripheralSession session,
+  });
+
   /// Discovers services offered by the peripheral.
   Future<void> discoverServices({
     required PeripheralSession session,
@@ -295,6 +311,8 @@ enum ConnectionState {
   connected,
   disconnecting,
 }
+
+enum BondState { none, bonding, bonded }
 
 final class Session {
   const Session({

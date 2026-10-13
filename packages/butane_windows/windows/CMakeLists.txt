@@ -34,6 +34,9 @@ list(APPEND PLUGIN_SOURCES
   "butane_connection.h"
   "butane_connection_winrt.cpp"
   "butane_connection_winrt.h"
+  "butane_bonding.h"
+  "butane_bonding_winrt.cpp"
+  "butane_bonding_winrt.h"
   "butane_gatt_discovery.cpp"
   "butane_gatt_discovery.h"
   "butane_gatt_discovery_winrt.cpp"
@@ -107,6 +110,7 @@ add_executable(${TEST_RUNNER}
   test/butane_gatt_operations_test.cpp
   test/butane_gatt_operations_winrt_test.cpp
   test/butane_connection_winrt_test.cpp
+  test/butane_bonding_winrt_test.cpp
   test/butane_windows_plugin_test.cpp
   test/butane_conversions_test.cpp
   test/butane_gatt_discovery_test.cpp

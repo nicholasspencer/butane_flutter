@@ -5,6 +5,7 @@ import AttResult
 import ButaneFlutterApi
 import ButaneHostApi
 import ButaneErrorCode
+import BondState
 import Characteristic
 import CharacteristicProperty
 import ClientSession
@@ -54,6 +55,10 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var activityBinding: ActivityPluginBinding? = null
     private val stateReceivers = mutableMapOf<String?, BroadcastReceiver>()
+    // One ACTION_BOND_STATE_CHANGED receiver serves every observed peripheral.
+    private var bondReceiver: BroadcastReceiver? = null
+    private val bondSessions = mutableMapOf<String, PeripheralSession>()
+    private val pendingBonds = mutableMapOf<String, MutableList<(Result<Unit>) -> Unit>>()
 
     private var scanCallback: ScanCallback? = null
     private val discoveredPeripherals = mutableMapOf<String, BluetoothDevice>()
@@ -88,6 +93,21 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
             }
         }
         stateReceivers.clear()
+        bondReceiver?.let { receiver ->
+            try {
+                applicationContext?.unregisterReceiver(receiver)
+            } catch (_: IllegalArgumentException) {
+                // Already unregistered
+            }
+        }
+        bondReceiver = null
+        bondSessions.clear()
+        completePendingBonds(
+            pendingBonds.keys.toList(),
+            Result.failure(
+                butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Plugin detached while bonding"),
+            ),
+        )
         // Close all connections
         connections.values.forEach { it.close() }
         connections.clear()
@@ -137,6 +157,122 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
                 BluetoothAdapter.STATE_TURNING_OFF -> ClientState.POWERED_ON
                 else -> ClientState.UNKNOWN
             }
+        }
+
+        fun mapBondState(bondState: Int): BondState {
+            return when (bondState) {
+                BluetoothDevice.BOND_NONE -> BondState.NONE
+                BluetoothDevice.BOND_BONDING -> BondState.BONDING
+                BluetoothDevice.BOND_BONDED -> BondState.BONDED
+                else -> BondState.NONE
+            }
+        }
+    }
+
+    private fun resolveBondDevice(session: PeripheralSession): Result<BluetoothDevice> {
+        if (applicationContext == null) {
+            return Result.failure(
+                butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Plugin not attached"),
+            )
+        }
+        val address = session.peripheralIdentifier
+        discoveredPeripherals[address]?.let { return Result.success(it) }
+        val adapter = bluetoothAdapter
+            ?: return Result.failure(
+                butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Bluetooth adapter not available"),
+            )
+        return try {
+            Result.success(adapter.getRemoteDevice(address))
+        } catch (error: IllegalArgumentException) {
+            Result.failure(
+                butaneFlutterError(
+                    ButaneErrorCode.NOT_FOUND,
+                    "Peripheral $address not found",
+                    error,
+                ),
+            )
+        } catch (error: SecurityException) {
+            Result.failure(
+                butaneFlutterError(
+                    ButaneErrorCode.UNAVAILABLE,
+                    "Bluetooth permission unavailable",
+                    error,
+                ),
+            )
+        }
+    }
+
+    private fun completePendingBonds(addresses: List<String>, result: Result<Unit>) {
+        for (address in addresses) {
+            pendingBonds.remove(address)?.forEach { it(result) }
+        }
+    }
+
+    private fun observeBondState(session: PeripheralSession): Result<Unit> {
+        bondSessions[session.peripheralIdentifier] = session
+        if (bondReceiver != null) return Result.success(Unit)
+        val context = applicationContext
+            ?: return Result.failure(
+                butaneFlutterError(ButaneErrorCode.UNAVAILABLE, "Plugin not attached"),
+            )
+        val receiver = object : BroadcastReceiver() {
+            @Suppress("DEPRECATION")
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) return
+                val device = intent.getParcelableExtra<BluetoothDevice>(
+                    BluetoothDevice.EXTRA_DEVICE,
+                ) ?: return
+                val address = try {
+                    device.address
+                } catch (_: SecurityException) {
+                    return
+                }
+                val session = bondSessions[address] ?: return
+                val state = intent.getIntExtra(
+                    BluetoothDevice.EXTRA_BOND_STATE,
+                    BluetoothDevice.BOND_NONE,
+                )
+                flutterApi?.onBondState(session, mapBondState(state)) {}
+                // bond() completes on the outcome, matching BlueZ Pair() and
+                // Windows PairAsync rather than the createBond() launch.
+                when (state) {
+                    BluetoothDevice.BOND_BONDED ->
+                        completePendingBonds(listOf(address), Result.success(Unit))
+                    BluetoothDevice.BOND_NONE -> completePendingBonds(
+                        listOf(address),
+                        Result.failure(
+                            butaneFlutterError(
+                                ButaneErrorCode.OPERATION_FAILED,
+                                "Bonding with $address failed or was rejected",
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+        return try {
+            context.registerReceiver(
+                receiver,
+                IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED),
+            )
+            bondReceiver = receiver
+            Result.success(Unit)
+        } catch (error: SecurityException) {
+            Result.failure(
+                butaneFlutterError(
+                    ButaneErrorCode.UNAVAILABLE,
+                    "Bluetooth permission unavailable",
+                    error,
+                ),
+            )
+        } catch (error: Exception) {
+            Result.failure(
+                butaneFlutterError(
+                    ButaneErrorCode.OPERATION_FAILED,
+                    "Failed to observe bond state",
+                    error,
+                ),
+            )
         }
     }
 
@@ -472,6 +608,106 @@ class ButaneAndroidPlugin : FlutterPlugin, ButaneHostApi, ActivityAware {
         val connection = connections[address]
         val state = connection?.connectionState?.value ?: ConnectionState.DISCONNECTED
         callback(Result.success(state))
+    }
+
+    override fun bond(session: PeripheralSession, callback: (Result<Unit>) -> Unit) {
+        val device = resolveBondDevice(session).getOrElse { error ->
+            callback(Result.failure(error))
+            return
+        }
+        observeBondState(session).exceptionOrNull()?.let { error ->
+            callback(Result.failure(error))
+            return
+        }
+        val address = session.peripheralIdentifier
+        try {
+            when (device.bondState) {
+                BluetoothDevice.BOND_BONDED -> callback(Result.success(Unit))
+                BluetoothDevice.BOND_BONDING ->
+                    pendingBonds.getOrPut(address) { mutableListOf() }.add(callback)
+                BluetoothDevice.BOND_NONE -> {
+                    pendingBonds.getOrPut(address) { mutableListOf() }.add(callback)
+                    if (!device.createBond()) {
+                        pendingBonds[address]?.remove(callback)
+                        callback(
+                            Result.failure(
+                                butaneFlutterError(
+                                    ButaneErrorCode.OPERATION_FAILED,
+                                    "Failed to start bonding with ${session.peripheralIdentifier}",
+                                ),
+                            ),
+                        )
+                    }
+                }
+                else -> callback(
+                    Result.failure(
+                        butaneFlutterError(
+                            ButaneErrorCode.OPERATION_FAILED,
+                            "Unknown bond state for ${session.peripheralIdentifier}",
+                        ),
+                    ),
+                )
+            }
+        } catch (error: SecurityException) {
+            pendingBonds[address]?.remove(callback)
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.UNAVAILABLE,
+                        "Bluetooth permission unavailable",
+                        error,
+                    ),
+                ),
+            )
+        } catch (error: Exception) {
+            pendingBonds[address]?.remove(callback)
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.OPERATION_FAILED,
+                        "Failed to start bonding with ${session.peripheralIdentifier}",
+                        error,
+                    ),
+                ),
+            )
+        }
+    }
+
+    override fun bondState(
+        session: PeripheralSession,
+        callback: (Result<BondState>) -> Unit,
+    ) {
+        val device = resolveBondDevice(session).getOrElse { error ->
+            callback(Result.failure(error))
+            return
+        }
+        observeBondState(session).exceptionOrNull()?.let { error ->
+            callback(Result.failure(error))
+            return
+        }
+        try {
+            callback(Result.success(mapBondState(device.bondState)))
+        } catch (error: SecurityException) {
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.UNAVAILABLE,
+                        "Bluetooth permission unavailable",
+                        error,
+                    ),
+                ),
+            )
+        } catch (error: Exception) {
+            callback(
+                Result.failure(
+                    butaneFlutterError(
+                        ButaneErrorCode.OPERATION_FAILED,
+                        "Failed to read bond state for ${session.peripheralIdentifier}",
+                        error,
+                    ),
+                ),
+            )
+        }
     }
 
     override fun discoverServices(
