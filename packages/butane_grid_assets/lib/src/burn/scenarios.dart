@@ -240,7 +240,7 @@ DriveScenario centralFeaturesScenario({required String centralTarget}) {
       DriveStep.invoke(
         'butane.start_advertising',
         args: {
-          'localName': 'BURN-FEAT',
+          'localName': 'BURN-FT',
           'serviceUuids': [kNusServiceUuid],
         },
         expectContains: 'advertising',
