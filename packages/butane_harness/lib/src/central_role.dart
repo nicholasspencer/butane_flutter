@@ -252,11 +252,15 @@ class CentralRole {
         'id': id,
         'name': peripheral.name,
       },
+      'rssi': result.rssi,
+      'timestampMillis': result.timestampMillis,
       'advertisement': {
         'localName': advertisement.localName,
         'serviceUuids': advertisement.serviceUuids,
         'isConnectable': advertisement.isConnectable,
         'txPowerLevel': advertisement.txPowerLevel,
+        'solicitedServiceUuids': advertisement.solicitedServiceUuids,
+        'overflowServiceUuids': advertisement.overflowServiceUuids,
       },
     };
   }
