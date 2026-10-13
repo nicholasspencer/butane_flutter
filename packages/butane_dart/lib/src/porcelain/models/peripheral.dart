@@ -29,11 +29,28 @@ base class ScanResult {
   const ScanResult({
     required this.peripheral,
     required this.advertisementData,
+    this.rssi,
+    this.timestampMillis,
   });
 
   final Peripheral peripheral;
 
   final AdvertisementData advertisementData;
+
+  /// Per-advertisement RSSI populated by Android, BlueZ, and Windows, and by
+  /// Darwin for the first advertisement seen per peripheral; later Darwin
+  /// advertisements are not surfaced while `didDiscover` de-duplicates them.
+  /// Its absence is null and not an error.
+  final int? rssi;
+
+  /// Per-advertisement epoch-millisecond discovery timestamp populated by
+  /// Android, BlueZ, and Windows, and by Darwin for the first advertisement
+  /// seen per peripheral; later Darwin advertisements are not surfaced while
+  /// `didDiscover` de-duplicates them. BlueZ exposes no advertisement
+  /// timestamp, so its value is when Butane observed the device update; the
+  /// initial scan snapshot of BlueZ's device cache carries the subscribe time,
+  /// not the original reception time. Its absence is null and not an error.
+  final int? timestampMillis;
 }
 
 base class AdvertisementData {
@@ -44,6 +61,8 @@ base class AdvertisementData {
     this.serviceData,
     this.serviceUuids,
     this.isConnectable = false,
+    this.solicitedServiceUuids,
+    this.overflowServiceUuids,
   });
 
   final String? localName;
@@ -59,6 +78,14 @@ base class AdvertisementData {
   /// This is `false` when the backend cannot determine connectability.
   final bool isConnectable;
 
+  /// Solicited service UUIDs populated by Android, Darwin, and Windows;
+  /// absence is null and not an error.
+  final List<String>? solicitedServiceUuids;
+
+  /// Overflow service UUIDs are populated by Darwin only.
+  /// Their absence is null and not an error.
+  final List<String>? overflowServiceUuids;
+
   @protected
   api.AdvertisementData toData() {
     return api.AdvertisementData(
@@ -68,6 +95,8 @@ base class AdvertisementData {
       serviceData: serviceData,
       serviceUuids: serviceUuids,
       isConnectable: isConnectable,
+      solicitedServiceUuids: solicitedServiceUuids,
+      overflowServiceUuids: overflowServiceUuids,
     );
   }
 }
@@ -84,6 +113,9 @@ base class Peripheral extends Peer {
 
   final String? name;
 
+  /// The initial peer RSSI retained for compatibility.
+  ///
+  /// Use [ScanResult.rssi] for the per-advertisement value.
   final int? initialRssi;
 
   final ConnectionState initialState;
@@ -351,6 +383,8 @@ extension ApiAdvertisementData on api.AdvertisementData {
       serviceUuids: serviceUuids?.nonNulls.toList(),
       txPowerLevel: txPowerLevel,
       localName: localName,
+      solicitedServiceUuids: solicitedServiceUuids?.nonNulls.toList(),
+      overflowServiceUuids: overflowServiceUuids?.nonNulls.toList(),
       isConnectable: isConnectable ?? false,
     );
   }
@@ -361,6 +395,8 @@ extension ApiScanData on api.ScanResult {
     return ScanResult(
       peripheral: peripheral.toPeripheral(manager: manager),
       advertisementData: advertisementData.toAdvertisementData(),
+      rssi: rssi,
+      timestampMillis: timestampMillis,
     );
   }
 }
