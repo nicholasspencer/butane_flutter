@@ -27,6 +27,10 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   private let centralManagerFactory: CentralManagerFactory
   
   var actors: [UUID: PeripheralActor] = [:]
+
+  /// Peripherals already reported by the current scan, so each scan surfaces
+  /// every peripheral once even when an earlier scan created its actor.
+  private var scannedPeripherals: Set<UUID> = []
   
   lazy var manager: CBCentralManager = {
     if let restorationIdentifier = restorationIdentifier {
@@ -73,6 +77,7 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
       CBUUID(string: $0)
     }
     
+    scannedPeripherals.removeAll()
     manager.scanForPeripherals(withServices: uuids)
   }
   
@@ -399,14 +404,16 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-    guard actors.keys.contains(peripheral.identifier) == false else {
+    guard scannedPeripherals.insert(peripheral.identifier).inserted else {
       return
     }
 
     let timestampMillis = Int64(Date().timeIntervalSince1970 * 1000)
     
-    peripheral.delegate = self
-    actors[peripheral.identifier] = PeripheralActor(peripheral: peripheral, flutterApi: flutterApi)
+    if actors[peripheral.identifier] == nil {
+      peripheral.delegate = self
+      actors[peripheral.identifier] = PeripheralActor(peripheral: peripheral, flutterApi: flutterApi)
+    }
     
     flutterApi.onScanResult(
       scanResult: ScanResult(
