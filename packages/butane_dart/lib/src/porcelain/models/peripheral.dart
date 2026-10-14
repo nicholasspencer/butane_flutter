@@ -38,15 +38,15 @@ base class ScanResult {
   final AdvertisementData advertisementData;
 
   /// Per-advertisement RSSI populated by Android, BlueZ, and Windows, and by
-  /// Darwin for the first advertisement seen per peripheral; later Darwin
-  /// advertisements are not surfaced while `didDiscover` de-duplicates them.
-  /// Its absence is null and not an error.
+  /// Darwin for the first advertisement seen per peripheral in each scan;
+  /// later Darwin advertisements in the same scan are not surfaced. Its
+  /// absence is null and not an error.
   final int? rssi;
 
   /// Per-advertisement epoch-millisecond discovery timestamp populated by
   /// Android, BlueZ, and Windows, and by Darwin for the first advertisement
-  /// seen per peripheral; later Darwin advertisements are not surfaced while
-  /// `didDiscover` de-duplicates them. BlueZ exposes no advertisement
+  /// seen per peripheral in each scan; later Darwin advertisements in the same
+  /// scan are not surfaced. BlueZ exposes no advertisement
   /// timestamp, so its value is when Butane observed the device update; the
   /// initial scan snapshot of BlueZ's device cache carries the subscribe time,
   /// not the original reception time. Its absence is null and not an error.
