@@ -11,7 +11,7 @@
 ///     default CoreDevice path launches with `devicectl`, while `dns-sd`
 ///     resolves the VM-service record published by the engine itself.
 ///  3. **Dart cannot directly dial the device over the LAN without the grant.**
-///     A LAN-exempt `python3` loopback relay publishes the resolved endpoint.
+///     A LAN-exempt `perl` loopback relay publishes the resolved endpoint.
 ///
 /// Teardown reaps the console process group (the reaper) plus, via the
 /// [LaunchedDaemon.onReap] seam, the relay process and a best-effort
@@ -186,33 +186,42 @@ List<IosMdnsCandidate> resolveIosMdnsCandidates({
   ];
 }
 
-/// The loopback relay, run by the LAN-exempt `python3`. Written to a temp file
-/// at launch so the launcher is self-contained (a Dart relay can't work — it
-/// would hit the same Local Network gate).
+/// The loopback relay, run by the LAN-exempt system `perl`. Written to a temp
+/// file at launch so the launcher is self-contained (a Dart relay can't work —
+/// it would hit the same Local Network gate). macOS 27 no longer exempts any
+/// `python3`, while `/usr/bin/perl` still dials the LAN without the grant.
 const String _kRelayScript = r'''
-import asyncio, sys
-LOCAL_PORT = int(sys.argv[1]); DEVICE = sys.argv[2]; DEVICE_PORT = int(sys.argv[3])
-async def pipe(r, w):
-    try:
-        while not r.at_eof():
-            data = await r.read(65536)
-            if not data: break
-            w.write(data); await w.drain()
-    except Exception: pass
-    finally:
-        try: w.close()
-        except Exception: pass
-async def handle(cr, cw):
-    try:
-        ur, uw = await asyncio.open_connection(DEVICE, DEVICE_PORT)
-    except Exception as e:
-        print(f"upstream connect failed: {e}", flush=True); cw.close(); return
-    await asyncio.gather(pipe(cr, uw), pipe(ur, cw))
-async def main():
-    server = await asyncio.start_server(handle, "127.0.0.1", LOCAL_PORT)
-    print(f"RELAY_READY 127.0.0.1:{LOCAL_PORT} -> {DEVICE}:{DEVICE_PORT}", flush=True)
-    async with server: await server.serve_forever()
-asyncio.run(main())
+use strict; use warnings; use IO::Socket::INET; use IO::Select;
+my ($local_port, $device, $device_port) = @ARGV;
+$| = 1; $SIG{CHLD} = 'IGNORE';
+my $server = IO::Socket::INET->new(
+  LocalAddr => '127.0.0.1', LocalPort => $local_port,
+  Listen => 16, ReuseAddr => 1,
+) or die "listen failed: $!\n";
+print "RELAY_READY 127.0.0.1:$local_port -> $device:$device_port\n";
+while (1) {
+  my $client = $server->accept or next;
+  my $pid = fork;
+  if (!defined $pid || $pid) { close $client; next; }
+  close $server;
+  my $upstream = IO::Socket::INET->new(PeerAddr => $device, PeerPort => $device_port)
+    or do { print "upstream connect failed: $!\n"; exit 0; };
+  my $select = IO::Select->new($client, $upstream);
+  PUMP: while (1) {
+    for my $from ($select->can_read) {
+      my $to = $from == $client ? $upstream : $client;
+      my $read = sysread($from, my $buffer, 65536);
+      last PUMP unless $read;
+      my $offset = 0;
+      while ($offset < $read) {
+        my $written = syswrite($to, $buffer, $read - $offset, $offset);
+        last PUMP unless defined $written;
+        $offset += $written;
+      }
+    }
+  }
+  exit 0;
+}
 ''';
 
 /// Launches the butane harness on a physical iOS device as a burn follower.
@@ -222,7 +231,7 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// Creates a launcher for [deviceId] (the device UDID), building from
   /// [harnessDirectory] and publishing under [station]. [launchMode] defaults
   /// to the Local Network grant-independent CoreDevice route. [bundleId]
-  /// identifies the engine's mDNS service; [relayPort] and [python3] provide
+  /// identifies the engine's mDNS service; [relayPort] and [perl] provide
   /// its Dart-reachable loopback relay.
   IosFollowerLauncher({
     this.deviceId = '',
@@ -233,7 +242,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     this.launchMode = IosFollowerLaunchMode.devicectl,
     this.flutterExecutable = 'flutter',
     this.xcrunExecutable = 'xcrun',
-    this.python3 = '/usr/bin/python3',
+    this.perl = '/usr/bin/perl',
     this.provisionTimeout = const Duration(minutes: 1),
     this.launchTimeout = const Duration(minutes: 10),
     this.readyTimeout = const Duration(minutes: 4),
@@ -280,8 +289,8 @@ class IosFollowerLauncher implements FollowerLauncher {
   /// The Xcode command-line tool dispatcher used for CoreDevice operations.
   final String xcrunExecutable;
 
-  /// The LAN-exempt python interpreter that runs the wireless fallback relay.
-  final String python3;
+  /// The LAN-exempt perl interpreter that runs the wireless fallback relay.
+  final String perl;
 
   /// Maximum duration of prior-app cleanup.
   final Duration provisionTimeout;
@@ -953,13 +962,13 @@ class IosFollowerLauncher implements FollowerLauncher {
     return out.existsSync() ? out.readAsStringSync() : '';
   }
 
-  /// Writes the embedded relay to a temp file and starts it under python3,
+  /// Writes the embedded relay to a temp file and starts it under perl,
   /// waiting for its RELAY_READY line, then curl-verifying the loopback.
   Future<Process> _startRelay(IosMdnsCandidate device) async {
     final scriptFile = File(
-      '${Directory.systemTemp.path}/butane_vm_relay_$relayPort.py',
+      '${Directory.systemTemp.path}/butane_vm_relay_$relayPort.pl',
     )..writeAsStringSync(_kRelayScript);
-    final relay = await Process.start(python3, [
+    final relay = await Process.start(perl, [
       scriptFile.path,
       '$relayPort',
       device.ip,
