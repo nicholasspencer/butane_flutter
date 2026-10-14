@@ -11,7 +11,8 @@
 ///     default CoreDevice path launches with `devicectl`, while `dns-sd`
 ///     resolves the VM-service record published by the engine itself.
 ///  3. **Dart cannot directly dial the device over the LAN without the grant.**
-///     A LAN-exempt `perl` loopback relay publishes the resolved endpoint.
+///     A USB `iproxy` forward publishes the resolved endpoint on loopback
+///     when the device is cabled; otherwise a LAN-exempt `perl` relay does.
 ///
 /// Teardown reaps the console process group (the reaper) plus, via the
 /// [LaunchedDaemon.onReap] seam, the relay process and a best-effort
@@ -243,6 +244,7 @@ class IosFollowerLauncher implements FollowerLauncher {
     this.flutterExecutable = 'flutter',
     this.xcrunExecutable = 'xcrun',
     this.perl = '/usr/bin/perl',
+    this.iproxy = 'iproxy',
     this.provisionTimeout = const Duration(minutes: 1),
     this.launchTimeout = const Duration(minutes: 10),
     this.readyTimeout = const Duration(minutes: 4),
@@ -291,6 +293,10 @@ class IosFollowerLauncher implements FollowerLauncher {
 
   /// The LAN-exempt perl interpreter that runs the wireless fallback relay.
   final String perl;
+
+  /// The libimobiledevice `iproxy` that forwards the loopback relay port over
+  /// USB, bypassing the Local Network gate entirely; null always uses [perl].
+  final String? iproxy;
 
   /// Maximum duration of prior-app cleanup.
   final Duration provisionTimeout;
@@ -962,9 +968,47 @@ class IosFollowerLauncher implements FollowerLauncher {
     return out.existsSync() ? out.readAsStringSync() : '';
   }
 
+  /// Forwards the loopback relay port over USB with [iproxy] when the device
+  /// is cabled, otherwise falls back to the perl LAN relay.
+  Future<Process> _startRelay(IosMdnsCandidate device) async =>
+      await _startUsbForward(device) ?? await _startLanRelay(device);
+
+  /// Starts `iproxy` for [device]'s VM-service port and returns it once the
+  /// loopback serves the exploration host, or null when the device is not
+  /// reachable over USB or `iproxy` is unavailable.
+  Future<Process?> _startUsbForward(IosMdnsCandidate device) async {
+    final executable = iproxy;
+    if (executable == null || deviceId.isEmpty) return null;
+    final Process forward;
+    try {
+      forward = await Process.start(executable, [
+        '-u',
+        deviceId,
+        '$relayPort:${device.port}',
+      ]);
+    } on ProcessException {
+      return null;
+    }
+    forward.stdout.listen((_) {}, onError: (Object _) {}, cancelOnError: false);
+    forward.stderr.listen((_) {}, onError: (Object _) {}, cancelOnError: false);
+
+    final base = Uri.parse('http://127.0.0.1:$relayPort/${device.authCode}/');
+    for (var attempt = 0; attempt < 5; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (await isIosExplorationReady(base)) {
+        _onLog('ios launcher: usb forward 127.0.0.1:$relayPort via iproxy');
+        return forward;
+      }
+    }
+    forward.kill(ProcessSignal.sigkill);
+    await forward.exitCode;
+    _onLog('ios launcher: no usb forward for $deviceId; using the perl relay');
+    return null;
+  }
+
   /// Writes the embedded relay to a temp file and starts it under perl,
   /// waiting for its RELAY_READY line, then curl-verifying the loopback.
-  Future<Process> _startRelay(IosMdnsCandidate device) async {
+  Future<Process> _startLanRelay(IosMdnsCandidate device) async {
     final scriptFile = File(
       '${Directory.systemTemp.path}/butane_vm_relay_$relayPort.pl',
     )..writeAsStringSync(_kRelayScript);
