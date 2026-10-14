@@ -62,6 +62,6 @@ jobs:
       - name: Generate the example Gradle project
         working-directory: packages/butane_android/example
         run: flutter build apk --debug --config-only
-      - name: Compile the butane_android Kotlin sources
+      - name: Compile and unit-test the butane_android Kotlin sources
         working-directory: packages/butane_android/example/android
-        run: ./gradlew :butane_android:compileDebugKotlin
+        run: ./gradlew :butane_android:testDebugUnitTest
