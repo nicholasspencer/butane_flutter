@@ -1,5 +1,9 @@
-## Unreleased
+## 0.2.0
 
+- `Characteristic.descriptors` is now populated; descriptors are discovered with their characteristics.
+- Descriptor values are read by their Core Bluetooth type, fixing a crash on the user-description and configuration descriptors.
+- A published characteristic may carry `2901` and `2904` descriptors; any other descriptor type reports `ButaneErrorCode.unsupported` instead of crashing.
+- `connect()` options `autoConnect` and `refreshGattCache`, and `requestEnable()`, report `ButaneErrorCode.unsupported`.
 - Requests pending when a peripheral disconnects now fail with `ButaneErrorCode.disconnected` instead of never completing.
 - **Breaking:** The minimum deployment targets are now iOS 15 and macOS 12, the oldest targets current Xcode builds.
 - Added explicit typed `ButaneErrorCode.unsupported` failures for `Peripheral.bond()` and `bondState` because Core Bluetooth pairing is implicit.
