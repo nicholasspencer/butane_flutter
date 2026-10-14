@@ -435,6 +435,10 @@ class CentralManager: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
   }
   
   func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+    if let actor = actors[peripheral.identifier] {
+      Task { await actor.didDisconnect(error: error) }
+    }
+
     flutterApi.onConnectionState(
       peripheral: peripheral.toPeripheral(session: session(peripheral)),
       state: .disconnected,
@@ -580,6 +584,19 @@ final class DescriptorDiscoveryContinuationStore {
     }
 
     for continuation in continuations ?? [] {
+      continuation.resume()
+    }
+  }
+
+  /// Resumes every pending wait, for a peripheral that disconnected before
+  /// its descriptor callbacks arrived.
+  func resumeAll() {
+    lock.lock()
+    let continuations = descriptorDiscoveryContinuations.values.flatMap { $0 }
+    descriptorDiscoveryContinuations.removeAll()
+    lock.unlock()
+
+    for continuation in continuations {
       continuation.resume()
     }
   }
@@ -909,10 +926,54 @@ actor PeripheralActor: Equatable {
       }
     }
 
+    // A disconnect while descriptors were discovering resumes the waits
+    // without callbacks, so the discovery is incomplete.
+    guard peripheral.state == .connected else {
+      for continuation in continuations {
+        continuation.resume(throwing: disconnectedError(error: nil))
+      }
+      return
+    }
+
     for continuation in continuations {
       print("\(service.uuid.uuidString): didDiscoverCharacteristics")
       continuation.resume()
     }
+  }
+
+  /// Fails every pending request: CoreBluetooth sends no further callbacks
+  /// for a peripheral once it disconnects.
+  func didDisconnect(error: Error?) {
+    let failure = disconnectedError(error: error)
+
+    serviceDiscoveryContinuations.forEach { $0.resume(throwing: failure) }
+    serviceDiscoveryContinuations.removeAll()
+    characteristicDiscoveryContinuations.values.joined().forEach { $0.resume(throwing: failure) }
+    characteristicDiscoveryContinuations.removeAll()
+    rssiContinuations.forEach { $0.resume(throwing: failure) }
+    rssiContinuations.removeAll()
+    characteristicReadContinuations.values.joined().forEach { $0.resume(throwing: failure) }
+    characteristicReadContinuations.removeAll()
+    characteristicWriteContinuations.values.joined().forEach { $0.resume(throwing: failure) }
+    characteristicWriteContinuations.removeAll()
+    observeCharacteristicContinuations.values.joined().forEach { $0.resume(throwing: failure) }
+    observeCharacteristicContinuations.removeAll()
+    descriptorReadContinuations.values.joined().forEach { $0.resume(throwing: failure) }
+    descriptorReadContinuations.removeAll()
+    descriptorWriteContinuations.values.joined().forEach { $0.resume(throwing: failure) }
+    descriptorWriteContinuations.removeAll()
+    descriptorDiscoveryContinuationStore.resumeAll()
+  }
+
+  /// Always `disconnected`, whatever native reason ended the link; the
+  /// reason travels in the message.
+  private func disconnectedError(error: Error?) -> Error {
+    let reason = error.map { ": \($0.localizedDescription)" } ?? ""
+    return butaneFlutterError(
+      nativeError: nil,
+      fallback: .disconnected,
+      message: "Peripheral \(peripheral.identifier.uuidString) disconnected\(reason)"
+    )
   }
 
   func didDiscoverDescriptorsFor(characteristic: CBCharacteristic, error: Error?) {

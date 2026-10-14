@@ -116,4 +116,40 @@ class RunnerTests: XCTestCase {
     )
     XCTAssertEqual(completion.wait(timeout: .now() + 1), .success)
   }
+
+  func testDescriptorDiscoveryCompletesWhenThePeripheralDisconnects() {
+    let characteristics = ["0001", "0002"].map {
+      CBMutableCharacteristic(
+        type: CBUUID(string: $0),
+        properties: [],
+        value: nil,
+        permissions: []
+      )
+    }
+
+    let store = DescriptorDiscoveryContinuationStore()
+    let starts = expectation(description: "Descriptor discovery starts for every characteristic")
+    starts.expectedFulfillmentCount = 2
+    let completion = DispatchSemaphore(value: 0)
+
+    Task {
+      await withTaskGroup(of: Void.self) { group in
+        for characteristic in characteristics {
+          group.addTask {
+            await store.wait(for: characteristic) {
+              starts.fulfill()
+            }
+          }
+        }
+      }
+
+      completion.signal()
+    }
+
+    wait(for: [starts], timeout: 1)
+    XCTAssertEqual(completion.wait(timeout: .now() + 0.1), .timedOut)
+
+    store.resumeAll()
+    XCTAssertEqual(completion.wait(timeout: .now() + 1), .success)
+  }
 }
