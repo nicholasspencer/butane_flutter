@@ -189,6 +189,145 @@ const DriveScenario kNusRoundTripScenario = DriveScenario(
   ],
 );
 
+/// The Characteristic User Description descriptor the features scenario
+/// publishes on TX, so the central can prove descriptor discovery.
+const String kUserDescriptionUuid = '2901';
+
+/// An encryption-required characteristic the features scenario publishes so a
+/// peripheral accepts the central's bond request.
+const String kSecureCharacteristicUuid =
+    '6e400004-b5a3-f393-e0a9-e50e24dcca9e';
+
+/// The literal every backend reports when it cannot honour an option.
+const String kUnsupportedError = 'ButaneException.unsupported';
+
+/// The #114 central-surface scenario: scan metadata, adapter-enable,
+/// connect options, descriptor discovery, and bonding, each asserted against
+/// what [centralTarget] must do. Darwin centrals must answer the options they
+/// cannot honour with [kUnsupportedError] rather than silently succeeding.
+///
+/// Android bonding raises a pairing prompt on both devices; the operator
+/// accepts it while the `bond` step waits.
+DriveScenario centralFeaturesScenario({required String centralTarget}) {
+  final darwin = centralTarget == 'macos' || centralTarget == 'ios';
+  return DriveScenario(
+    name: 'central-features',
+    steps: [
+      DriveStep.invoke(
+        'butane.wait_for_state',
+        expectContains: '"matched":true',
+      ),
+      DriveStep.invoke(
+        'butane.wait_for_state',
+        expectContains: '"matched":true',
+        on: DriveEndpoint.local,
+      ),
+      DriveStep.invoke(
+        'butane.add_service',
+        args: {
+          'uuid': kNusServiceUuid,
+          'characteristics': [
+            {
+              'uuid': kNusTxUuid,
+              'properties': {'read': true, 'notify': true},
+              'permissions': {'readable': true},
+              'descriptors': [
+                {
+                  'uuid': kUserDescriptionUuid,
+                  'value': 'YnVybiB0eA==', // base64('burn tx')
+                },
+              ],
+            },
+            // CoreBluetooth peripherals reject a pairing request unless an
+            // attribute requires encryption, so `bond` needs this one.
+            {
+              'uuid': kSecureCharacteristicUuid,
+              'properties': {'read': true},
+              'permissions': {'readEncryptionRequired': true},
+            },
+          ],
+        },
+        expectContains: 'added',
+      ),
+      DriveStep.invoke(
+        'butane.start_advertising',
+        args: {
+          'localName': 'BURN-FT',
+          'serviceUuids': [kNusServiceUuid],
+        },
+        expectContains: 'advertising',
+      ),
+      DriveStep.invoke(
+        'butane.scan',
+        args: {
+          'serviceUuids': [kNusServiceUuid],
+        },
+        expectContains: '"isConnectable":true',
+        on: DriveEndpoint.local,
+      ),
+      DriveStep.invoke(
+        'butane.request_enable',
+        expectContains: darwin ? kUnsupportedError : '"requested":true',
+        on: DriveEndpoint.local,
+      ),
+      if (darwin) ...[
+        DriveStep.invoke(
+          'butane.connect',
+          args: {'autoConnect': false},
+          expectContains: kUnsupportedError,
+          on: DriveEndpoint.local,
+        ),
+        DriveStep.invoke(
+          'butane.connect',
+          args: {'refreshGattCache': true},
+          expectContains: kUnsupportedError,
+          on: DriveEndpoint.local,
+        ),
+      ],
+      DriveStep.invoke(
+        'butane.connect',
+        args: {
+          'timeoutMs': 20000,
+          if (!darwin) ...{'autoConnect': false, 'refreshGattCache': true},
+        },
+        expectContains: '"connected":true',
+        on: DriveEndpoint.local,
+      ),
+      DriveStep.invoke(
+        'butane.discover_services',
+        args: {
+          'serviceUuids': [kNusServiceUuid],
+        },
+        expectContains: kNusServiceUuid,
+        on: DriveEndpoint.local,
+        caseInsensitive: true,
+      ),
+      DriveStep.invoke(
+        'butane.discover_characteristics',
+        args: {'serviceUuid': kNusServiceUuid},
+        expectContains: kUserDescriptionUuid,
+        on: DriveEndpoint.local,
+        caseInsensitive: true,
+      ),
+      DriveStep.invoke(
+        'butane.bond_state',
+        expectContains: darwin ? kUnsupportedError : '"state":',
+        on: DriveEndpoint.local,
+      ),
+      DriveStep.invoke(
+        'butane.bond',
+        expectContains: darwin ? kUnsupportedError : '"bonded":true',
+        on: DriveEndpoint.local,
+      ),
+      DriveStep.invoke(
+        'butane.disconnect',
+        expectContains: '"disconnected":true',
+        on: DriveEndpoint.local,
+      ),
+    ],
+  );
+}
+
 /// The named scenario registry (`--scenario` on the burn run command).
 const Map<String, DriveScenario> kButaneScenarios = {
   'smoke': kSmokeScenario,

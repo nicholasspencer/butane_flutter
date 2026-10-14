@@ -79,10 +79,30 @@ class CentralRole {
           handler: _handleScan,
         ),
         HarnessCommand(
+          action: 'request_enable',
+          description: 'Ask the platform to enable the Bluetooth adapter. '
+              'Completes when the request is accepted or launched, not when '
+              'the adapter is on.',
+          handler: _handleRequestEnable,
+        ),
+        HarnessCommand(
           action: 'connect',
           description:
-              'Connect to a previously discovered peripheral (peripheralId).',
+              'Connect to a previously discovered peripheral (peripheralId; '
+              'optional autoConnect, timeoutMs, refreshGattCache '
+              'ConnectOptions).',
           handler: _handleConnect,
+        ),
+        HarnessCommand(
+          action: 'bond',
+          description: 'Bond with a peripheral (peripheralId); completes once '
+              'bonded → the resulting bond state.',
+          handler: _handleBond,
+        ),
+        HarnessCommand(
+          action: 'bond_state',
+          description: 'Return the bond state of a peripheral (peripheralId).',
+          handler: _handleBondState,
         ),
         HarnessCommand(
           action: 'disconnect',
@@ -226,10 +246,21 @@ class CentralRole {
 
     _log.add('Found peripheral: $id (${peripheral.name ?? 'unnamed'})');
 
+    final advertisement = result.advertisementData;
     return {
       'peripheral': {
         'id': id,
         'name': peripheral.name,
+      },
+      'rssi': result.rssi,
+      'timestampMillis': result.timestampMillis,
+      'advertisement': {
+        'localName': advertisement.localName,
+        'serviceUuids': advertisement.serviceUuids,
+        'isConnectable': advertisement.isConnectable,
+        'txPowerLevel': advertisement.txPowerLevel,
+        'solicitedServiceUuids': advertisement.solicitedServiceUuids,
+        'overflowServiceUuids': advertisement.overflowServiceUuids,
       },
     };
   }
@@ -241,9 +272,23 @@ class CentralRole {
     final peripheralId = _peripheralIdFrom(params);
     final peripheral = _findPeripheral(peripheralId);
 
+    final autoConnect = params['autoConnect'] as bool?;
+    final timeoutMs = params['timeoutMs'] as int?;
+    final refreshGattCache = params['refreshGattCache'] as bool?;
+    final hasOptions =
+        autoConnect != null || timeoutMs != null || refreshGattCache != null;
+
     _log.add('Connecting to $peripheralId...');
 
-    await peripheral.connect();
+    await peripheral.connect(
+      options: hasOptions
+          ? ConnectOptions(
+              autoConnect: autoConnect,
+              timeoutMillis: timeoutMs,
+              refreshGattCache: refreshGattCache,
+            )
+          : null,
+    );
 
     // Wait for the connected state confirmation.
     await peripheral.stateStream.firstWhere(
@@ -253,6 +298,39 @@ class CentralRole {
     _log.add('Connected to $peripheralId');
 
     return {'connected': true};
+  }
+
+  /// Asks the platform to enable its Bluetooth adapter.
+  Future<Map<String, dynamic>> _handleRequestEnable(
+    Map<String, dynamic> params,
+  ) async {
+    await _manager.requestEnable();
+    _log.add('Requested adapter enable');
+    return {'requested': true};
+  }
+
+  /// Bonds with a peripheral, returning the resulting bond state.
+  Future<Map<String, dynamic>> _handleBond(
+    Map<String, dynamic> params,
+  ) async {
+    final peripheralId = _peripheralIdFrom(params);
+    final peripheral = _findPeripheral(peripheralId);
+
+    _log.add('Bonding with $peripheralId...');
+    await peripheral.bond();
+    final state = await peripheral.bondState;
+    _log.add('Bonded with $peripheralId: ${state.name}');
+
+    return {'bonded': state == BondState.bonded, 'state': state.name};
+  }
+
+  /// Returns the bond state of a peripheral.
+  Future<Map<String, dynamic>> _handleBondState(
+    Map<String, dynamic> params,
+  ) async {
+    final peripheralId = _peripheralIdFrom(params);
+    final state = await _findPeripheral(peripheralId).bondState;
+    return {'state': state.name};
   }
 
   /// Disconnects from a peripheral, cleaning up notification subscriptions.
@@ -325,8 +403,13 @@ class CentralRole {
     _log.add('Found ${characteristics.length} characteristics');
 
     return {
-      'characteristics':
-          characteristics.map((c) => {'uuid': c.uuid.toString()}).toList(),
+      'characteristics': characteristics
+          .map((c) => {
+                'uuid': c.uuid.toString(),
+                'descriptors':
+                    c.descriptors.map((d) => d.uuid.toString()).toList(),
+              })
+          .toList(),
     };
   }
 
