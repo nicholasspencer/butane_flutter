@@ -12,7 +12,7 @@
 # (lunar_station/CLAUDE.md). Keep both spellings.
 issue_prefix: butane_flutter
 issue-prefix: butane_flutter
-dolt.auto-start: false
+dolt.auto-start: true
 dolt:
   disable-event-flush: true
 export.auto: false
